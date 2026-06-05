@@ -15,7 +15,7 @@ private enum HorizonParam: UInt32 {
 
 private enum QuadParam: UInt32 {
     case mode = 198
-    case applySourceQuad = 199
+    case showCornerAdjuster = 199
     case topLeftPercentX = 200
     case topLeftPercentY = 201
     case topLeftPixelX = 202
@@ -379,10 +379,10 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
             parameterFlags: defaultFlags()
         )
         paramAPI.addToggleButton(
-            withName: "Apply Source Quad",
-            parameterID: QuadParam.applySourceQuad.rawValue,
-            defaultValue: false,
-            parameterFlags: applySourceQuadHiddenFlags()
+            withName: "Show Corner Adjuster",
+            parameterID: QuadParam.showCornerAdjuster.rawValue,
+            defaultValue: true,
+            parameterFlags: showCornerAdjusterHiddenFlags()
         )
         addCornerParameters(paramAPI, title: "Top Left", groupID: QuadGroup.topLeft.rawValue, percentX: .topLeftPercentX, percentY: .topLeftPercentY, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY)
         addCornerParameters(paramAPI, title: "Top Right", groupID: QuadGroup.topRight.rawValue, percentX: .topRightPercentX, percentY: .topRightPercentY, pixelX: .topRightPixelX, pixelY: .topRightPixelY)
@@ -394,12 +394,12 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
         let paramAPI = parameterRetrievalAPI()
         var result = AnyUprightParameterState(effectKind: AnyUprightEffectKind.quad.rawValue)
         var mode = Int32(AUQuadTransformMode.outputCorners.rawValue)
-        var applySourceQuad = ObjCBool(false)
+        var showCornerAdjuster = ObjCBool(true)
 
         paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: renderTime)
-        paramAPI.getBoolValue(&applySourceQuad, fromParameter: QuadParam.applySourceQuad.rawValue, at: renderTime)
+        paramAPI.getBoolValue(&showCornerAdjuster, fromParameter: QuadParam.showCornerAdjuster.rawValue, at: renderTime)
         result.quadMode = mode
-        result.applySourceQuad = applySourceQuad.boolValue ? 1 : 0
+        result.showCornerAdjuster = showCornerAdjuster.boolValue ? 1 : 0
 
         result.topLeftPercentX = floatParam(paramAPI, .topLeftPercentX, renderTime)
         result.topLeftPercentY = floatParam(paramAPI, .topLeftPercentY, renderTime)
@@ -491,7 +491,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
         let selectedMode = AUQuadTransformMode(rawValue: mode) ?? .outputCorners
         let isSourceQuad = selectedMode == .sourceQuad
 
-        _ = settingAPI.setParameterFlags(isSourceQuad ? defaultFlags() : applySourceQuadHiddenFlags(), toParameter: QuadParam.applySourceQuad.rawValue)
+        _ = settingAPI.setParameterFlags(isSourceQuad ? defaultFlags() : showCornerAdjusterHiddenFlags(), toParameter: QuadParam.showCornerAdjuster.rawValue)
 
         let cornerFlags = isSourceQuad ? hiddenCollapsedFlags() : collapsedFlags()
         for group in QuadGroup.allCases {
@@ -499,7 +499,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
         }
     }
 
-    private func applySourceQuadHiddenFlags() -> FxParameterFlags {
+    private func showCornerAdjusterHiddenFlags() -> FxParameterFlags {
         FxParameterFlags(kFxParameterFlag_HIDDEN)
     }
 
@@ -512,25 +512,47 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
     }
 
     func drawOSC(withWidth width: Int, height: Int, activePart: Int, destinationImage: FxImageTile, at time: CMTime) {
+        let mode = quadMode(at: time)
+        guard mode != .sourceQuad || shouldShowCornerAdjuster(at: time) else {
+            return
+        }
+
         let size = AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
-        let points = quadObjectPoints(at: time, size: size)
+        let points = quadObjectPoints(at: time, size: size, mode: mode)
         let handles = [
             AUOSCHandle(point: points.topLeft, part: QuadOSCPart.topLeft.rawValue),
             AUOSCHandle(point: points.topRight, part: QuadOSCPart.topRight.rawValue),
             AUOSCHandle(point: points.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
             AUOSCHandle(point: points.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
         ]
-        overlayRenderer.renderQuad(
-            points: [points.topLeft, points.topRight, points.bottomRight, points.bottomLeft],
-            handles: handles,
-            activePart: activePart,
-            destinationImage: destinationImage
-        )
+        let orderedPoints = [points.topLeft, points.topRight, points.bottomRight, points.bottomLeft]
+
+        if mode == .sourceQuad {
+            overlayRenderer.renderQuadAdjuster(
+                points: orderedPoints,
+                handles: handles,
+                activePart: activePart,
+                destinationImage: destinationImage
+            )
+        } else {
+            overlayRenderer.renderQuad(
+                points: orderedPoints,
+                handles: handles,
+                activePart: activePart,
+                destinationImage: destinationImage
+            )
+        }
     }
 
     func hitTestOSC(atMousePositionX mousePositionX: Double, mousePositionY: Double, activePart: UnsafeMutablePointer<Int>?, at time: CMTime) {
+        let mode = quadMode(at: time)
+        guard mode != .sourceQuad || shouldShowCornerAdjuster(at: time) else {
+            activePart?.pointee = QuadOSCPart.none.rawValue
+            return
+        }
+
         let size = objectPixelSizeForOSC()
-        let points = quadObjectPoints(at: time, size: size)
+        let points = quadObjectPoints(at: time, size: size, mode: mode)
         let handles = [
             AUOSCHandle(point: points.topLeft, part: QuadOSCPart.topLeft.rawValue),
             AUOSCHandle(point: points.topRight, part: QuadOSCPart.topRight.rawValue),
@@ -556,7 +578,9 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
     }
 
     func mouseDragged(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
-        guard let part = QuadOSCPart(rawValue: activePart),
+        let mode = quadMode(at: time)
+        guard (mode != .sourceQuad || shouldShowCornerAdjuster(at: time)),
+              let part = QuadOSCPart(rawValue: activePart),
               part != .none,
               let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
             forceUpdate?.pointee = false
@@ -565,7 +589,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
 
         let size = objectPixelSizeForOSC()
         let point = AUPoint(x: mousePositionX, y: mousePositionY)
-        setCorner(point, part: part, size: size, settingAPI: settingAPI, time: time)
+        setCorner(point, part: part, mode: mode, size: size, settingAPI: settingAPI, time: time)
         forceUpdate?.pointee = true
     }
 
@@ -583,11 +607,35 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
         didHandle?.pointee = false
     }
 
-    private func quadObjectPoints(at time: CMTime, size: AUSize) -> AUQuad {
-        AnyUprightGeometry.quadObjectPoints(from: cornerOffsets(at: time), size: size)
+    private func shouldShowCornerAdjuster(at time: CMTime) -> Bool {
+        guard quadMode(at: time) == .sourceQuad else {
+            return true
+        }
+
+        let paramAPI = parameterRetrievalAPI()
+        var showCornerAdjuster = ObjCBool(true)
+        paramAPI.getBoolValue(&showCornerAdjuster, fromParameter: QuadParam.showCornerAdjuster.rawValue, at: time)
+        return showCornerAdjuster.boolValue
     }
 
-    private func setCorner(_ point: AUPoint, part: QuadOSCPart, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    private func quadMode(at time: CMTime) -> AUQuadTransformMode {
+        let paramAPI = parameterRetrievalAPI()
+        var mode = Int32(AUQuadTransformMode.outputCorners.rawValue)
+        paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
+        return AUQuadTransformMode(rawValue: mode) ?? .outputCorners
+    }
+
+    private func quadObjectPoints(at time: CMTime, size: AUSize, mode: AUQuadTransformMode) -> AUQuad {
+        let offsets = cornerOffsets(at: time)
+        switch mode {
+        case .outputCorners:
+            return AnyUprightGeometry.quadObjectPoints(from: offsets, size: size)
+        case .sourceQuad:
+            return AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+        }
+    }
+
+    private func setCorner(_ point: AUPoint, part: QuadOSCPart, mode: AUQuadTransformMode, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         let ids: (corner: AUQuadCorner, pixelX: QuadParam, pixelY: QuadParam)
 
         switch part {
@@ -603,12 +651,24 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
             return
         }
 
-        let pixels = AnyUprightGeometry.cornerPixelOffset(
-            forObjectPoint: point,
-            corner: ids.corner,
-            offsets: cornerOffsets(at: time),
-            size: size
-        )
+        let offsets = cornerOffsets(at: time)
+        let pixels: AUPoint
+        switch mode {
+        case .outputCorners:
+            pixels = AnyUprightGeometry.cornerPixelOffset(
+                forObjectPoint: point,
+                corner: ids.corner,
+                offsets: offsets,
+                size: size
+            )
+        case .sourceQuad:
+            pixels = AnyUprightGeometry.sourceCornerPixelOffset(
+                forObjectPoint: point,
+                corner: ids.corner,
+                offsets: offsets,
+                size: size
+            )
+        }
 
         settingAPI.setFloatValue(pixels.x, toParameter: ids.pixelX.rawValue, at: time)
         settingAPI.setFloatValue(pixels.y, toParameter: ids.pixelY.rawValue, at: time)

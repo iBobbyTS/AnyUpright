@@ -17,7 +17,7 @@ struct AnyUprightParameterState {
     var effectKind: Int32 = 0
     var fillFrame: Int32 = 0
     var quadMode: Int32 = AUQuadTransformMode.outputCorners.rawValue
-    var applySourceQuad: Int32 = 0
+    var showCornerAdjuster: Int32 = 1
     var rotationRadians: Float = 0.0
     var verticalPerspective: Float = 0.0
     var horizontalPerspective: Float = 0.0
@@ -236,7 +236,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             return AnyUprightGeometry.quadOutputToSourceMatrix(
                 from: cornerOffsets(from: state),
                 mode: mode,
-                applySourceQuad: state.applySourceQuad != 0,
+                showCornerAdjuster: state.showCornerAdjuster != 0,
                 outputSize: outputSize,
                 sourceSize: sourceSize
             )

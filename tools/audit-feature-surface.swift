@@ -71,10 +71,13 @@ struct AuditFeatureSurface {
     private static func auditQuad(_ effects: String, geometry: String) throws {
         try require(effects, "Output Corners", "Quad exposes realtime output-corner mode")
         try require(effects, "Source Quad", "Quad exposes Lens-style source-quad mode")
-        try require(effects, "Apply Source Quad", "Quad can keep source-quad editing non-destructive until apply")
+        try require(effects, "Show Corner Adjuster", "Quad can show source-quad handles without applying the warp")
         try require(effects, "FxOnScreenControl_v4", "Quad exposes onscreen controls")
+        try require(effects, "renderQuadAdjuster", "Source Quad draws a dedicated adjuster overlay")
         try require(geometry, "quadOutputToSourceMatrix", "Quad render matrix is centralized in geometry")
-        try require(geometry, "applySourceQuad else", "Source Quad mode can preview handles without warping")
+        try require(geometry, "sourceQuadDefault", "Source Quad has a central default quadrilateral")
+        try require(geometry, "sourceQuadObjectPoints", "Source Quad handles use their own object-space base")
+        try require(geometry, "guard !showCornerAdjuster else", "Source Quad mode can preview handles without warping")
         try require(geometry, "cornerPixelOffset", "Quad OSC writes stable corner pixel offsets")
     }
 

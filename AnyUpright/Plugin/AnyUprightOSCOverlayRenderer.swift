@@ -9,6 +9,7 @@ import Metal
 struct AUOSCOverlayStyle {
     var lineColor = SIMD4<Float>(1.0, 1.0, 1.0, 0.95)
     var shadowColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.65)
+    var dimOutsideColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.30)
     var handleColor = SIMD4<Float>(0.18, 0.44, 1.0, 0.95)
     var activeHandleColor = SIMD4<Float>(1.0, 0.85, 0.25, 1.0)
     var lineThickness: Double = 2.0
@@ -60,6 +61,39 @@ final class AnyUprightOSCOverlayRenderer {
         )
     }
 
+    func renderQuadAdjuster(
+        points: [AUPoint],
+        handles: [AUOSCHandle],
+        activePart: Int,
+        destinationImage: FxImageTile,
+        style: AUOSCOverlayStyle = AUOSCOverlayStyle()
+    ) {
+        guard points.count == 4 else {
+            renderQuad(
+                points: points,
+                handles: handles,
+                activePart: activePart,
+                destinationImage: destinationImage,
+                style: style
+            )
+            return
+        }
+
+        let segments = points.indices.map { index -> (AUPoint, AUPoint) in
+            let nextIndex = index == points.index(before: points.endIndex) ? points.startIndex : points.index(after: index)
+            return (points[index], points[nextIndex])
+        }
+
+        renderStyledSegments(
+            segments.map { AUOSCStyledSegment(start: $0.0, end: $0.1, style: style) },
+            handles: handles,
+            activePart: activePart,
+            destinationImage: destinationImage,
+            handleStyle: style,
+            dimmingQuads: outsideDimmingQuads(around: points)
+        )
+    }
+
     func renderSegments(
         _ segments: [(AUPoint, AUPoint)],
         handles: [AUOSCHandle],
@@ -81,7 +115,8 @@ final class AnyUprightOSCOverlayRenderer {
         handles: [AUOSCHandle],
         activePart: Int,
         destinationImage: FxImageTile,
-        handleStyle: AUOSCOverlayStyle = AUOSCOverlayStyle()
+        handleStyle: AUOSCOverlayStyle = AUOSCOverlayStyle(),
+        dimmingQuads: [[AUPoint]] = []
     ) {
         guard !segments.isEmpty || !handles.isEmpty else {
             return
@@ -102,6 +137,9 @@ final class AnyUprightOSCOverlayRenderer {
         let height = max(1.0, Double(tileBounds.top - tileBounds.bottom))
         var vertices: [AnyUprightOverlayVertex2D] = []
 
+        for quad in dimmingQuads where quad.count == 4 {
+            appendObjectQuad(quad, color: handleStyle.dimOutsideColor, width: width, height: height, to: &vertices)
+        }
         for segment in segments {
             appendLine(
                 from: segment.start,
@@ -158,6 +196,25 @@ final class AnyUprightOSCOverlayRenderer {
 
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
+    }
+
+    private func outsideDimmingQuads(around points: [AUPoint]) -> [[AUPoint]] {
+        let topLeft = points[0]
+        let topRight = points[1]
+        let bottomRight = points[2]
+        let bottomLeft = points[3]
+
+        let frameTopLeft = AUPoint(x: 0.0, y: 1.0)
+        let frameTopRight = AUPoint(x: 1.0, y: 1.0)
+        let frameBottomRight = AUPoint(x: 1.0, y: 0.0)
+        let frameBottomLeft = AUPoint(x: 0.0, y: 0.0)
+
+        return [
+            [frameTopLeft, frameTopRight, topRight, topLeft],
+            [frameTopRight, frameBottomRight, bottomRight, topRight],
+            [frameBottomRight, frameBottomLeft, bottomLeft, bottomRight],
+            [frameBottomLeft, frameTopLeft, topLeft, bottomLeft]
+        ]
     }
 
     private func pipelineState(device: MTLDevice, pixelFormat: MTLPixelFormat) -> MTLRenderPipelineState? {
@@ -242,6 +299,26 @@ final class AnyUprightOSCOverlayRenderer {
             p1: centerPixel + SIMD2<Double>(radius, -radius),
             p2: centerPixel + SIMD2<Double>(radius, radius),
             p3: centerPixel + SIMD2<Double>(-radius, radius),
+            color: color,
+            width: width,
+            height: height,
+            to: &vertices
+        )
+    }
+
+    private func appendObjectQuad(
+        _ points: [AUPoint],
+        color: SIMD4<Float>,
+        width: Double,
+        height: Double,
+        to vertices: inout [AnyUprightOverlayVertex2D]
+    ) {
+        let pixels = points.map { SIMD2<Double>($0.x * width, $0.y * height) }
+        appendQuad(
+            p0: pixels[0],
+            p1: pixels[1],
+            p2: pixels[2],
+            p3: pixels[3],
             color: color,
             width: width,
             height: height,

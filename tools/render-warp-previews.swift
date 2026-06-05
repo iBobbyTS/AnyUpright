@@ -94,11 +94,11 @@ struct RenderWarpPreviews {
             bottomRight: AUPoint(x: 1285.0, y: 890.0),
             bottomLeft: AUPoint(x: 430.0, y: 790.0)
         )
-        let offsets = pixelOffsets(for: sourceQuad, size: size)
+        let offsets = pixelOffsets(for: sourceQuad, base: AnyUprightGeometry.sourceQuadDefault(size), size: size)
         let previewMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
             mode: .sourceQuad,
-            applySourceQuad: false,
+            showCornerAdjuster: true,
             outputSize: size,
             sourceSize: size
         )
@@ -107,7 +107,7 @@ struct RenderWarpPreviews {
         let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
             mode: .sourceQuad,
-            applySourceQuad: true,
+            showCornerAdjuster: false,
             outputSize: size,
             sourceSize: size
         )
@@ -128,7 +128,7 @@ struct RenderWarpPreviews {
         let matrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
             mode: .outputCorners,
-            applySourceQuad: false,
+            showCornerAdjuster: false,
             outputSize: size,
             sourceSize: size
         )
@@ -154,16 +154,19 @@ struct RenderWarpPreviews {
     }
 
     private static func pixelOffsets(for quad: AUQuad, size: AUSize) -> AUCornerOffsets {
+        pixelOffsets(for: quad, base: AUQuad.fullFrame(size), size: size)
+    }
+
+    private static func pixelOffsets(for quad: AUQuad, base: AUQuad, size: AUSize) -> AUCornerOffsets {
         func offset(base: AUPoint, target: AUPoint) -> AUPoint {
             AUPoint(x: target.x - base.x, y: base.y - target.y)
         }
 
-        let frame = AUQuad.fullFrame(size)
         var offsets = AUCornerOffsets()
-        offsets.topLeftPixels = offset(base: frame.topLeft, target: quad.topLeft)
-        offsets.topRightPixels = offset(base: frame.topRight, target: quad.topRight)
-        offsets.bottomRightPixels = offset(base: frame.bottomRight, target: quad.bottomRight)
-        offsets.bottomLeftPixels = offset(base: frame.bottomLeft, target: quad.bottomLeft)
+        offsets.topLeftPixels = offset(base: base.topLeft, target: quad.topLeft)
+        offsets.topRightPixels = offset(base: base.topRight, target: quad.topRight)
+        offsets.bottomRightPixels = offset(base: base.bottomRight, target: quad.bottomRight)
+        offsets.bottomLeftPixels = offset(base: base.bottomLeft, target: quad.bottomLeft)
         return offsets
     }
 

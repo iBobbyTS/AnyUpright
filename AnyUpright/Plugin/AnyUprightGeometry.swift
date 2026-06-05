@@ -82,7 +82,26 @@ struct AUCornerOffsets {
 }
 
 enum AnyUprightGeometry {
+    private static let sourceQuadInset = 0.10
+
     static func quad(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
+        quad(from: offsets, base: AUQuad.fullFrame(size), size: size)
+    }
+
+    static func sourceQuadDefault(_ size: AUSize) -> AUQuad {
+        AUQuad(
+            topLeft: AUPoint(x: size.width * sourceQuadInset, y: size.height * sourceQuadInset),
+            topRight: AUPoint(x: size.width * (1.0 - sourceQuadInset), y: size.height * sourceQuadInset),
+            bottomRight: AUPoint(x: size.width * (1.0 - sourceQuadInset), y: size.height * (1.0 - sourceQuadInset)),
+            bottomLeft: AUPoint(x: size.width * sourceQuadInset, y: size.height * (1.0 - sourceQuadInset))
+        )
+    }
+
+    static func sourceQuad(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
+        quad(from: offsets, base: sourceQuadDefault(size), size: size)
+    }
+
+    private static func quad(from offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUQuad {
         func apply(_ base: AUPoint, percent: AUPoint, pixels: AUPoint) -> AUPoint {
             AUPoint(
                 x: base.x + percent.x * size.width + pixels.x,
@@ -90,26 +109,41 @@ enum AnyUprightGeometry {
             )
         }
 
-        let frame = AUQuad.fullFrame(size)
         return AUQuad(
-            topLeft: apply(frame.topLeft, percent: offsets.topLeftPercent, pixels: offsets.topLeftPixels),
-            topRight: apply(frame.topRight, percent: offsets.topRightPercent, pixels: offsets.topRightPixels),
-            bottomRight: apply(frame.bottomRight, percent: offsets.bottomRightPercent, pixels: offsets.bottomRightPixels),
-            bottomLeft: apply(frame.bottomLeft, percent: offsets.bottomLeftPercent, pixels: offsets.bottomLeftPixels)
+            topLeft: apply(base.topLeft, percent: offsets.topLeftPercent, pixels: offsets.topLeftPixels),
+            topRight: apply(base.topRight, percent: offsets.topRightPercent, pixels: offsets.topRightPixels),
+            bottomRight: apply(base.bottomRight, percent: offsets.bottomRightPercent, pixels: offsets.bottomRightPixels),
+            bottomLeft: apply(base.bottomLeft, percent: offsets.bottomLeftPercent, pixels: offsets.bottomLeftPixels)
         )
     }
 
     static func quadObjectPoints(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
+        quadObjectPoints(from: offsets, base: fullFrameObjectBase(), size: size)
+    }
+
+    static func sourceQuadObjectPoints(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
+        quadObjectPoints(from: offsets, base: sourceQuadObjectBase(), size: size)
+    }
+
+    private static func quadObjectPoints(from offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUQuad {
         AUQuad(
-            topLeft: objectPoint(for: .topLeft, offsets: offsets, size: size),
-            topRight: objectPoint(for: .topRight, offsets: offsets, size: size),
-            bottomRight: objectPoint(for: .bottomRight, offsets: offsets, size: size),
-            bottomLeft: objectPoint(for: .bottomLeft, offsets: offsets, size: size)
+            topLeft: objectPoint(for: .topLeft, offsets: offsets, base: base, size: size),
+            topRight: objectPoint(for: .topRight, offsets: offsets, base: base, size: size),
+            bottomRight: objectPoint(for: .bottomRight, offsets: offsets, base: base, size: size),
+            bottomLeft: objectPoint(for: .bottomLeft, offsets: offsets, base: base, size: size)
         )
     }
 
     static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
-        let base = objectBasePoint(for: corner)
+        cornerPixelOffset(forObjectPoint: point, corner: corner, offsets: offsets, base: fullFrameObjectBase(), size: size)
+    }
+
+    static func sourceCornerPixelOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
+        cornerPixelOffset(forObjectPoint: point, corner: corner, offsets: offsets, base: sourceQuadObjectBase(), size: size)
+    }
+
+    private static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner, offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUPoint {
+        let base = objectBasePoint(for: corner, in: base)
         let percent = percentOffset(for: corner, in: offsets)
         return AUPoint(
             x: (point.x - base.x - percent.x) * size.width,
@@ -281,7 +315,7 @@ enum AnyUprightGeometry {
     static func quadOutputToSourceMatrix(
         from offsets: AUCornerOffsets,
         mode: AUQuadTransformMode,
-        applySourceQuad: Bool,
+        showCornerAdjuster: Bool,
         outputSize: AUSize,
         sourceSize: AUSize
     ) -> simd_float3x3 {
@@ -291,11 +325,11 @@ enum AnyUprightGeometry {
             return homography(from: outputQuad, to: AUQuad.fullFrame(sourceSize))
 
         case .sourceQuad:
-            guard applySourceQuad else {
+            guard !showCornerAdjuster else {
                 return homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
             }
 
-            let sourceQuad = quad(from: offsets, size: sourceSize)
+            let sourceQuad = sourceQuad(from: offsets, size: sourceSize)
             return homography(from: AUQuad.fullFrame(outputSize), to: sourceQuad)
         }
     }
@@ -421,8 +455,8 @@ enum AnyUprightGeometry {
         ))
     }
 
-    private static func objectPoint(for corner: AUQuadCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
-        let base = objectBasePoint(for: corner)
+    private static func objectPoint(for corner: AUQuadCorner, offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUPoint {
+        let base = objectBasePoint(for: corner, in: base)
         let percent = percentOffset(for: corner, in: offsets)
         let pixels = pixelOffset(for: corner, in: offsets)
         return AUPoint(
@@ -431,16 +465,34 @@ enum AnyUprightGeometry {
         )
     }
 
-    private static func objectBasePoint(for corner: AUQuadCorner) -> AUPoint {
+    private static func fullFrameObjectBase() -> AUQuad {
+        AUQuad(
+            topLeft: AUPoint(x: 0.0, y: 1.0),
+            topRight: AUPoint(x: 1.0, y: 1.0),
+            bottomRight: AUPoint(x: 1.0, y: 0.0),
+            bottomLeft: AUPoint(x: 0.0, y: 0.0)
+        )
+    }
+
+    private static func sourceQuadObjectBase() -> AUQuad {
+        AUQuad(
+            topLeft: AUPoint(x: sourceQuadInset, y: 1.0 - sourceQuadInset),
+            topRight: AUPoint(x: 1.0 - sourceQuadInset, y: 1.0 - sourceQuadInset),
+            bottomRight: AUPoint(x: 1.0 - sourceQuadInset, y: sourceQuadInset),
+            bottomLeft: AUPoint(x: sourceQuadInset, y: sourceQuadInset)
+        )
+    }
+
+    private static func objectBasePoint(for corner: AUQuadCorner, in base: AUQuad) -> AUPoint {
         switch corner {
         case .topLeft:
-            return AUPoint(x: 0.0, y: 1.0)
+            return base.topLeft
         case .topRight:
-            return AUPoint(x: 1.0, y: 1.0)
+            return base.topRight
         case .bottomRight:
-            return AUPoint(x: 1.0, y: 0.0)
+            return base.bottomRight
         case .bottomLeft:
-            return AUPoint(x: 0.0, y: 0.0)
+            return base.bottomLeft
         }
     }
 

@@ -25,7 +25,9 @@ struct AnyUprightGeometryTests {
         try testQuadObjectPointsKeepCanvasCornerDefinitions()
         try testQuadObjectDragPreservesPercentAndWritesPixelOffsets()
         try testQuadOutputCornersKeepTheirNamedPositions()
-        try testQuadSourceModeCanPreviewHandlesBeforeApplyingWarp()
+        try testQuadSourceDefaultsToCentralEightyPercent()
+        try testQuadSourceObjectDragPreservesCentralBase()
+        try testQuadSourceModeShowsAdjusterBeforeApplyingWarp()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
         try testUprightVerticalAndHorizontalPerspectiveGenerateCenteredQuads()
         try testUprightPerspectiveKeepsFrameCenterAnchored()
@@ -136,7 +138,54 @@ struct AnyUprightGeometryTests {
         try assertMaps(matrix, outputQuad.bottomLeft, to: AUPoint(x: 0.0, y: size.height))
     }
 
-    static func testQuadSourceModeCanPreviewHandlesBeforeApplyingWarp() throws {
+    static func testQuadSourceDefaultsToCentralEightyPercent() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let offsets = AUCornerOffsets()
+        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+        let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
+            from: offsets,
+            mode: .sourceQuad,
+            showCornerAdjuster: false,
+            outputSize: size,
+            sourceSize: size
+        )
+
+        try assertEqual(sourceQuad.topLeft, AUPoint(x: 20.0, y: 10.0), "source default top-left")
+        try assertEqual(sourceQuad.topRight, AUPoint(x: 180.0, y: 10.0), "source default top-right")
+        try assertEqual(sourceQuad.bottomRight, AUPoint(x: 180.0, y: 90.0), "source default bottom-right")
+        try assertEqual(sourceQuad.bottomLeft, AUPoint(x: 20.0, y: 90.0), "source default bottom-left")
+
+        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.10, y: 0.90), "source default object top-left")
+        try assertEqual(objectPoints.topRight, AUPoint(x: 0.90, y: 0.90), "source default object top-right")
+        try assertEqual(objectPoints.bottomRight, AUPoint(x: 0.90, y: 0.10), "source default object bottom-right")
+        try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.10, y: 0.10), "source default object bottom-left")
+
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: sourceQuad.topLeft)
+        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: sourceQuad.bottomRight)
+    }
+
+    static func testQuadSourceObjectDragPreservesCentralBase() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        var offsets = AUCornerOffsets()
+
+        let pixels = AnyUprightGeometry.sourceCornerPixelOffset(
+            forObjectPoint: AUPoint(x: 0.20, y: 0.80),
+            corner: .topLeft,
+            offsets: offsets,
+            size: size
+        )
+        offsets.topLeftPixels = pixels
+
+        let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+
+        try assertEqual(pixels, AUPoint(x: 20.0, y: -10.0), "source dragged top-left pixel offset")
+        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "source dragged top-left object point")
+        try assertEqual(sourceQuad.topLeft, AUPoint(x: 40.0, y: 20.0), "source dragged top-left source point")
+    }
+
+    static func testQuadSourceModeShowsAdjusterBeforeApplyingWarp() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
         offsets.topLeftPixels = AUPoint(x: 25.0, y: -10.0)
@@ -147,18 +196,18 @@ struct AnyUprightGeometryTests {
         let previewMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
             mode: .sourceQuad,
-            applySourceQuad: false,
+            showCornerAdjuster: true,
             outputSize: size,
             sourceSize: size
         )
 
         try assertMaps(previewMatrix, AUPoint(x: 30.0, y: 40.0), to: AUPoint(x: 30.0, y: 40.0))
 
-        let sourceQuad = AnyUprightGeometry.quad(from: offsets, size: size)
+        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
         let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
             mode: .sourceQuad,
-            applySourceQuad: true,
+            showCornerAdjuster: false,
             outputSize: size,
             sourceSize: size
         )

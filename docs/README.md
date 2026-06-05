@@ -50,7 +50,8 @@ Current implementation:
 
 - `AnyUpright Quad Manual` is registered as a separate FxPlug filter.
 - `Mode` selects `Output Corners` or `Source Quad`.
-- `Apply Source Quad` is shown only in `Source Quad` mode. It controls whether source-quad edits are rendered: leave it off while positioning handles, then enable it to map the selected source quadrilateral to the full output frame.
+- `Show Corner Adjuster` is shown only in `Source Quad` mode. It is enabled by default: when enabled, the four handles are shown at the current source quadrilateral, handle drags only move the handles, and the image is not warped. Disable it to hide the handles and map the selected source quadrilateral to the full output frame.
+- In `Source Quad` mode, the default source quadrilateral is the central 80% of the frame. The onscreen adjuster dims the outside area to 70% brightness, leaves the selected quadrilateral at original brightness, and connects the four handles with a visible quadrilateral outline.
 - In `Output Corners` mode, each visible output corner exposes `X %`, `Y %`, `X px`, and `Y px` offsets in the inspector.
 - In `Source Quad` mode, the corner coordinate groups are hidden from the inspector; users position the source quadrilateral with onscreen handles.
 - Final offset is `percentage * current frame dimension + pixels`.
@@ -199,10 +200,10 @@ Quad:
 
 - Apply `AnyUpright Quad Manual` to `quad-phone-screen.png`.
 - In `Output Corners` mode, drag the four onscreen handles; the image should warp in realtime.
-- In `Output Corners` mode, `Apply Source Quad` should be hidden and the four corner coordinate groups should be visible.
-- In `Source Quad` mode with `Apply Source Quad` off, drag the four handles around the phone-screen quadrilateral; the image should not warp while editing.
+- In `Output Corners` mode, `Show Corner Adjuster` should be hidden and the four corner coordinate groups should be visible.
+- In `Source Quad` mode with `Show Corner Adjuster` on, the four handles should start at the central 80% of the frame, the outside area should be dimmed to 70% brightness, and dragging the handles around the phone-screen quadrilateral should not warp the image while editing.
 - In `Source Quad` mode, the four corner coordinate groups should be hidden because positioning happens through onscreen handles.
-- Turn `Apply Source Quad` on; the selected screen quadrilateral should map to the full output frame.
+- Turn `Show Corner Adjuster` off; the selected screen quadrilateral should map to the full output frame and the handles should be hidden.
 
 Upright:
 

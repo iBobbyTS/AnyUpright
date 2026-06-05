@@ -1,0 +1,573 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B0B4FAA22FD2A99500794BBA /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B0B4FAA12FD2A99500794BBA /* Cocoa.framework */; };
+		B0B4FAAA2FD2A99500794BBA /* AnyUpright XPC Service.pluginkit in Embed PlugIns */ = {isa = PBXBuildFile; fileRef = B0B4FAA92FD2A99500794BBA /* AnyUpright XPC Service.pluginkit */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B0B4FAAE2FD2A99500794BBA /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B0B4FAAD2FD2A99500794BBA /* Foundation.framework */; };
+		B0B4FAB02FD2A99500794BBA /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B0B4FAAF2FD2A99500794BBA /* AppKit.framework */; };
+		B0B4FAB22FD2A99500794BBA /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B0B4FAB12FD2A99500794BBA /* Accelerate.framework */; };
+		B0B4FAB42FD2A99500794BBA /* PluginManager.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B0B4FAB32FD2A99500794BBA /* PluginManager.framework */; };
+		B0B4FAB62FD2A99500794BBA /* FxPlug.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B0B4FAB52FD2A99500794BBA /* FxPlug.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B0B4FAAB2FD2A99500794BBA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B0B4FA962FD2A99500794BBA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B0B4FAA82FD2A99500794BBA;
+			remoteInfo = "XPC Service";
+		};
+		B0B4FAB72FD2A99500794BBA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B0B4FA962FD2A99500794BBA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B0B4FAA82FD2A99500794BBA;
+			remoteInfo = "XPC Service";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B0B4FADF2FD2A99500794BBA /* Embed PlugIns */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B0B4FAAA2FD2A99500794BBA /* AnyUpright XPC Service.pluginkit in Embed PlugIns */,
+			);
+			name = "Embed PlugIns";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		B0B4FA9E2FD2A99500794BBA /* AnyUpright.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AnyUpright.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0B4FAA12FD2A99500794BBA /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
+		B0B4FAA92FD2A99500794BBA /* AnyUpright XPC Service.pluginkit */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "AnyUpright XPC Service.pluginkit"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0B4FAAD2FD2A99500794BBA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		B0B4FAAF2FD2A99500794BBA /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		B0B4FAB12FD2A99500794BBA /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		B0B4FAB32FD2A99500794BBA /* PluginManager.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PluginManager.framework; path = Library/Frameworks/../../../../../../Library/Developer/Frameworks/PluginManager.framework; sourceTree = DEVELOPER_DIR; };
+		B0B4FAB52FD2A99500794BBA /* FxPlug.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FxPlug.framework; path = Library/Frameworks/../../../../../../Library/Developer/Frameworks/FxPlug.framework; sourceTree = DEVELOPER_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B0B4FADB2FD2A99500794BBA /* Exceptions for "AnyUpright" folder in "Wrapper Application" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"/Localized: Plugin/InfoPlist.strings",
+				"/Localized: Plugin/Localizable.strings",
+				Plugin/AnyUprightPlugIn.swift,
+				Plugin/Info.plist,
+				Plugin/main.swift,
+				Plugin/MetalDeviceCache.swift,
+				Plugin/TileableRemoteBrightness.metal,
+				"Wrapper Application/Info.plist",
+			);
+			target = B0B4FA9D2FD2A99500794BBA /* Wrapper Application */;
+		};
+		B0B4FAE32FD2A99500794BBA /* Exceptions for "AnyUpright" folder in "XPC Service" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"/Localized: Wrapper Application/Credits.rtf",
+				"/Localized: Wrapper Application/InfoPlist.strings",
+				"/Localized: Wrapper Application/MainMenu.xib",
+				Plugin/Info.plist,
+				"Wrapper Application/AppDelegate.swift",
+				"Wrapper Application/Info.plist",
+			);
+			target = B0B4FAA82FD2A99500794BBA /* XPC Service */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		B0B4FAB92FD2A99500794BBA /* AnyUpright */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B0B4FADB2FD2A99500794BBA /* Exceptions for "AnyUpright" folder in "Wrapper Application" target */,
+				B0B4FAE32FD2A99500794BBA /* Exceptions for "AnyUpright" folder in "XPC Service" target */,
+			);
+			path = AnyUpright;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B0B4FA9B2FD2A99500794BBA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0B4FAA22FD2A99500794BBA /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0B4FAA42FD2A99500794BBA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0B4FAB22FD2A99500794BBA /* Accelerate.framework in Frameworks */,
+				B0B4FAB42FD2A99500794BBA /* PluginManager.framework in Frameworks */,
+				B0B4FAAE2FD2A99500794BBA /* Foundation.framework in Frameworks */,
+				B0B4FAB02FD2A99500794BBA /* AppKit.framework in Frameworks */,
+				B0B4FAB62FD2A99500794BBA /* FxPlug.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		B0B4FA952FD2A99500794BBA = {
+			isa = PBXGroup;
+			children = (
+				B0B4FAB92FD2A99500794BBA /* AnyUpright */,
+				B0B4FAA02FD2A99500794BBA /* Frameworks */,
+				B0B4FA9F2FD2A99500794BBA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B0B4FA9F2FD2A99500794BBA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B0B4FA9E2FD2A99500794BBA /* AnyUpright.app */,
+				B0B4FAA92FD2A99500794BBA /* AnyUpright XPC Service.pluginkit */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B0B4FAA02FD2A99500794BBA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B0B4FAA12FD2A99500794BBA /* Cocoa.framework */,
+				B0B4FAAD2FD2A99500794BBA /* Foundation.framework */,
+				B0B4FAAF2FD2A99500794BBA /* AppKit.framework */,
+				B0B4FAB12FD2A99500794BBA /* Accelerate.framework */,
+				B0B4FAB32FD2A99500794BBA /* PluginManager.framework */,
+				B0B4FAB52FD2A99500794BBA /* FxPlug.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B0B4FA9D2FD2A99500794BBA /* Wrapper Application */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B0B4FAE02FD2A99500794BBA /* Build configuration list for PBXNativeTarget "Wrapper Application" */;
+			buildPhases = (
+				B0B4FA9A2FD2A99500794BBA /* Sources */,
+				B0B4FA9B2FD2A99500794BBA /* Frameworks */,
+				B0B4FA9C2FD2A99500794BBA /* Resources */,
+				B0B4FADF2FD2A99500794BBA /* Embed PlugIns */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B0B4FAAC2FD2A99500794BBA /* PBXTargetDependency */,
+				B0B4FAB82FD2A99500794BBA /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B0B4FAB92FD2A99500794BBA /* AnyUpright */,
+			);
+			name = "Wrapper Application";
+			packageProductDependencies = (
+			);
+			productName = "Wrapper Application";
+			productReference = B0B4FA9E2FD2A99500794BBA /* AnyUpright.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B0B4FAA82FD2A99500794BBA /* XPC Service */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B0B4FADC2FD2A99500794BBA /* Build configuration list for PBXNativeTarget "XPC Service" */;
+			buildPhases = (
+				B0B4FAA32FD2A99500794BBA /* Sources */,
+				B0B4FAA42FD2A99500794BBA /* Frameworks */,
+				B0B4FAA52FD2A99500794BBA /* Resources */,
+				B0B4FAA62FD2A99500794BBA /* Copy and Code Sign FxPlug.framework */,
+				B0B4FAA72FD2A99500794BBA /* Copy and Code Sign PluginManager.framework */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B0B4FAB92FD2A99500794BBA /* AnyUpright */,
+			);
+			name = "XPC Service";
+			packageProductDependencies = (
+			);
+			productName = "XPC Service";
+			productReference = B0B4FAA92FD2A99500794BBA /* AnyUpright XPC Service.pluginkit */;
+			productType = "com.apple.product-type.bundle";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B0B4FA962FD2A99500794BBA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					B0B4FA9D2FD2A99500794BBA = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					B0B4FAA82FD2A99500794BBA = {
+						CreatedOnToolsVersion = 26.5;
+					};
+				};
+			};
+			buildConfigurationList = B0B4FA992FD2A99500794BBA /* Build configuration list for PBXProject "AnyUpright" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = B0B4FA952FD2A99500794BBA;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B0B4FA9F2FD2A99500794BBA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B0B4FA9D2FD2A99500794BBA /* Wrapper Application */,
+				B0B4FAA82FD2A99500794BBA /* XPC Service */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B0B4FA9C2FD2A99500794BBA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0B4FAA52FD2A99500794BBA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		B0B4FAA62FD2A99500794BBA /* Copy and Code Sign FxPlug.framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy and Code Sign FxPlug.framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "mkdir -p \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nrsync --archive --links --whole-file --no-owner --no-group --checksum --exclude='Headers' \"/Library/Developer/Frameworks/FxPlug.framework/\" \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/FxPlug.framework/\"\nif [ \"$?\" -ne 0 ]; then echo \"error: rsync failed; couldn't embed FxPlug.framework\"; exit 1; fi\ncodesign --force --timestamp --options runtime --sign \"${CODE_SIGN_IDENTITY}\" \"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/FxPlug.framework\"";
+			showEnvVarsInLog = 0;
+		};
+		B0B4FAA72FD2A99500794BBA /* Copy and Code Sign PluginManager.framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy and Code Sign PluginManager.framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "mkdir -p \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nrsync --archive --links --whole-file --no-owner --no-group --checksum --exclude='Headers' \"/Library/Developer/Frameworks/PluginManager.framework/\" \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/PluginManager.framework/\"\nif [ \"$?\" -ne 0 ]; then echo \"error: rsync failed; couldn't embed PluginManager.framework\"; exit 1; fi\ncodesign --force --timestamp --options runtime --sign \"${CODE_SIGN_IDENTITY}\" \"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/PluginManager.framework\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B0B4FA9A2FD2A99500794BBA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0B4FAA32FD2A99500794BBA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B0B4FAAC2FD2A99500794BBA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B0B4FAA82FD2A99500794BBA /* XPC Service */;
+			targetProxy = B0B4FAAB2FD2A99500794BBA /* PBXContainerItemProxy */;
+		};
+		B0B4FAB82FD2A99500794BBA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B0B4FAA82FD2A99500794BBA /* XPC Service */;
+			targetProxy = B0B4FAB72FD2A99500794BBA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		B0B4FADD2FD2A99500794BBA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				INFOPLIST_FILE = AnyUpright/Plugin/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+				);
+				MACH_O_TYPE = mh_execute;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_NAME = "AnyUpright $(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "AnyUpright/Plugin/XPC Service-Bridging-Header.h";
+				WRAPPER_EXTENSION = pluginkit;
+			};
+			name = Debug;
+		};
+		B0B4FADE2FD2A99500794BBA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				INFOPLIST_FILE = AnyUpright/Plugin/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+				);
+				MACH_O_TYPE = mh_execute;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_NAME = "AnyUpright $(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "AnyUpright/Plugin/XPC Service-Bridging-Header.h";
+				WRAPPER_EXTENSION = pluginkit;
+			};
+			name = Release;
+		};
+		B0B4FAE12FD2A99500794BBA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "AnyUpright/Wrapper Application/SandboxEntitlements.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				INFOPLIST_FILE = "AnyUpright/Wrapper Application/Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_NAME = AnyUpright;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "AnyUpright/Wrapper Application/Wrapper Application-Bridging-Header.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B0B4FAE22FD2A99500794BBA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "AnyUpright/Wrapper Application/SandboxEntitlements.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				INFOPLIST_FILE = "AnyUpright/Wrapper Application/Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_NAME = AnyUpright;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "AnyUpright/Wrapper Application/Wrapper Application-Bridging-Header.h";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B0B4FAE42FD2A99500794BBA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ADDITIONAL_SDKS = /Library/Developer/SDKs/FxPlug.sdk;
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = NO;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					/Library/Frameworks,
+					"$(inherited)",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5;
+			};
+			name = Debug;
+		};
+		B0B4FAE52FD2A99500794BBA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ADDITIONAL_SDKS = /Library/Developer/SDKs/FxPlug.sdk;
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = NO;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					/Library/Frameworks,
+					"$(inherited)",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B0B4FA992FD2A99500794BBA /* Build configuration list for PBXProject "AnyUpright" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0B4FAE42FD2A99500794BBA /* Debug */,
+				B0B4FAE52FD2A99500794BBA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B0B4FADC2FD2A99500794BBA /* Build configuration list for PBXNativeTarget "XPC Service" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0B4FADD2FD2A99500794BBA /* Debug */,
+				B0B4FADE2FD2A99500794BBA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B0B4FAE02FD2A99500794BBA /* Build configuration list for PBXNativeTarget "Wrapper Application" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0B4FAE12FD2A99500794BBA /* Debug */,
+				B0B4FAE22FD2A99500794BBA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = B0B4FA962FD2A99500794BBA /* Project object */;
+}

@@ -1,4 +1,5 @@
 /* Localized versions of Info.plist keys */
 
-"AnyUpright::FxPlug Description" = "A helpful description of\nwhat this plugin does.";
-
+"AnyUpright::Horizon Manual Description" = "Manual horizon rotation with optional fill.";
+"AnyUpright::Quad Manual Description" = "Manual four-corner source perspective correction.";
+"AnyUpright::Upright Manual Description" = "Manual vertical, horizontal, and rotation correction.";

@@ -48,7 +48,7 @@
 	<array>
 		<dict>
 			<key>groupName</key>
-			<string>AnyUpright Group</string>
+			<string>AnyUpright</string>
 			<key>uuid</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 		</dict>
@@ -57,19 +57,55 @@
 	<array>
 		<dict>
 			<key>className</key>
-			<string>AnyUprightPlugIn</string>
+			<string>AnyUprightHorizonManualPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::FxPlug Name</string>
+			<string>AnyUpright::Horizon Manual Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 			<key>infoString</key>
-			<string>AnyUpright::FxPlug Description</string>
+			<string>AnyUpright::Horizon Manual Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
 			</array>
 			<key>uuid</key>
-			<string>C4A3F7D2-4DE4-41B7-AF68-1A7A15D587A6</string>
+			<string>2E32E3C2-91C7-44D4-A0AC-0E87832A86A1</string>
+			<key>version</key>
+			<string>1.0</string>
+		</dict>
+		<dict>
+			<key>className</key>
+			<string>AnyUprightQuadManualPlugIn</string>
+			<key>displayName</key>
+			<string>AnyUpright::Quad Manual Name</string>
+			<key>group</key>
+			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<key>infoString</key>
+			<string>AnyUpright::Quad Manual Description</string>
+			<key>protocolNames</key>
+			<array>
+				<string>FxFilter</string>
+			</array>
+			<key>uuid</key>
+			<string>9BB4C7D9-9384-4C8F-927D-4F716DA78B14</string>
+			<key>version</key>
+			<string>1.0</string>
+		</dict>
+		<dict>
+			<key>className</key>
+			<string>AnyUprightUprightManualPlugIn</string>
+			<key>displayName</key>
+			<string>AnyUpright::Upright Manual Name</string>
+			<key>group</key>
+			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<key>infoString</key>
+			<string>AnyUpright::Upright Manual Description</string>
+			<key>protocolNames</key>
+			<array>
+				<string>FxFilter</string>
+			</array>
+			<key>uuid</key>
+			<string>A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>

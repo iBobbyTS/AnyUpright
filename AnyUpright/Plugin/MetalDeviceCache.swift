@@ -37,11 +37,11 @@ class MetalDeviceCacheItem: NSObject {
         // Load all the shader files with a .metal file extension in the project
         let defaultLibrary = gpuDevice.makeDefaultLibrary()
         
-        // Configure a pipeline descriptor that is used to cerate a pipeline state
+        // Configure a pipeline descriptor that is used to create a pipeline state
         let pipelineStateDescriptor = MTLRenderPipelineDescriptor.init()
-        pipelineStateDescriptor.label = "MetalBrightness"
-        let vertexFunction = defaultLibrary?.makeFunction(name: "vertexShader")
-        let fragmentFunction = defaultLibrary?.makeFunction(name: "fragmentShader")
+        pipelineStateDescriptor.label = "AnyUprightWarp"
+        let vertexFunction = defaultLibrary?.makeFunction(name: "anyUprightWarpVertex")
+        let fragmentFunction = defaultLibrary?.makeFunction(name: "anyUprightWarpFragment")
         pipelineStateDescriptor.vertexFunction = vertexFunction
         pipelineStateDescriptor.fragmentFunction = fragmentFunction
         pipelineStateDescriptor.colorAttachments [ 0 ].pixelFormat = pixFormat
@@ -86,6 +86,7 @@ class MetalDeviceCacheItem: NSObject {
             {
                 found = true
                 nextCommandQueueDict [ kKey_InUse ] = false
+                commandQueueCache[index] = nextCommandQueueDict
             }
             index += 1;
         }

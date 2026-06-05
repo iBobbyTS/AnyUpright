@@ -1,3 +1,5 @@
 /* Localized versions of Info.plist keys */
 
-"AnyUpright::FxPlug Name" = "AnyUpright";
+"AnyUpright::Horizon Manual Name" = "AnyUpright Horizon Manual";
+"AnyUpright::Quad Manual Name" = "AnyUpright Quad Manual";
+"AnyUpright::Upright Manual Name" = "AnyUpright Upright Manual";

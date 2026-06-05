@@ -27,6 +27,11 @@ typedef struct AnyUprightVertex2D {
     vector_float2 outputCoordinate;
 } AnyUprightVertex2D;
 
+typedef struct AnyUprightOverlayVertex2D {
+    vector_float2 position;
+    vector_float4 color;
+} AnyUprightOverlayVertex2D;
+
 typedef struct AnyUprightWarpState {
     matrix_float3x3 outputToSource;
     vector_float2 outputSize;

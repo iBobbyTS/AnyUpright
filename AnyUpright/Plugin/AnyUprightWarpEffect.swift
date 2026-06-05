@@ -16,6 +16,8 @@ enum AnyUprightEffectKind: Int32 {
 struct AnyUprightParameterState {
     var effectKind: Int32 = 0
     var fillFrame: Int32 = 0
+    var quadMode: Int32 = AUQuadTransformMode.outputCorners.rawValue
+    var applySourceQuad: Int32 = 0
     var rotationRadians: Float = 0.0
     var verticalPerspective: Float = 0.0
     var horizontalPerspective: Float = 0.0
@@ -166,6 +168,26 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         FxParameterFlags(kFxParameterFlag_COLLAPSED)
     }
 
+    func currentParameterTime() -> CMTime {
+        guard let actionAPI = _apiManager.api(for: FxCustomParameterActionAPI_v4.self) as? FxCustomParameterActionAPI_v4 else {
+            return .zero
+        }
+
+        return actionAPI.currentTime()
+    }
+
+    func objectPixelSizeForOSC(defaultSize: AUSize = AUSize(width: 1920.0, height: 1080.0)) -> AUSize {
+        guard let oscAPI = _apiManager.api(for: FxOnScreenControlAPI_v4.self) as? FxOnScreenControlAPI_v4 else {
+            return defaultSize
+        }
+
+        var width: UInt = 0
+        var height: UInt = 0
+        var pixelAspectRatio = 1.0
+        oscAPI.objectWidth(&width, height: &height, pixelAspectRatio: &pixelAspectRatio)
+        return AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
+    }
+
     private func state(from pluginState: Data?) -> AnyUprightParameterState {
         guard let pluginState,
               pluginState.count >= MemoryLayout<AnyUprightParameterState>.stride else {
@@ -199,16 +221,22 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             )
 
         case .quad:
-            let outputQuad = AnyUprightGeometry.quad(from: cornerOffsets(from: state), size: outputSize)
-            return AnyUprightGeometry.homography(from: outputQuad, to: AUQuad.fullFrame(sourceSize))
+            let mode = AUQuadTransformMode(rawValue: state.quadMode) ?? .outputCorners
+            return AnyUprightGeometry.quadOutputToSourceMatrix(
+                from: cornerOffsets(from: state),
+                mode: mode,
+                applySourceQuad: state.applySourceQuad != 0,
+                outputSize: outputSize,
+                sourceSize: sourceSize
+            )
 
         case .upright:
-            let sourceQuad = AnyUprightGeometry.uprightQuad(
+            let outputQuad = AnyUprightGeometry.uprightQuad(
                 vertical: Double(state.verticalPerspective),
                 horizontal: Double(state.horizontalPerspective),
-                size: sourceSize
+                size: outputSize
             )
-            let perspective = AnyUprightGeometry.homography(from: AUQuad.fullFrame(outputSize), to: sourceQuad)
+            let perspective = AnyUprightGeometry.homography(from: outputQuad, to: AUQuad.fullFrame(sourceSize))
             let rotation = AnyUprightGeometry.rotationOutputToSource(
                 angleRadians: Double(state.rotationRadians),
                 fillFrame: false,

@@ -32,6 +32,36 @@ struct AUQuad: Equatable {
     }
 }
 
+struct AULineSegment: Equatable {
+    var start: AUPoint
+    var end: AUPoint
+
+    var length: Double {
+        hypot(end.x - start.x, end.y - start.y)
+    }
+}
+
+enum AUReferenceOrientation {
+    case horizontal
+    case vertical
+}
+
+enum AUQuadTransformMode: Int32 {
+    case outputCorners = 0
+    case sourceQuad = 1
+}
+
+struct AULineCandidate: Equatable {
+    var line: AULineSegment
+    var orientation: AUReferenceOrientation
+    var signedDeviationRadians: Double
+    var length: Double
+
+    var absoluteDeviationRadians: Double {
+        abs(signedDeviationRadians)
+    }
+}
+
 struct AUCornerOffsets {
     var topLeftPercent: AUPoint = AUPoint(x: 0.0, y: 0.0)
     var topRightPercent: AUPoint = AUPoint(x: 0.0, y: 0.0)
@@ -72,20 +102,127 @@ enum AnyUprightGeometry {
         if vertical > 0.0 {
             quad.topLeft.x += verticalInset
             quad.topRight.x -= verticalInset
+            quad.bottomRight.x += verticalInset
+            quad.bottomLeft.x -= verticalInset
         } else if vertical < 0.0 {
+            quad.topLeft.x -= verticalInset
+            quad.topRight.x += verticalInset
             quad.bottomLeft.x += verticalInset
             quad.bottomRight.x -= verticalInset
         }
 
         if horizontal > 0.0 {
+            quad.topLeft.y -= horizontalInset
             quad.topRight.y += horizontalInset
             quad.bottomRight.y -= horizontalInset
+            quad.bottomLeft.y += horizontalInset
         } else if horizontal < 0.0 {
             quad.topLeft.y += horizontalInset
+            quad.topRight.y -= horizontalInset
+            quad.bottomRight.y += horizontalInset
             quad.bottomLeft.y -= horizontalInset
         }
 
         return quad
+    }
+
+    static func lineCandidates(
+        from lines: [AULineSegment],
+        orientation: AUReferenceOrientation,
+        maxDeviationRadians: Double = .pi / 6.0,
+        minimumLength: Double = 1.0
+    ) -> [AULineCandidate] {
+        lines.compactMap { line in
+            let length = line.length
+            guard length >= minimumLength else {
+                return nil
+            }
+
+            let deviation = signedDeviationRadians(of: line, from: orientation)
+            guard abs(deviation) <= maxDeviationRadians else {
+                return nil
+            }
+
+            return AULineCandidate(
+                line: line,
+                orientation: orientation,
+                signedDeviationRadians: deviation,
+                length: length
+            )
+        }
+        .sorted {
+            if abs($0.signedDeviationRadians) == abs($1.signedDeviationRadians) {
+                return $0.length > $1.length
+            }
+            return abs($0.signedDeviationRadians) < abs($1.signedDeviationRadians)
+        }
+    }
+
+    static func bestReferenceLines(
+        from lines: [AULineSegment],
+        orientation: AUReferenceOrientation,
+        maximumCount: Int = 2,
+        maxDeviationRadians: Double = .pi / 6.0,
+        minimumLength: Double = 1.0
+    ) -> [AULineSegment] {
+        Array(
+            lineCandidates(
+                from: lines,
+                orientation: orientation,
+                maxDeviationRadians: maxDeviationRadians,
+                minimumLength: minimumLength
+            )
+            .prefix(maximumCount)
+            .map(\.line)
+        )
+    }
+
+    static func horizonCorrectionRadians(from lines: [AULineSegment], maximumCount: Int = 2) -> Double? {
+        rotationCorrectionRadians(from: lines, orientation: .horizontal, maximumCount: maximumCount)
+    }
+
+    static func rotationCorrectionRadians(from lines: [AULineSegment], orientation: AUReferenceOrientation, maximumCount: Int = 2) -> Double? {
+        let candidates = Array(lineCandidates(from: lines, orientation: orientation).prefix(maximumCount))
+        let totalWeight = candidates.reduce(0.0) { $0 + $1.length }
+        guard totalWeight > 0.0 else {
+            return nil
+        }
+
+        let weightedDeviation = candidates.reduce(0.0) { partial, candidate in
+            partial + candidate.signedDeviationRadians * candidate.length
+        } / totalWeight
+
+        return -weightedDeviation
+    }
+
+    static func estimateVerticalPerspective(from referenceLines: [AULineSegment], size: AUSize) -> Double? {
+        estimatePerspective(from: referenceLines, orientation: .vertical, size: size)
+    }
+
+    static func estimateHorizontalPerspective(from referenceLines: [AULineSegment], size: AUSize) -> Double? {
+        estimatePerspective(from: referenceLines, orientation: .horizontal, size: size)
+    }
+
+    static func quadOutputToSourceMatrix(
+        from offsets: AUCornerOffsets,
+        mode: AUQuadTransformMode,
+        applySourceQuad: Bool,
+        outputSize: AUSize,
+        sourceSize: AUSize
+    ) -> simd_float3x3 {
+        switch mode {
+        case .outputCorners:
+            let outputQuad = quad(from: offsets, size: outputSize)
+            return homography(from: outputQuad, to: AUQuad.fullFrame(sourceSize))
+
+        case .sourceQuad:
+            guard applySourceQuad else {
+                return homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
+            }
+
+            let sourceQuad = quad(from: offsets, size: sourceSize)
+            return homography(from: AUQuad.fullFrame(outputSize), to: sourceQuad)
+        }
     }
 
     static func rotationScaleToFill(angleRadians: Double, size: AUSize) -> Double {
@@ -179,6 +316,26 @@ enum AnyUprightGeometry {
         lhs * rhs
     }
 
+    static func transform(_ point: AUPoint, by matrix: simd_float3x3) -> AUPoint {
+        let mapped = matrix * SIMD3<Float>(Float(point.x), Float(point.y), 1.0)
+        let z = Double(mapped.z)
+        guard abs(z) > 0.000001 else {
+            return point
+        }
+
+        return AUPoint(
+            x: Double(mapped.x) / z,
+            y: Double(mapped.y) / z
+        )
+    }
+
+    static func transform(_ line: AULineSegment, by matrix: simd_float3x3) -> AULineSegment {
+        AULineSegment(
+            start: transform(line.start, by: matrix),
+            end: transform(line.end, by: matrix)
+        )
+    }
+
     private static func matrix(_ a: Double, _ b: Double, _ c: Double,
                                _ d: Double, _ e: Double, _ f: Double,
                                _ g: Double, _ h: Double, _ i: Double) -> simd_float3x3 {
@@ -231,5 +388,86 @@ enum AnyUprightGeometry {
         }
 
         return matrix.map { $0[columnCount] }
+    }
+
+    private static func estimatePerspective(from referenceLines: [AULineSegment], orientation: AUReferenceOrientation, size: AUSize) -> Double? {
+        let usableLines = referenceLines.filter { $0.length > 1.0 }
+        guard !usableLines.isEmpty, size.width > 0.0, size.height > 0.0 else {
+            return nil
+        }
+
+        func objective(_ parameter: Double) -> Double {
+            let quad: AUQuad
+            switch orientation {
+            case .vertical:
+                quad = uprightQuad(vertical: parameter, horizontal: 0.0, size: size)
+            case .horizontal:
+                quad = uprightQuad(vertical: 0.0, horizontal: parameter, size: size)
+            }
+
+            let sourceToOutput = homography(from: AUQuad.fullFrame(size), to: quad)
+            return usableLines.reduce(0.0) { partial, line in
+                let transformed = transform(line, by: sourceToOutput)
+                let deviation = signedDeviationRadians(of: transformed, from: orientation)
+                return partial + deviation * deviation * line.length
+            }
+        }
+
+        return minimize(objective, lowerBound: -1.0, upperBound: 1.0)
+    }
+
+    private static func signedDeviationRadians(of line: AULineSegment, from orientation: AUReferenceOrientation) -> Double {
+        let angle = normalizedLineAngleRadians(
+            atan2(line.end.y - line.start.y, line.end.x - line.start.x)
+        )
+
+        switch orientation {
+        case .horizontal:
+            return angle
+        case .vertical:
+            if angle >= 0.0 {
+                return angle - .pi / 2.0
+            }
+            return angle + .pi / 2.0
+        }
+    }
+
+    private static func normalizedLineAngleRadians(_ angle: Double) -> Double {
+        var result = angle
+        while result <= -.pi / 2.0 {
+            result += .pi
+        }
+        while result > .pi / 2.0 {
+            result -= .pi
+        }
+        return result
+    }
+
+    private static func minimize(_ objective: (Double) -> Double, lowerBound: Double, upperBound: Double) -> Double {
+        let inverseGoldenRatio = (sqrt(5.0) - 1.0) / 2.0
+        var lower = lowerBound
+        var upper = upperBound
+        var x1 = upper - inverseGoldenRatio * (upper - lower)
+        var x2 = lower + inverseGoldenRatio * (upper - lower)
+        var f1 = objective(x1)
+        var f2 = objective(x2)
+
+        for _ in 0..<48 {
+            if f1 > f2 {
+                lower = x1
+                x1 = x2
+                f1 = f2
+                x2 = lower + inverseGoldenRatio * (upper - lower)
+                f2 = objective(x2)
+            } else {
+                upper = x2
+                x2 = x1
+                f2 = f1
+                x1 = upper - inverseGoldenRatio * (upper - lower)
+                f1 = objective(x1)
+            }
+        }
+
+        return (lower + upper) / 2.0
     }
 }

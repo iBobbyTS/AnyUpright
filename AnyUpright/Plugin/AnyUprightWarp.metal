@@ -16,6 +16,12 @@ typedef struct
     float2 outputCoordinate;
 } RasterizerData;
 
+typedef struct
+{
+    float4 clipSpacePosition [[position]];
+    float4 color;
+} OverlayRasterizerData;
+
 vertex RasterizerData anyUprightWarpVertex(uint vertexID [[vertex_id]],
                                            constant AnyUprightVertex2D *vertexArray [[buffer(AUVII_Vertices)]],
                                            constant vector_uint2 *viewportSizePointer [[buffer(AUVII_ViewportSize)]])
@@ -53,4 +59,25 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
     }
 
     return float4(colorTexture.sample(textureSampler, sourceUV));
+}
+
+vertex OverlayRasterizerData anyUprightOverlayVertex(uint vertexID [[vertex_id]],
+                                                     constant AnyUprightOverlayVertex2D *vertexArray [[buffer(AUVII_Vertices)]],
+                                                     constant vector_uint2 *viewportSizePointer [[buffer(AUVII_ViewportSize)]])
+{
+    OverlayRasterizerData out;
+    float2 pixelSpacePosition = vertexArray[vertexID].position.xy;
+    float2 viewportSize = float2(*viewportSizePointer);
+
+    out.clipSpacePosition.xy = pixelSpacePosition / (viewportSize / 2.0);
+    out.clipSpacePosition.z = 0.0;
+    out.clipSpacePosition.w = 1.0;
+    out.color = vertexArray[vertexID].color;
+
+    return out;
+}
+
+fragment float4 anyUprightOverlayFragment(OverlayRasterizerData in [[stage_in]])
+{
+    return in.color;
 }

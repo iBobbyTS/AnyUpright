@@ -62,11 +62,12 @@
 			<string>AnyUpright::Horizon Manual Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
-			<key>infoString</key>
-			<string>AnyUpright::Horizon Manual Description</string>
+				<key>infoString</key>
+				<string>AnyUpright::Horizon Manual Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
+				<string>FxAnalyzer</string>
 			</array>
 			<key>uuid</key>
 			<string>2E32E3C2-91C7-44D4-A0AC-0E87832A86A1</string>
@@ -80,13 +81,14 @@
 			<string>AnyUpright::Quad Manual Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
-			<key>infoString</key>
-			<string>AnyUpright::Quad Manual Description</string>
+				<key>infoString</key>
+				<string>AnyUpright::Quad Manual Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
+				<string>FxOnScreenControl</string>
 			</array>
-			<key>uuid</key>
+				<key>uuid</key>
 			<string>9BB4C7D9-9384-4C8F-927D-4F716DA78B14</string>
 			<key>version</key>
 			<string>1.0</string>
@@ -100,9 +102,11 @@
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 			<key>infoString</key>
 			<string>AnyUpright::Upright Manual Description</string>
-			<key>protocolNames</key>
+				<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
+				<string>FxAnalyzer</string>
+				<string>FxOnScreenControl</string>
 			</array>
 			<key>uuid</key>
 			<string>A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB</string>

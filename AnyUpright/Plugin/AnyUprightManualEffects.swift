@@ -34,6 +34,13 @@ private enum QuadParam: UInt32 {
     case bottomLeftPixelY = 215
 }
 
+private enum QuadGroup: UInt32, CaseIterable {
+    case topLeft = 220
+    case topRight = 221
+    case bottomRight = 222
+    case bottomLeft = 223
+}
+
 private enum QuadOSCPart: Int {
     case none = 0
     case topLeft = 1
@@ -375,12 +382,12 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
             withName: "Apply Source Quad",
             parameterID: QuadParam.applySourceQuad.rawValue,
             defaultValue: false,
-            parameterFlags: defaultFlags()
+            parameterFlags: applySourceQuadHiddenFlags()
         )
-        addCornerParameters(paramAPI, title: "Top Left", groupID: 220, percentX: .topLeftPercentX, percentY: .topLeftPercentY, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY)
-        addCornerParameters(paramAPI, title: "Top Right", groupID: 221, percentX: .topRightPercentX, percentY: .topRightPercentY, pixelX: .topRightPixelX, pixelY: .topRightPixelY)
-        addCornerParameters(paramAPI, title: "Bottom Right", groupID: 222, percentX: .bottomRightPercentX, percentY: .bottomRightPercentY, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY)
-        addCornerParameters(paramAPI, title: "Bottom Left", groupID: 223, percentX: .bottomLeftPercentX, percentY: .bottomLeftPercentY, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY)
+        addCornerParameters(paramAPI, title: "Top Left", groupID: QuadGroup.topLeft.rawValue, percentX: .topLeftPercentX, percentY: .topLeftPercentY, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY)
+        addCornerParameters(paramAPI, title: "Top Right", groupID: QuadGroup.topRight.rawValue, percentX: .topRightPercentX, percentY: .topRightPercentY, pixelX: .topRightPixelX, pixelY: .topRightPixelY)
+        addCornerParameters(paramAPI, title: "Bottom Right", groupID: QuadGroup.bottomRight.rawValue, percentX: .bottomRightPercentX, percentY: .bottomRightPercentY, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY)
+        addCornerParameters(paramAPI, title: "Bottom Left", groupID: QuadGroup.bottomLeft.rawValue, percentX: .bottomLeftPercentX, percentY: .bottomLeftPercentY, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY)
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
@@ -415,6 +422,18 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
         result.bottomLeftPixelY = floatParam(paramAPI, .bottomLeftPixelY, renderTime)
 
         return result
+    }
+
+    func pluginInstanceAddedToDocument() {
+        syncQuadInspectorVisibility(at: currentParameterTime())
+    }
+
+    func parameterChanged(_ paramID: UInt32, at time: CMTime) throws {
+        guard paramID == QuadParam.mode.rawValue else {
+            return
+        }
+
+        syncQuadInspectorVisibility(at: time)
     }
 
     private func addCornerParameters(_ paramAPI: FxParameterCreationAPI_v5, title: String, groupID: UInt32, percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam) {
@@ -458,6 +477,34 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
         var value = 0.0
         paramAPI.getFloatValue(&value, fromParameter: param.rawValue, at: time)
         return Float(value)
+    }
+
+    private func syncQuadInspectorVisibility(at time: CMTime) {
+        let paramAPI = parameterRetrievalAPI()
+        var mode = Int32(AUQuadTransformMode.outputCorners.rawValue)
+        paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
+
+        guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
+            return
+        }
+
+        let selectedMode = AUQuadTransformMode(rawValue: mode) ?? .outputCorners
+        let isSourceQuad = selectedMode == .sourceQuad
+
+        _ = settingAPI.setParameterFlags(isSourceQuad ? defaultFlags() : applySourceQuadHiddenFlags(), toParameter: QuadParam.applySourceQuad.rawValue)
+
+        let cornerFlags = isSourceQuad ? hiddenCollapsedFlags() : collapsedFlags()
+        for group in QuadGroup.allCases {
+            _ = settingAPI.setParameterFlags(cornerFlags, toParameter: group.rawValue)
+        }
+    }
+
+    private func applySourceQuadHiddenFlags() -> FxParameterFlags {
+        FxParameterFlags(kFxParameterFlag_HIDDEN)
+    }
+
+    private func hiddenCollapsedFlags() -> FxParameterFlags {
+        FxParameterFlags(kFxParameterFlag_HIDDEN | kFxParameterFlag_COLLAPSED)
     }
 
     func drawingCoordinates() -> FxDrawingCoordinates {

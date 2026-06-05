@@ -20,6 +20,12 @@ struct AUOSCHandle {
     var part: Int
 }
 
+struct AUOSCStyledSegment {
+    var start: AUPoint
+    var end: AUPoint
+    var style: AUOSCOverlayStyle
+}
+
 final class AnyUprightOSCOverlayRenderer {
     private struct PipelineKey: Hashable {
         var registryID: UInt64
@@ -61,6 +67,22 @@ final class AnyUprightOSCOverlayRenderer {
         destinationImage: FxImageTile,
         style: AUOSCOverlayStyle = AUOSCOverlayStyle()
     ) {
+        renderStyledSegments(
+            segments.map { AUOSCStyledSegment(start: $0.0, end: $0.1, style: style) },
+            handles: handles,
+            activePart: activePart,
+            destinationImage: destinationImage,
+            handleStyle: style
+        )
+    }
+
+    func renderStyledSegments(
+        _ segments: [AUOSCStyledSegment],
+        handles: [AUOSCHandle],
+        activePart: Int,
+        destinationImage: FxImageTile,
+        handleStyle: AUOSCOverlayStyle = AUOSCOverlayStyle()
+    ) {
         guard !segments.isEmpty || !handles.isEmpty else {
             return
         }
@@ -81,15 +103,31 @@ final class AnyUprightOSCOverlayRenderer {
         var vertices: [AnyUprightOverlayVertex2D] = []
 
         for segment in segments {
-            appendLine(from: segment.0, to: segment.1, color: style.shadowColor, thickness: style.lineThickness + 2.0, width: width, height: height, to: &vertices)
+            appendLine(
+                from: segment.start,
+                to: segment.end,
+                color: segment.style.shadowColor,
+                thickness: segment.style.lineThickness + 2.0,
+                width: width,
+                height: height,
+                to: &vertices
+            )
         }
         for segment in segments {
-            appendLine(from: segment.0, to: segment.1, color: style.lineColor, thickness: style.lineThickness, width: width, height: height, to: &vertices)
+            appendLine(
+                from: segment.start,
+                to: segment.end,
+                color: segment.style.lineColor,
+                thickness: segment.style.lineThickness,
+                width: width,
+                height: height,
+                to: &vertices
+            )
         }
         for handle in handles {
-            let color = handle.part == activePart ? style.activeHandleColor : style.handleColor
-            appendSquare(center: handle.point, radius: style.handleRadius + 2.0, color: style.shadowColor, width: width, height: height, to: &vertices)
-            appendSquare(center: handle.point, radius: style.handleRadius, color: color, width: width, height: height, to: &vertices)
+            let color = handle.part == activePart ? handleStyle.activeHandleColor : handleStyle.handleColor
+            appendSquare(center: handle.point, radius: handleStyle.handleRadius + 2.0, color: handleStyle.shadowColor, width: width, height: height, to: &vertices)
+            appendSquare(center: handle.point, radius: handleStyle.handleRadius, color: color, width: width, height: height, to: &vertices)
         }
 
         guard !vertices.isEmpty else {

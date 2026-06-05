@@ -52,6 +52,12 @@ private enum UprightParam: UInt32 {
     case applyGuidedVertical = 306
     case applyGuidedHorizontal = 307
     case applyGuidedFull = 308
+    case detectVerticalCandidates = 309
+    case detectHorizontalCandidates = 310
+    case detectFullCandidates = 311
+    case applySelectedVertical = 312
+    case applySelectedHorizontal = 313
+    case applySelectedFull = 314
 
     case guide1Enabled = 320
     case guide1Orientation = 321
@@ -75,11 +81,36 @@ private enum UprightAnalysisMode {
     case vertical
     case horizontal
     case full
-}
+    case detectVerticalCandidates
+    case detectHorizontalCandidates
+    case detectFullCandidates
 
-private enum UprightGuideOrientation: Int32 {
-    case vertical = 0
-    case horizontal = 1
+    var includesVertical: Bool {
+        switch self {
+        case .vertical, .full, .detectVerticalCandidates, .detectFullCandidates:
+            return true
+        case .horizontal, .detectHorizontalCandidates:
+            return false
+        }
+    }
+
+    var includesHorizontal: Bool {
+        switch self {
+        case .horizontal, .full, .detectHorizontalCandidates, .detectFullCandidates:
+            return true
+        case .vertical, .detectVerticalCandidates:
+            return false
+        }
+    }
+
+    var isCandidateDetection: Bool {
+        switch self {
+        case .detectVerticalCandidates, .detectHorizontalCandidates, .detectFullCandidates:
+            return true
+        case .vertical, .horizontal, .full:
+            return false
+        }
+    }
 }
 
 private enum UprightOSCPart: Int {
@@ -113,11 +144,82 @@ private struct UprightGuideLine {
     var end: AUPoint
 }
 
+private func singleFrameAnalysisRange(near requestedTime: CMTime, within inputTimeRange: CMTimeRange) -> CMTimeRange {
+    let singleFrameHint = CMTime(value: 1, timescale: 600)
+    let duration = CMTimeCompare(inputTimeRange.duration, singleFrameHint) < 0 ? inputTimeRange.duration : singleFrameHint
+    var start = inputTimeRange.start
+
+    if requestedTime.isValid,
+       requestedTime.isNumeric,
+       CMTimeRangeContainsTime(inputTimeRange, time: requestedTime) {
+        let latestStart = CMTimeSubtract(CMTimeRangeGetEnd(inputTimeRange), duration)
+        start = CMTimeCompare(requestedTime, latestStart) > 0 ? latestStart : requestedTime
+    }
+
+    return CMTimeRange(start: start, duration: duration)
+}
+
+private func parameterWriteTime(preferred: CMTime, fallback: CMTime) -> CMTime {
+    if preferred.isValid, preferred.isNumeric {
+        return preferred
+    }
+
+    return fallback
+}
+
+private enum AnyUprightAnalysisImage {
+    static func ciImage(from frame: FxImageTile) -> CIImage? {
+        guard let ioSurface = frame.ioSurface else {
+            return nil
+        }
+
+        let colorSpace = frame.colorSpace.map { $0 as Any }
+        return CIImage(ioSurface: ioSurface, options: colorSpace.map { [.colorSpace: $0] } ?? [:])
+    }
+
+    static func grayscaleImage(from frame: FxImageTile, maxDimension: Int, context: CIContext) -> AUGrayscaleImage? {
+        guard let sourceImage = ciImage(from: frame) else {
+            return nil
+        }
+
+        let bounds = frame.imagePixelBounds
+        let sourceWidth = max(1, Int(bounds.right - bounds.left))
+        let sourceHeight = max(1, Int(bounds.top - bounds.bottom))
+        let scale = min(1.0, Double(maxDimension) / Double(max(sourceWidth, sourceHeight)))
+        let width = max(1, Int(round(Double(sourceWidth) * scale)))
+        let height = max(1, Int(round(Double(sourceHeight) * scale)))
+        let image = sourceImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        var rgba = Array(repeating: UInt8(0), count: width * height * 4)
+
+        context.render(
+            image,
+            toBitmap: &rgba,
+            rowBytes: width * 4,
+            bounds: CGRect(x: 0, y: 0, width: width, height: height),
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+
+        var gray = Array(repeating: UInt8(0), count: width * height)
+        for index in 0..<(width * height) {
+            let base = index * 4
+            let red = Double(rgba[base])
+            let green = Double(rgba[base + 1])
+            let blue = Double(rgba[base + 2])
+            gray[index] = UInt8(min(255.0, max(0.0, red * 0.299 + green * 0.587 + blue * 0.114)))
+        }
+
+        return AUGrayscaleImage(width: width, height: height, pixels: gray)
+    }
+}
+
 @objc(AnyUprightHorizonManualPlugIn)
 class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private let analysisLock = NSLock()
+    private let analysisContext = CIContext(options: nil)
     private var detectedRotationDegrees: Double?
     private var detectedRotationTime = CMTime.zero
+    private var requestedAnalysisTime = CMTime.zero
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         paramAPI.addPushButton(
@@ -157,6 +259,10 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     @objc private func analyzeHorizon() {
+        analysisLock.lock()
+        requestedAnalysisTime = currentParameterTime()
+        analysisLock.unlock()
+
         guard let analysisAPI = _apiManager.api(for: FxAnalysisAPI.self) as? FxAnalysisAPI else {
             return
         }
@@ -165,9 +271,10 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     func desiredAnalysisTimeRange(_ desiredRange: UnsafeMutablePointer<CMTimeRange>, forInputWith inputTimeRange: CMTimeRange) throws {
-        let singleFrameHint = CMTime(value: 1, timescale: 600)
-        let duration = CMTimeCompare(inputTimeRange.duration, singleFrameHint) < 0 ? inputTimeRange.duration : singleFrameHint
-        desiredRange.pointee = CMTimeRange(start: inputTimeRange.start, duration: duration)
+        analysisLock.lock()
+        let requestedTime = requestedAnalysisTime
+        analysisLock.unlock()
+        desiredRange.pointee = singleFrameAnalysisRange(near: requestedTime, within: inputTimeRange)
     }
 
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
@@ -178,25 +285,45 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
-        guard let ioSurface = frame.ioSurface else {
+        guard let image = AnyUprightAnalysisImage.ciImage(from: frame) else {
             return
         }
 
-        let colorSpace = frame.colorSpace.map { $0 as Any }
-        let image = CIImage(ioSurface: ioSurface, options: colorSpace.map { [.colorSpace: $0] } ?? [:])
         let request = VNDetectHorizonRequest()
         let handler = VNImageRequestHandler(ciImage: image, options: [:])
-        try handler.perform([request])
+        var rotationRadians: Double?
 
-        guard let observation = request.results?.first as? VNHorizonObservation else {
-            return
+        do {
+            try handler.perform([request])
+
+            if let observation = request.results?.first as? VNHorizonObservation {
+                let bounds = frame.imagePixelBounds
+                let width = max(1, Int(bounds.right - bounds.left))
+                let height = max(1, Int(bounds.top - bounds.bottom))
+                let transform = observation.transform(forImageWidth: width, height: height)
+                rotationRadians = atan2(Double(transform.b), Double(transform.a))
+            }
+        } catch {
+            rotationRadians = nil
         }
 
-        let bounds = frame.imagePixelBounds
-        let width = max(1, Int(bounds.right - bounds.left))
-        let height = max(1, Int(bounds.top - bounds.bottom))
-        let transform = observation.transform(forImageWidth: width, height: height)
-        let rotationRadians = atan2(Double(transform.b), Double(transform.a))
+        if rotationRadians == nil,
+           let grayscaleImage = AnyUprightAnalysisImage.grayscaleImage(from: frame, maxDimension: 360, context: analysisContext) {
+            let lines = AnyUprightLineDetection.detectLineSegments(
+                in: grayscaleImage,
+                options: AULineDetectionOptions(
+                    orientation: .horizontal,
+                    edgeThreshold: 40.0,
+                    voteThreshold: max(20, grayscaleImage.width / 5),
+                    maxLines: 40
+                )
+            )
+            rotationRadians = AnyUprightGeometry.dominantHorizonCorrectionRadians(from: lines)
+        }
+
+        guard let rotationRadians else {
+            return
+        }
 
         analysisLock.lock()
         detectedRotationDegrees = rotationRadians * 180.0 / .pi
@@ -208,14 +335,21 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         analysisLock.lock()
         let rotationDegrees = detectedRotationDegrees
         let rotationTime = detectedRotationTime
+        let requestedTime = requestedAnalysisTime
         analysisLock.unlock()
 
-        guard let rotationDegrees,
-              let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
+        guard let rotationDegrees else {
             return
         }
 
-        settingAPI.setFloatValue(rotationDegrees, toParameter: HorizonParam.rotation.rawValue, at: rotationTime)
+        let writeTime = parameterWriteTime(preferred: requestedTime, fallback: rotationTime)
+        performParameterAction {
+            guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
+                return
+            }
+
+            _ = settingAPI.setFloatValue(rotationDegrees, toParameter: HorizonParam.rotation.rawValue, at: writeTime)
+        }
     }
 }
 
@@ -397,82 +531,48 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
     }
 
     private func quadObjectPoints(at time: CMTime, size: AUSize) -> AUQuad {
-        let paramAPI = parameterRetrievalAPI()
-        return AUQuad(
-            topLeft: objectPoint(
-                base: AUPoint(x: 0.0, y: 1.0),
-                percentX: .topLeftPercentX,
-                percentY: .topLeftPercentY,
-                pixelX: .topLeftPixelX,
-                pixelY: .topLeftPixelY,
-                paramAPI: paramAPI,
-                time: time,
-                size: size
-            ),
-            topRight: objectPoint(
-                base: AUPoint(x: 1.0, y: 1.0),
-                percentX: .topRightPercentX,
-                percentY: .topRightPercentY,
-                pixelX: .topRightPixelX,
-                pixelY: .topRightPixelY,
-                paramAPI: paramAPI,
-                time: time,
-                size: size
-            ),
-            bottomRight: objectPoint(
-                base: AUPoint(x: 1.0, y: 0.0),
-                percentX: .bottomRightPercentX,
-                percentY: .bottomRightPercentY,
-                pixelX: .bottomRightPixelX,
-                pixelY: .bottomRightPixelY,
-                paramAPI: paramAPI,
-                time: time,
-                size: size
-            ),
-            bottomLeft: objectPoint(
-                base: AUPoint(x: 0.0, y: 0.0),
-                percentX: .bottomLeftPercentX,
-                percentY: .bottomLeftPercentY,
-                pixelX: .bottomLeftPixelX,
-                pixelY: .bottomLeftPixelY,
-                paramAPI: paramAPI,
-                time: time,
-                size: size
-            )
-        )
-    }
-
-    private func objectPoint(base: AUPoint, percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam, paramAPI: FxParameterRetrievalAPI_v6, time: CMTime, size: AUSize) -> AUPoint {
-        AUPoint(
-            x: base.x + Double(floatParam(paramAPI, percentX, time)) + Double(floatParam(paramAPI, pixelX, time)) / size.width,
-            y: base.y + Double(floatParam(paramAPI, percentY, time)) + Double(floatParam(paramAPI, pixelY, time)) / size.height
-        )
+        AnyUprightGeometry.quadObjectPoints(from: cornerOffsets(at: time), size: size)
     }
 
     private func setCorner(_ point: AUPoint, part: QuadOSCPart, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
-        let paramAPI = parameterRetrievalAPI()
-        let ids: (base: AUPoint, percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam)
+        let ids: (corner: AUQuadCorner, pixelX: QuadParam, pixelY: QuadParam)
 
         switch part {
         case .topLeft:
-            ids = (AUPoint(x: 0.0, y: 1.0), .topLeftPercentX, .topLeftPercentY, .topLeftPixelX, .topLeftPixelY)
+            ids = (.topLeft, .topLeftPixelX, .topLeftPixelY)
         case .topRight:
-            ids = (AUPoint(x: 1.0, y: 1.0), .topRightPercentX, .topRightPercentY, .topRightPixelX, .topRightPixelY)
+            ids = (.topRight, .topRightPixelX, .topRightPixelY)
         case .bottomRight:
-            ids = (AUPoint(x: 1.0, y: 0.0), .bottomRightPercentX, .bottomRightPercentY, .bottomRightPixelX, .bottomRightPixelY)
+            ids = (.bottomRight, .bottomRightPixelX, .bottomRightPixelY)
         case .bottomLeft:
-            ids = (AUPoint(x: 0.0, y: 0.0), .bottomLeftPercentX, .bottomLeftPercentY, .bottomLeftPixelX, .bottomLeftPixelY)
+            ids = (.bottomLeft, .bottomLeftPixelX, .bottomLeftPixelY)
         case .none:
             return
         }
 
-        let percentX = Double(floatParam(paramAPI, ids.percentX, time))
-        let percentY = Double(floatParam(paramAPI, ids.percentY, time))
-        let pixelX = (point.x - ids.base.x - percentX) * size.width
-        let pixelY = (point.y - ids.base.y - percentY) * size.height
+        let pixels = AnyUprightGeometry.cornerPixelOffset(
+            forObjectPoint: point,
+            corner: ids.corner,
+            offsets: cornerOffsets(at: time),
+            size: size
+        )
 
-        settingAPI.setFloatValue(pixelX, toParameter: ids.pixelX.rawValue, at: time)
-        settingAPI.setFloatValue(pixelY, toParameter: ids.pixelY.rawValue, at: time)
+        settingAPI.setFloatValue(pixels.x, toParameter: ids.pixelX.rawValue, at: time)
+        settingAPI.setFloatValue(pixels.y, toParameter: ids.pixelY.rawValue, at: time)
+    }
+
+    private func cornerOffsets(at time: CMTime) -> AUCornerOffsets {
+        let paramAPI = parameterRetrievalAPI()
+        return AUCornerOffsets(
+            topLeftPercent: AUPoint(x: Double(floatParam(paramAPI, .topLeftPercentX, time)), y: Double(floatParam(paramAPI, .topLeftPercentY, time))),
+            topRightPercent: AUPoint(x: Double(floatParam(paramAPI, .topRightPercentX, time)), y: Double(floatParam(paramAPI, .topRightPercentY, time))),
+            bottomRightPercent: AUPoint(x: Double(floatParam(paramAPI, .bottomRightPercentX, time)), y: Double(floatParam(paramAPI, .bottomRightPercentY, time))),
+            bottomLeftPercent: AUPoint(x: Double(floatParam(paramAPI, .bottomLeftPercentX, time)), y: Double(floatParam(paramAPI, .bottomLeftPercentY, time))),
+            topLeftPixels: AUPoint(x: Double(floatParam(paramAPI, .topLeftPixelX, time)), y: Double(floatParam(paramAPI, .topLeftPixelY, time))),
+            topRightPixels: AUPoint(x: Double(floatParam(paramAPI, .topRightPixelX, time)), y: Double(floatParam(paramAPI, .topRightPixelY, time))),
+            bottomRightPixels: AUPoint(x: Double(floatParam(paramAPI, .bottomRightPixelX, time)), y: Double(floatParam(paramAPI, .bottomRightPixelY, time))),
+            bottomLeftPixels: AUPoint(x: Double(floatParam(paramAPI, .bottomLeftPixelX, time)), y: Double(floatParam(paramAPI, .bottomLeftPixelY, time)))
+        )
     }
 
 }
@@ -532,7 +632,10 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
     private var pendingAnalysisMode: UprightAnalysisMode?
     private var detectedVerticalPerspective: Double?
     private var detectedHorizontalPerspective: Double?
+    private var detectedRotationDegrees: Double?
+    private var detectedCandidates: [UprightDetectedCandidate] = []
     private var detectedPerspectiveTime = CMTime.zero
+    private var requestedAnalysisTime = CMTime.zero
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         paramAPI.addPushButton(
@@ -551,6 +654,42 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
             withName: "Auto Full",
             parameterID: UprightParam.analyzeFull.rawValue,
             selector: #selector(analyzeFull),
+            parameterFlags: defaultFlags()
+        )
+        paramAPI.addPushButton(
+            withName: "Detect Vertical Candidates",
+            parameterID: UprightParam.detectVerticalCandidates.rawValue,
+            selector: #selector(detectVerticalCandidates),
+            parameterFlags: defaultFlags()
+        )
+        paramAPI.addPushButton(
+            withName: "Detect Horizontal Candidates",
+            parameterID: UprightParam.detectHorizontalCandidates.rawValue,
+            selector: #selector(detectHorizontalCandidates),
+            parameterFlags: defaultFlags()
+        )
+        paramAPI.addPushButton(
+            withName: "Detect Full Candidates",
+            parameterID: UprightParam.detectFullCandidates.rawValue,
+            selector: #selector(detectFullCandidates),
+            parameterFlags: defaultFlags()
+        )
+        paramAPI.addPushButton(
+            withName: "Apply Selected Vertical",
+            parameterID: UprightParam.applySelectedVertical.rawValue,
+            selector: #selector(applySelectedVertical),
+            parameterFlags: defaultFlags()
+        )
+        paramAPI.addPushButton(
+            withName: "Apply Selected Horizontal",
+            parameterID: UprightParam.applySelectedHorizontal.rawValue,
+            selector: #selector(applySelectedHorizontal),
+            parameterFlags: defaultFlags()
+        )
+        paramAPI.addPushButton(
+            withName: "Apply Selected Full",
+            parameterID: UprightParam.applySelectedFull.rawValue,
+            selector: #selector(applySelectedFull),
             parameterFlags: defaultFlags()
         )
         paramAPI.addPushButton(
@@ -602,6 +741,7 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
             parameterFlags: defaultFlags()
         )
         addGuideParameters(paramAPI)
+        addCandidateParameters(paramAPI)
     }
 
     private func addGuideParameters(_ paramAPI: FxParameterCreationAPI_v5) {
@@ -641,6 +781,49 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         paramAPI.endParameterSubGroup()
     }
 
+    private func addCandidateParameters(_ paramAPI: FxParameterCreationAPI_v5) {
+        paramAPI.startParameterSubGroup("Detected Candidates", parameterID: 420, parameterFlags: collapsedFlags())
+        for (index, spec) in AnyUprightUprightCandidates.specs.enumerated() {
+            let title = "Candidate \(index + 1)"
+            paramAPI.startParameterSubGroup(title, parameterID: spec.group, parameterFlags: collapsedFlags())
+            paramAPI.addToggleButton(
+                withName: "\(title) Visible",
+                parameterID: spec.visible,
+                defaultValue: false,
+                parameterFlags: defaultFlags()
+            )
+            paramAPI.addToggleButton(
+                withName: "\(title) Selected",
+                parameterID: spec.selected,
+                defaultValue: false,
+                parameterFlags: defaultFlags()
+            )
+            paramAPI.addPopupMenu(
+                withName: "\(title) Orientation",
+                parameterID: spec.orientation,
+                defaultValue: UInt32(UprightGuideOrientation.vertical.rawValue),
+                menuEntries: ["Vertical", "Horizontal"],
+                parameterFlags: defaultFlags()
+            )
+            paramAPI.addPointParameter(
+                withName: "\(title) Start",
+                parameterID: spec.start,
+                defaultX: 0.0,
+                defaultY: 0.0,
+                parameterFlags: defaultFlags()
+            )
+            paramAPI.addPointParameter(
+                withName: "\(title) End",
+                parameterID: spec.end,
+                defaultX: 0.0,
+                defaultY: 0.0,
+                parameterFlags: defaultFlags()
+            )
+            paramAPI.endParameterSubGroup()
+        }
+        paramAPI.endParameterSubGroup()
+    }
+
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
         let paramAPI = parameterRetrievalAPI()
         var result = AnyUprightParameterState(effectKind: AnyUprightEffectKind.upright.rawValue)
@@ -670,6 +853,30 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         startAnalysis(.full)
     }
 
+    @objc private func detectVerticalCandidates() {
+        startAnalysis(.detectVerticalCandidates)
+    }
+
+    @objc private func detectHorizontalCandidates() {
+        startAnalysis(.detectHorizontalCandidates)
+    }
+
+    @objc private func detectFullCandidates() {
+        startAnalysis(.detectFullCandidates)
+    }
+
+    @objc private func applySelectedVertical() {
+        applySelected(.vertical)
+    }
+
+    @objc private func applySelectedHorizontal() {
+        applySelected(.horizontal)
+    }
+
+    @objc private func applySelectedFull() {
+        applySelected(.full)
+    }
+
     @objc private func applyGuidedVertical() {
         applyGuided(.vertical)
     }
@@ -685,6 +892,7 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
     private func startAnalysis(_ mode: UprightAnalysisMode) {
         analysisLock.lock()
         pendingAnalysisMode = mode
+        requestedAnalysisTime = currentParameterTime()
         analysisLock.unlock()
 
         guard let analysisAPI = _apiManager.api(for: FxAnalysisAPI.self) as? FxAnalysisAPI else {
@@ -695,15 +903,18 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
     }
 
     func desiredAnalysisTimeRange(_ desiredRange: UnsafeMutablePointer<CMTimeRange>, forInputWith inputTimeRange: CMTimeRange) throws {
-        let singleFrameHint = CMTime(value: 1, timescale: 600)
-        let duration = CMTimeCompare(inputTimeRange.duration, singleFrameHint) < 0 ? inputTimeRange.duration : singleFrameHint
-        desiredRange.pointee = CMTimeRange(start: inputTimeRange.start, duration: duration)
+        analysisLock.lock()
+        let requestedTime = requestedAnalysisTime
+        analysisLock.unlock()
+        desiredRange.pointee = singleFrameAnalysisRange(near: requestedTime, within: inputTimeRange)
     }
 
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
         analysisLock.lock()
         detectedVerticalPerspective = nil
         detectedHorizontalPerspective = nil
+        detectedRotationDegrees = nil
+        detectedCandidates = []
         detectedPerspectiveTime = analysisRange.start
         analysisLock.unlock()
     }
@@ -714,66 +925,123 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         analysisLock.unlock()
 
         guard let mode,
-              let grayscaleImage = grayscaleImage(from: frame, maxDimension: 360) else {
+              let grayscaleImage = AnyUprightAnalysisImage.grayscaleImage(from: frame, maxDimension: 360, context: analysisContext) else {
             return
         }
 
         let size = AUSize(width: Double(grayscaleImage.width), height: Double(grayscaleImage.height))
         var verticalPerspective: Double?
         var horizontalPerspective: Double?
+        var rotationDegrees: Double?
+        var verticalReferenceLines: [AULineSegment] = []
+        var horizontalReferenceLines: [AULineSegment] = []
+        var candidates: [UprightDetectedCandidate] = []
 
-        if mode == .vertical || mode == .full {
+        if mode.includesVertical {
             let lines = AnyUprightLineDetection.detectLineSegments(
                 in: grayscaleImage,
                 options: AULineDetectionOptions(
                     orientation: .vertical,
                     edgeThreshold: 40.0,
                     voteThreshold: max(20, grayscaleImage.height / 5),
-                    maxLines: 30
+                    maxLines: candidateLimit(for: mode)
                 )
             )
-            let references = AnyUprightGeometry.bestReferenceLines(from: lines, orientation: .vertical, maximumCount: 2, minimumLength: Double(grayscaleImage.height) * 0.25)
-            verticalPerspective = AnyUprightGeometry.estimateVerticalPerspective(from: references, size: size)
+            let lineCandidates = AnyUprightGeometry.lineCandidates(
+                from: lines,
+                orientation: .vertical,
+                minimumLength: Double(grayscaleImage.height) * 0.25
+            )
+
+            if mode.isCandidateDetection {
+                candidates.append(contentsOf: AnyUprightUprightCandidates.detectedCandidates(
+                    from: Array(lineCandidates.prefix(candidateLimit(for: mode))),
+                    orientation: .vertical,
+                    size: size
+                ))
+            } else {
+                let references = Array(lineCandidates.prefix(2).map(\.line))
+                verticalReferenceLines = references
+                verticalPerspective = AnyUprightGeometry.estimateVerticalPerspective(from: references, size: size)
+            }
         }
 
-        if mode == .horizontal || mode == .full {
+        if mode.includesHorizontal {
             let lines = AnyUprightLineDetection.detectLineSegments(
                 in: grayscaleImage,
                 options: AULineDetectionOptions(
                     orientation: .horizontal,
                     edgeThreshold: 40.0,
                     voteThreshold: max(20, grayscaleImage.width / 5),
-                    maxLines: 30
+                    maxLines: candidateLimit(for: mode)
                 )
             )
-            let references = AnyUprightGeometry.bestReferenceLines(from: lines, orientation: .horizontal, maximumCount: 2, minimumLength: Double(grayscaleImage.width) * 0.25)
-            horizontalPerspective = AnyUprightGeometry.estimateHorizontalPerspective(from: references, size: size)
+            let lineCandidates = AnyUprightGeometry.lineCandidates(
+                from: lines,
+                orientation: .horizontal,
+                minimumLength: Double(grayscaleImage.width) * 0.25
+            )
+
+            if mode.isCandidateDetection {
+                candidates.append(contentsOf: AnyUprightUprightCandidates.detectedCandidates(
+                    from: Array(lineCandidates.prefix(candidateLimit(for: mode))),
+                    orientation: .horizontal,
+                    size: size
+                ))
+            } else {
+                let references = Array(lineCandidates.prefix(2).map(\.line))
+                horizontalReferenceLines = references
+                horizontalPerspective = AnyUprightGeometry.estimateHorizontalPerspective(from: references, size: size)
+            }
+        }
+
+        if mode == .full {
+            let rotationLines = horizontalReferenceLines.isEmpty ? verticalReferenceLines : horizontalReferenceLines
+            let rotationOrientation: AUReferenceOrientation = horizontalReferenceLines.isEmpty ? .vertical : .horizontal
+            if let rotation = AnyUprightGeometry.rotationCorrectionRadians(from: rotationLines, orientation: rotationOrientation) {
+                rotationDegrees = rotation * 180.0 / .pi
+            }
         }
 
         analysisLock.lock()
         detectedVerticalPerspective = verticalPerspective
         detectedHorizontalPerspective = horizontalPerspective
+        detectedRotationDegrees = rotationDegrees
+        detectedCandidates = Array(candidates.prefix(AnyUprightUprightCandidates.slotCount))
         detectedPerspectiveTime = frameTime
         analysisLock.unlock()
     }
 
     func cleanupAnalysis() throws {
         analysisLock.lock()
+        let mode = pendingAnalysisMode
         let vertical = detectedVerticalPerspective
         let horizontal = detectedHorizontalPerspective
-        let time = detectedPerspectiveTime
+        let rotation = detectedRotationDegrees
+        let candidates = detectedCandidates
+        let time = parameterWriteTime(preferred: requestedAnalysisTime, fallback: detectedPerspectiveTime)
         pendingAnalysisMode = nil
         analysisLock.unlock()
 
-        guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
-            return
-        }
+        performParameterAction {
+            guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
+                return
+            }
 
-        if let vertical {
-            settingAPI.setFloatValue(vertical, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
-        }
-        if let horizontal {
-            settingAPI.setFloatValue(horizontal, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
+            if mode?.isCandidateDetection == true {
+                writeCandidateSlots(candidates, settingAPI: settingAPI, time: time)
+                return
+            }
+
+            if let vertical {
+                _ = settingAPI.setFloatValue(vertical, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
+            }
+            if let horizontal {
+                _ = settingAPI.setFloatValue(horizontal, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
+            }
+            if let rotation {
+                _ = settingAPI.setFloatValue(rotation, toParameter: UprightParam.rotation.rawValue, at: time)
+            }
         }
     }
 
@@ -787,16 +1055,29 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
             .filter { $0.orientation == .horizontal }
             .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
 
+        applyReferences(verticalLines: verticalLines, horizontalLines: horizontalLines, mode: mode, time: time)
+    }
+
+    private func applySelected(_ mode: UprightAnalysisMode) {
+        let time = currentParameterTime()
+        let candidates = candidateLines(at: time)
+        let verticalLines = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .vertical)
+        let horizontalLines = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .horizontal)
+
+        applyReferences(verticalLines: verticalLines, horizontalLines: horizontalLines, mode: mode, time: time)
+    }
+
+    private func applyReferences(verticalLines: [AULineSegment], horizontalLines: [AULineSegment], mode: UprightAnalysisMode, time: CMTime) {
         guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
             return
         }
 
-        if mode == .vertical || mode == .full,
+        if mode.includesVertical,
            let vertical = AnyUprightGeometry.estimateVerticalPerspective(from: verticalLines, size: AUSize(width: 1.0, height: 1.0)) {
             settingAPI.setFloatValue(vertical, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
         }
 
-        if mode == .horizontal || mode == .full,
+        if mode.includesHorizontal,
            let horizontal = AnyUprightGeometry.estimateHorizontalPerspective(from: horizontalLines, size: AUSize(width: 1.0, height: 1.0)) {
             settingAPI.setFloatValue(horizontal, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
         }
@@ -818,14 +1099,24 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
 
     func drawOSC(withWidth width: Int, height: Int, activePart: Int, destinationImage: FxImageTile, at time: CMTime) {
         let guides = guideLines(at: time)
-        let segments = guides.map { ($0.start, $0.end) }
+        let candidates = candidateLines(at: time)
+        var segments = candidates.map { candidate in
+            AUOSCStyledSegment(
+                start: candidate.start,
+                end: candidate.end,
+                style: candidateStyle(candidate, activePart: activePart)
+            )
+        }
+        segments.append(contentsOf: guides.map {
+            AUOSCStyledSegment(start: $0.start, end: $0.end, style: guideStyle())
+        })
         let handles = guides.flatMap {
             [
                 AUOSCHandle(point: $0.start, part: $0.spec.startPart.rawValue),
                 AUOSCHandle(point: $0.end, part: $0.spec.endPart.rawValue)
             ]
         }
-        overlayRenderer.renderSegments(
+        overlayRenderer.renderStyledSegments(
             segments,
             handles: handles,
             activePart: activePart,
@@ -852,13 +1143,33 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
                 }
             }
         }
+
+        for candidate in candidateLines(at: time) {
+            if AnyUprightUprightCandidates.distanceFromPointToSegment(mouse, start: candidate.start, end: candidate.end, size: size) <= 8.0 {
+                activePart?.pointee = candidate.spec.linePart
+                return
+            }
+        }
     }
 
     func mouseDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        if let candidateIndex = AnyUprightUprightCandidates.candidateIndex(for: activePart),
+           let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 {
+            let candidates = candidateLines(at: time)
+            if let candidate = candidates.first(where: { $0.spec.linePart == activePart }) {
+                let selected = AnyUprightUprightCandidates.selectionValueAfterToggling(candidate, within: candidates)
+                settingAPI.setBoolValue(selected, toParameter: AnyUprightUprightCandidates.specs[candidateIndex].selected, at: time)
+            }
+        }
         forceUpdate?.pointee = true
     }
 
     func mouseDragged(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        guard AnyUprightUprightCandidates.candidateIndex(for: activePart) == nil else {
+            forceUpdate?.pointee = true
+            return
+        }
+
         guard let part = UprightOSCPart(rawValue: activePart),
               let endpoint = endpointParameter(for: part),
               let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
@@ -904,10 +1215,71 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         }
     }
 
+    private func candidateLines(at time: CMTime) -> [UprightCandidateLine] {
+        let paramAPI = parameterRetrievalAPI()
+        return AnyUprightUprightCandidates.specs.compactMap { spec in
+            var visible = ObjCBool(false)
+            var selected = ObjCBool(false)
+            var orientationRaw = Int32(UprightGuideOrientation.vertical.rawValue)
+            paramAPI.getBoolValue(&visible, fromParameter: spec.visible, at: time)
+            paramAPI.getBoolValue(&selected, fromParameter: spec.selected, at: time)
+            paramAPI.getIntValue(&orientationRaw, fromParameter: spec.orientation, at: time)
+
+            guard visible.boolValue else {
+                return nil
+            }
+
+            return UprightCandidateLine(
+                spec: spec,
+                selected: selected.boolValue,
+                orientation: UprightGuideOrientation(rawValue: orientationRaw) ?? .vertical,
+                start: pointParam(paramAPI, spec.start, defaultValue: AUPoint(x: 0.0, y: 0.0), time: time),
+                end: pointParam(paramAPI, spec.end, defaultValue: AUPoint(x: 0.0, y: 0.0), time: time)
+            )
+        }
+    }
+
+    private func candidateLimit(for mode: UprightAnalysisMode) -> Int {
+        AnyUprightUprightCandidates.slotLimit(isFullMode: mode == .detectFullCandidates)
+    }
+
+    private func writeCandidateSlots(_ candidates: [UprightDetectedCandidate], settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+        var selectedCountByOrientation: [UprightGuideOrientation: Int] = [
+            .vertical: 0,
+            .horizontal: 0
+        ]
+
+        for (index, spec) in AnyUprightUprightCandidates.specs.enumerated() {
+            guard index < candidates.count else {
+                settingAPI.setBoolValue(false, toParameter: spec.visible, at: time)
+                settingAPI.setBoolValue(false, toParameter: spec.selected, at: time)
+                continue
+            }
+
+            let candidate = candidates[index]
+            let selectedCount = selectedCountByOrientation[candidate.orientation, default: 0]
+            let shouldPreselect = selectedCount < 2
+            selectedCountByOrientation[candidate.orientation] = selectedCount + 1
+
+            settingAPI.setBoolValue(true, toParameter: spec.visible, at: time)
+            settingAPI.setBoolValue(shouldPreselect, toParameter: spec.selected, at: time)
+            settingAPI.setIntValue(Int32(candidate.orientation.rawValue), toParameter: spec.orientation, at: time)
+            settingAPI.setXValue(candidate.start.x, yValue: candidate.start.y, toParameter: spec.start, at: time)
+            settingAPI.setXValue(candidate.end.x, yValue: candidate.end.y, toParameter: spec.end, at: time)
+        }
+    }
+
     private func pointParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ param: UprightParam, defaultValue: AUPoint, time: CMTime) -> AUPoint {
         var x = defaultValue.x
         var y = defaultValue.y
         paramAPI.getXValue(&x, yValue: &y, fromParameter: param.rawValue, at: time)
+        return AUPoint(x: x, y: y)
+    }
+
+    private func pointParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ parameterID: UInt32, defaultValue: AUPoint, time: CMTime) -> AUPoint {
+        var x = defaultValue.x
+        var y = defaultValue.y
+        paramAPI.getXValue(&x, yValue: &y, fromParameter: parameterID, at: time)
         return AUPoint(x: x, y: y)
     }
 
@@ -930,40 +1302,22 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         )
     }
 
-    private func grayscaleImage(from frame: FxImageTile, maxDimension: Int) -> AUGrayscaleImage? {
-        guard let ioSurface = frame.ioSurface else {
-            return nil
-        }
 
-        let bounds = frame.imagePixelBounds
-        let sourceWidth = max(1, Int(bounds.right - bounds.left))
-        let sourceHeight = max(1, Int(bounds.top - bounds.bottom))
-        let scale = min(1.0, Double(maxDimension) / Double(max(sourceWidth, sourceHeight)))
-        let width = max(1, Int(round(Double(sourceWidth) * scale)))
-        let height = max(1, Int(round(Double(sourceHeight) * scale)))
-        let colorSpace = frame.colorSpace.map { $0 as Any }
-        let image = CIImage(ioSurface: ioSurface, options: colorSpace.map { [.colorSpace: $0] } ?? [:])
-            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        var rgba = Array(repeating: UInt8(0), count: width * height * 4)
-
-        analysisContext.render(
-            image,
-            toBitmap: &rgba,
-            rowBytes: width * 4,
-            bounds: CGRect(x: 0, y: 0, width: width, height: height),
-            format: .RGBA8,
-            colorSpace: CGColorSpaceCreateDeviceRGB()
-        )
-
-        var gray = Array(repeating: UInt8(0), count: width * height)
-        for index in 0..<(width * height) {
-            let base = index * 4
-            let red = Double(rgba[base])
-            let green = Double(rgba[base + 1])
-            let blue = Double(rgba[base + 2])
-            gray[index] = UInt8(min(255.0, max(0.0, red * 0.299 + green * 0.587 + blue * 0.114)))
-        }
-
-        return AUGrayscaleImage(width: width, height: height, pixels: gray)
+    private func guideStyle() -> AUOSCOverlayStyle {
+        AUOSCOverlayStyle()
     }
+
+    private func candidateStyle(_ candidate: UprightCandidateLine, activePart: Int) -> AUOSCOverlayStyle {
+        var style = AUOSCOverlayStyle()
+        style.lineThickness = candidate.selected ? 3.0 : 2.0
+        style.lineColor = candidate.selected
+            ? SIMD4<Float>(0.15, 0.9, 0.45, 0.95)
+            : SIMD4<Float>(0.15, 0.65, 1.0, 0.8)
+        if candidate.spec.linePart == activePart {
+            style.lineColor = style.activeHandleColor
+            style.lineThickness = 4.0
+        }
+        return style
+    }
+
 }

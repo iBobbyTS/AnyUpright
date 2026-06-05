@@ -176,6 +176,17 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         return actionAPI.currentTime()
     }
 
+    func performParameterAction(_ body: () -> Void) {
+        guard let actionAPI = _apiManager.api(for: FxCustomParameterActionAPI_v4.self) as? FxCustomParameterActionAPI_v4 else {
+            body()
+            return
+        }
+
+        actionAPI.startAction(self)
+        body()
+        actionAPI.endAction(self)
+    }
+
     func objectPixelSizeForOSC(defaultSize: AUSize = AUSize(width: 1920.0, height: 1080.0)) -> AUSize {
         guard let oscAPI = _apiManager.api(for: FxOnScreenControlAPI_v4.self) as? FxOnScreenControlAPI_v4 else {
             return defaultSize
@@ -231,12 +242,13 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             )
 
         case .upright:
-            let outputQuad = AnyUprightGeometry.uprightQuad(
+            let perspectiveInOutputSpace = AnyUprightGeometry.uprightOutputToSourceMatrix(
                 vertical: Double(state.verticalPerspective),
                 horizontal: Double(state.horizontalPerspective),
                 size: outputSize
             )
-            let perspective = AnyUprightGeometry.homography(from: outputQuad, to: AUQuad.fullFrame(sourceSize))
+            let outputToSourceFrame = AnyUprightGeometry.homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
+            let perspective = AnyUprightGeometry.multiply(outputToSourceFrame, perspectiveInOutputSpace)
             let rotation = AnyUprightGeometry.rotationOutputToSource(
                 angleRadians: Double(state.rotationRadians),
                 fillFrame: false,

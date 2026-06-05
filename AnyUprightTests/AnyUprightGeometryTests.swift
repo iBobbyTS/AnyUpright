@@ -22,15 +22,25 @@ struct AnyUprightGeometryTests {
     static func main() throws {
         try testIdentityHomographyMapsPointsToThemselves()
         try testCornerOffsetsCombinePercentAndPixels()
+        try testQuadObjectPointsKeepCanvasCornerDefinitions()
+        try testQuadObjectDragPreservesPercentAndWritesPixelOffsets()
         try testQuadOutputCornersKeepTheirNamedPositions()
         try testQuadSourceModeCanPreviewHandlesBeforeApplyingWarp()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
         try testUprightVerticalAndHorizontalPerspectiveGenerateCenteredQuads()
+        try testUprightPerspectiveKeepsFrameCenterAnchored()
         try testLineCandidateSelectionPrefersSmallestDeviation()
+        try testLineCandidatesKeepAllNearAxisLinesForSemiAuto()
+        try testLineCandidatesExcludeThirtyDegreeBoundary()
         try testHorizonCorrectionFromReferenceLine()
+        try testDominantHorizonCorrectionPreservesDetectorRanking()
         try testRotationCorrectionFromVerticalReferenceLine()
         try testPerspectiveEstimatesRecoverSyntheticReferenceLines()
         try testDetectorFindsNearHorizontalAndVerticalLines()
+        try testUprightCandidateSelectionLimitsToTwoAndConvertsCoordinates()
+        try testUprightCandidateToggleSelectionStopsAtTwoPerOrientation()
+        try testUprightCandidateObjectLineClampsAndFlipsY()
+        try testUprightCandidateHitTestingUsesPixelDistance()
         try testZeroRotationMatrixIsIdentity()
         print("AnyUprightGeometryTests passed")
     }
@@ -63,6 +73,45 @@ struct AnyUprightGeometryTests {
         try assertEqual(quad.topRight, AUPoint(x: 175.0, y: -10.0), "top-right offset")
         try assertEqual(quad.bottomRight, AUPoint(x: 220.0, y: 115.0), "bottom-right offset")
         try assertEqual(quad.bottomLeft, AUPoint(x: -20.0, y: 115.0), "bottom-left offset")
+    }
+
+    static func testQuadObjectPointsKeepCanvasCornerDefinitions() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPixels = AUPoint(x: -20.0, y: 30.0)
+        offsets.topRightPixels = AUPoint(x: 10.0, y: 20.0)
+        offsets.bottomRightPixels = AUPoint(x: 40.0, y: -15.0)
+        offsets.bottomLeftPixels = AUPoint(x: -50.0, y: -25.0)
+
+        let objectPoints = AnyUprightGeometry.quadObjectPoints(from: offsets, size: size)
+
+        try assertEqual(objectPoints.topLeft, AUPoint(x: -0.10, y: 1.30), "object top-left")
+        try assertEqual(objectPoints.topRight, AUPoint(x: 1.05, y: 1.20), "object top-right")
+        try assertEqual(objectPoints.bottomRight, AUPoint(x: 1.20, y: -0.15), "object bottom-right")
+        try assertEqual(objectPoints.bottomLeft, AUPoint(x: -0.25, y: -0.25), "object bottom-left")
+        try assertTrue(objectPoints.topLeft.y > objectPoints.bottomLeft.y, "top-left handle should stay above bottom-left")
+        try assertTrue(objectPoints.topLeft.x < objectPoints.topRight.x, "top-left handle should stay left of top-right")
+    }
+
+    static func testQuadObjectDragPreservesPercentAndWritesPixelOffsets() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPercent = AUPoint(x: 0.10, y: -0.20)
+
+        let pixels = AnyUprightGeometry.cornerPixelOffset(
+            forObjectPoint: AUPoint(x: 0.35, y: 1.10),
+            corner: .topLeft,
+            offsets: offsets,
+            size: size
+        )
+        offsets.topLeftPixels = pixels
+
+        let objectPoints = AnyUprightGeometry.quadObjectPoints(from: offsets, size: size)
+        let outputQuad = AnyUprightGeometry.quad(from: offsets, size: size)
+
+        try assertEqual(pixels, AUPoint(x: 50.0, y: 30.0), "dragged top-left pixel offset")
+        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.35, y: 1.10), "dragged top-left object point")
+        try assertEqual(outputQuad.topLeft, AUPoint(x: 70.0, y: -10.0), "dragged top-left output point")
     }
 
     static func testQuadOutputCornersKeepTheirNamedPositions() throws {
@@ -131,28 +180,53 @@ struct AnyUprightGeometryTests {
         let size = AUSize(width: 200.0, height: 100.0)
 
         let positiveVertical = AnyUprightGeometry.uprightQuad(vertical: 0.5, horizontal: 0.0, size: size)
-        try assertEqual(positiveVertical.topLeft, AUPoint(x: 12.5, y: 0.0), "positive vertical top-left")
-        try assertEqual(positiveVertical.topRight, AUPoint(x: 187.5, y: 0.0), "positive vertical top-right")
-        try assertEqual(positiveVertical.bottomRight, AUPoint(x: 212.5, y: 100.0), "positive vertical bottom-right")
-        try assertEqual(positiveVertical.bottomLeft, AUPoint(x: -12.5, y: 100.0), "positive vertical bottom-left")
+        try assertTrue(positiveVertical.topLeft.x > 0.0, "positive vertical top-left should move inward")
+        try assertTrue(positiveVertical.topRight.x < size.width, "positive vertical top-right should move inward")
+        try assertTrue(positiveVertical.bottomRight.x > size.width, "positive vertical bottom-right should move outward")
+        try assertTrue(positiveVertical.bottomLeft.x < 0.0, "positive vertical bottom-left should move outward")
+        try assertApprox(positiveVertical.topLeft.x, size.width - positiveVertical.topRight.x, "positive vertical top symmetry")
+        try assertApprox(positiveVertical.bottomLeft.x, size.width - positiveVertical.bottomRight.x, "positive vertical bottom symmetry")
 
         let negativeVertical = AnyUprightGeometry.uprightQuad(vertical: -0.5, horizontal: 0.0, size: size)
-        try assertEqual(negativeVertical.topLeft, AUPoint(x: -12.5, y: 0.0), "negative vertical top-left")
-        try assertEqual(negativeVertical.topRight, AUPoint(x: 212.5, y: 0.0), "negative vertical top-right")
-        try assertEqual(negativeVertical.bottomRight, AUPoint(x: 187.5, y: 100.0), "negative vertical bottom-right")
-        try assertEqual(negativeVertical.bottomLeft, AUPoint(x: 12.5, y: 100.0), "negative vertical bottom-left")
+        try assertTrue(negativeVertical.topLeft.x < 0.0, "negative vertical top-left should move outward")
+        try assertTrue(negativeVertical.topRight.x > size.width, "negative vertical top-right should move outward")
+        try assertTrue(negativeVertical.bottomRight.x < size.width, "negative vertical bottom-right should move inward")
+        try assertTrue(negativeVertical.bottomLeft.x > 0.0, "negative vertical bottom-left should move inward")
+        try assertApprox(negativeVertical.topLeft.x, size.width - negativeVertical.topRight.x, "negative vertical top symmetry")
+        try assertApprox(negativeVertical.bottomLeft.x, size.width - negativeVertical.bottomRight.x, "negative vertical bottom symmetry")
 
         let positiveHorizontal = AnyUprightGeometry.uprightQuad(vertical: 0.0, horizontal: 0.5, size: size)
-        try assertEqual(positiveHorizontal.topLeft, AUPoint(x: 0.0, y: -12.5), "positive horizontal top-left")
-        try assertEqual(positiveHorizontal.topRight, AUPoint(x: 200.0, y: 12.5), "positive horizontal top-right")
-        try assertEqual(positiveHorizontal.bottomRight, AUPoint(x: 200.0, y: 87.5), "positive horizontal bottom-right")
-        try assertEqual(positiveHorizontal.bottomLeft, AUPoint(x: 0.0, y: 112.5), "positive horizontal bottom-left")
+        try assertTrue(positiveHorizontal.topLeft.y < 0.0, "positive horizontal top-left should move outward")
+        try assertTrue(positiveHorizontal.topRight.y > 0.0, "positive horizontal top-right should move inward")
+        try assertTrue(positiveHorizontal.bottomRight.y < size.height, "positive horizontal bottom-right should move inward")
+        try assertTrue(positiveHorizontal.bottomLeft.y > size.height, "positive horizontal bottom-left should move outward")
+        try assertApprox(positiveHorizontal.topLeft.y, size.height - positiveHorizontal.bottomLeft.y, "positive horizontal left symmetry")
+        try assertApprox(positiveHorizontal.topRight.y, size.height - positiveHorizontal.bottomRight.y, "positive horizontal right symmetry")
 
         let negativeHorizontal = AnyUprightGeometry.uprightQuad(vertical: 0.0, horizontal: -0.5, size: size)
-        try assertEqual(negativeHorizontal.topLeft, AUPoint(x: 0.0, y: 12.5), "negative horizontal top-left")
-        try assertEqual(negativeHorizontal.topRight, AUPoint(x: 200.0, y: -12.5), "negative horizontal top-right")
-        try assertEqual(negativeHorizontal.bottomRight, AUPoint(x: 200.0, y: 112.5), "negative horizontal bottom-right")
-        try assertEqual(negativeHorizontal.bottomLeft, AUPoint(x: 0.0, y: 87.5), "negative horizontal bottom-left")
+        try assertTrue(negativeHorizontal.topLeft.y > 0.0, "negative horizontal top-left should move inward")
+        try assertTrue(negativeHorizontal.topRight.y < 0.0, "negative horizontal top-right should move outward")
+        try assertTrue(negativeHorizontal.bottomRight.y > size.height, "negative horizontal bottom-right should move outward")
+        try assertTrue(negativeHorizontal.bottomLeft.y < size.height, "negative horizontal bottom-left should move inward")
+        try assertApprox(negativeHorizontal.topLeft.y, size.height - negativeHorizontal.bottomLeft.y, "negative horizontal left symmetry")
+        try assertApprox(negativeHorizontal.topRight.y, size.height - negativeHorizontal.bottomRight.y, "negative horizontal right symmetry")
+    }
+
+    static func testUprightPerspectiveKeepsFrameCenterAnchored() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let center = AUPoint(x: 100.0, y: 50.0)
+        let cases = [
+            AnyUprightGeometry.uprightQuad(vertical: 0.5, horizontal: 0.0, size: size),
+            AnyUprightGeometry.uprightQuad(vertical: -0.5, horizontal: 0.0, size: size),
+            AnyUprightGeometry.uprightQuad(vertical: 0.0, horizontal: 0.5, size: size),
+            AnyUprightGeometry.uprightQuad(vertical: 0.0, horizontal: -0.5, size: size),
+            AnyUprightGeometry.uprightQuad(vertical: 0.35, horizontal: -0.25, size: size)
+        ]
+
+        for quad in cases {
+            let outputToSource = AnyUprightGeometry.homography(from: quad, to: AUQuad.fullFrame(size))
+            try assertMaps(outputToSource, center, to: center)
+        }
     }
 
     static func testLineCandidateSelectionPrefersSmallestDeviation() throws {
@@ -173,12 +247,69 @@ struct AnyUprightGeometryTests {
         try assertEqual(vertical[0].end, lines[3].end, "best vertical reference")
     }
 
+    static func testLineCandidatesKeepAllNearAxisLinesForSemiAuto() throws {
+        let lines = [
+            line(angleDegrees: 29.0, length: 100.0),
+            line(angleDegrees: -25.0, length: 120.0),
+            line(angleDegrees: 31.0, length: 200.0),
+            line(angleDegrees: 5.0, length: 80.0)
+        ]
+
+        let candidates = AnyUprightGeometry.lineCandidates(
+            from: lines,
+            orientation: .horizontal,
+            maxDeviationRadians: degreesToRadians(30.0),
+            minimumLength: 20.0
+        )
+
+        try assertEqual(candidates.count, 3, "semi-auto candidate count")
+        try assertApprox(candidates[0].absoluteDeviationRadians, degreesToRadians(5.0), "first semi-auto candidate")
+        try assertApprox(candidates[1].absoluteDeviationRadians, degreesToRadians(25.0), "second semi-auto candidate")
+        try assertApprox(candidates[2].absoluteDeviationRadians, degreesToRadians(29.0), "third semi-auto candidate")
+    }
+
+    static func testLineCandidatesExcludeThirtyDegreeBoundary() throws {
+        let horizontal = AnyUprightGeometry.lineCandidates(
+            from: [
+                line(angleDegrees: 29.9, length: 100.0),
+                line(angleDegrees: 30.0, length: 100.0)
+            ],
+            orientation: .horizontal,
+            maxDeviationRadians: degreesToRadians(30.0),
+            minimumLength: 20.0
+        )
+        try assertEqual(horizontal.count, 1, "horizontal <30 degree candidate count")
+        try assertApprox(horizontal[0].absoluteDeviationRadians, degreesToRadians(29.9), "horizontal <30 degree candidate")
+
+        let vertical = AnyUprightGeometry.lineCandidates(
+            from: [
+                line(angleDegrees: 60.0, length: 100.0),
+                line(angleDegrees: 60.1, length: 100.0)
+            ],
+            orientation: .vertical,
+            maxDeviationRadians: degreesToRadians(30.0),
+            minimumLength: 20.0
+        )
+        try assertEqual(vertical.count, 1, "vertical <30 degree candidate count")
+        try assertApprox(vertical[0].absoluteDeviationRadians, degreesToRadians(29.9), "vertical <30 degree candidate")
+    }
+
     static func testHorizonCorrectionFromReferenceLine() throws {
         let correction = try unwrap(AnyUprightGeometry.horizonCorrectionRadians(from: [
             line(angleDegrees: 10.0, length: 200.0)
         ]), "horizon correction")
 
         try assertApprox(correction, degreesToRadians(-10.0), "horizon correction angle")
+    }
+
+    static func testDominantHorizonCorrectionPreservesDetectorRanking() throws {
+        let correction = try unwrap(AnyUprightGeometry.dominantHorizonCorrectionRadians(from: [
+            line(angleDegrees: 8.0, length: 200.0),
+            line(angleDegrees: 7.0, length: 200.0),
+            line(angleDegrees: 1.0, length: 200.0)
+        ]), "dominant horizon correction")
+
+        try assertApprox(correction, degreesToRadians(-7.5), "dominant horizon correction angle")
     }
 
     static func testRotationCorrectionFromVerticalReferenceLine() throws {
@@ -253,6 +384,132 @@ struct AnyUprightGeometryTests {
         let verticalCandidates = AnyUprightGeometry.lineCandidates(from: verticalLines, orientation: .vertical, minimumLength: 60.0)
         try assertTrue(!verticalCandidates.isEmpty, "vertical detector should find at least one candidate")
         try assertTrue(verticalCandidates[0].absoluteDeviationRadians <= degreesToRadians(15.0), "detected vertical angle should be a near-vertical candidate")
+    }
+
+    static func testUprightCandidateSelectionLimitsToTwoAndConvertsCoordinates() throws {
+        let specs = AnyUprightUprightCandidates.specs
+        let candidates = [
+            UprightCandidateLine(
+                spec: specs[0],
+                selected: true,
+                orientation: .vertical,
+                start: AUPoint(x: 0.20, y: 0.80),
+                end: AUPoint(x: 0.20, y: 0.20)
+            ),
+            UprightCandidateLine(
+                spec: specs[1],
+                selected: true,
+                orientation: .vertical,
+                start: AUPoint(x: 0.40, y: 0.70),
+                end: AUPoint(x: 0.40, y: 0.30)
+            ),
+            UprightCandidateLine(
+                spec: specs[2],
+                selected: true,
+                orientation: .vertical,
+                start: AUPoint(x: 0.60, y: 0.70),
+                end: AUPoint(x: 0.60, y: 0.30)
+            ),
+            UprightCandidateLine(
+                spec: specs[3],
+                selected: true,
+                orientation: .horizontal,
+                start: AUPoint(x: 0.10, y: 0.25),
+                end: AUPoint(x: 0.90, y: 0.25)
+            )
+        ]
+
+        let selected = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .vertical)
+
+        try assertEqual(selected.count, 2, "selected candidate limit")
+        try assertEqual(selected[0].start, AUPoint(x: 0.20, y: 0.20), "first selected candidate start")
+        try assertEqual(selected[0].end, AUPoint(x: 0.20, y: 0.80), "first selected candidate end")
+        try assertEqual(selected[1].start, AUPoint(x: 0.40, y: 0.30), "second selected candidate start")
+        try assertEqual(selected[1].end, AUPoint(x: 0.40, y: 0.70), "second selected candidate end")
+    }
+
+    static func testUprightCandidateToggleSelectionStopsAtTwoPerOrientation() throws {
+        let specs = AnyUprightUprightCandidates.specs
+        let selectedA = UprightCandidateLine(
+            spec: specs[0],
+            selected: true,
+            orientation: .vertical,
+            start: AUPoint(x: 0.10, y: 0.20),
+            end: AUPoint(x: 0.10, y: 0.80)
+        )
+        let selectedB = UprightCandidateLine(
+            spec: specs[1],
+            selected: true,
+            orientation: .vertical,
+            start: AUPoint(x: 0.30, y: 0.20),
+            end: AUPoint(x: 0.30, y: 0.80)
+        )
+        let unselectedVertical = UprightCandidateLine(
+            spec: specs[2],
+            selected: false,
+            orientation: .vertical,
+            start: AUPoint(x: 0.50, y: 0.20),
+            end: AUPoint(x: 0.50, y: 0.80)
+        )
+        let unselectedHorizontal = UprightCandidateLine(
+            spec: specs[3],
+            selected: false,
+            orientation: .horizontal,
+            start: AUPoint(x: 0.20, y: 0.50),
+            end: AUPoint(x: 0.80, y: 0.50)
+        )
+
+        let candidates = [selectedA, selectedB, unselectedVertical, unselectedHorizontal]
+
+        try assertTrue(
+            !AnyUprightUprightCandidates.selectionValueAfterToggling(selectedA, within: candidates),
+            "selected candidate toggles off"
+        )
+        try assertTrue(
+            !AnyUprightUprightCandidates.selectionValueAfterToggling(unselectedVertical, within: candidates),
+            "third vertical candidate should stay unselected"
+        )
+        try assertTrue(
+            AnyUprightUprightCandidates.selectionValueAfterToggling(unselectedHorizontal, within: candidates),
+            "different orientation can still be selected"
+        )
+    }
+
+    static func testUprightCandidateObjectLineClampsAndFlipsY() throws {
+        let imageLine = AULineSegment(
+            start: AUPoint(x: -10.0, y: 20.0),
+            end: AUPoint(x: 120.0, y: 220.0)
+        )
+
+        let objectLine = AnyUprightUprightCandidates.objectLine(
+            from: imageLine,
+            size: AUSize(width: 100.0, height: 200.0)
+        )
+
+        try assertEqual(objectLine.start, AUPoint(x: 0.0, y: 0.9), "object candidate start")
+        try assertEqual(objectLine.end, AUPoint(x: 1.0, y: 0.0), "object candidate end")
+    }
+
+    static func testUprightCandidateHitTestingUsesPixelDistance() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let start = AUPoint(x: 0.25, y: 0.50)
+        let end = AUPoint(x: 0.75, y: 0.50)
+
+        let nearDistance = AnyUprightUprightCandidates.distanceFromPointToSegment(
+            AUPoint(x: 0.50, y: 0.55),
+            start: start,
+            end: end,
+            size: size
+        )
+        let outsideDistance = AnyUprightUprightCandidates.distanceFromPointToSegment(
+            AUPoint(x: 0.10, y: 0.50),
+            start: start,
+            end: end,
+            size: size
+        )
+
+        try assertApprox(nearDistance, 5.0, "candidate near hit distance")
+        try assertApprox(outsideDistance, 30.0, "candidate endpoint hit distance")
     }
 
     static func testZeroRotationMatrixIsIdentity() throws {

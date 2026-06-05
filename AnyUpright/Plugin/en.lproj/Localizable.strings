@@ -1,5 +1,5 @@
 /* Localized versions of Info.plist keys */
 
-"AnyUpright::Horizon Manual Description" = "Manual horizon rotation with optional fill.";
-"AnyUpright::Quad Manual Description" = "Manual four-corner source perspective correction.";
-"AnyUpright::Upright Manual Description" = "Manual vertical, horizontal, and rotation correction.";
+"AnyUpright::Horizon Manual Description" = "Automatic horizon correction with manual rotation and optional fill.";
+"AnyUpright::Quad Manual Description" = "Manual four-corner source and output perspective correction.";
+"AnyUpright::Upright Manual Description" = "Lightroom-style manual, guided, automatic, and semi-automatic upright correction.";

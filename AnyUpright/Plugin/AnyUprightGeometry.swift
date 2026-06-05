@@ -51,6 +51,13 @@ enum AUQuadTransformMode: Int32 {
     case sourceQuad = 1
 }
 
+enum AUQuadCorner {
+    case topLeft
+    case topRight
+    case bottomRight
+    case bottomLeft
+}
+
 struct AULineCandidate: Equatable {
     var line: AULineSegment
     var orientation: AUReferenceOrientation
@@ -92,38 +99,64 @@ enum AnyUprightGeometry {
         )
     }
 
+    static func quadObjectPoints(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
+        AUQuad(
+            topLeft: objectPoint(for: .topLeft, offsets: offsets, size: size),
+            topRight: objectPoint(for: .topRight, offsets: offsets, size: size),
+            bottomRight: objectPoint(for: .bottomRight, offsets: offsets, size: size),
+            bottomLeft: objectPoint(for: .bottomLeft, offsets: offsets, size: size)
+        )
+    }
+
+    static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
+        let base = objectBasePoint(for: corner)
+        let percent = percentOffset(for: corner, in: offsets)
+        return AUPoint(
+            x: (point.x - base.x - percent.x) * size.width,
+            y: (point.y - base.y - percent.y) * size.height
+        )
+    }
+
     static func uprightQuad(vertical: Double, horizontal: Double, size: AUSize) -> AUQuad {
-        let maxInset = min(size.width, size.height) * 0.25
-        let verticalInset = abs(vertical) * maxInset
-        let horizontalInset = abs(horizontal) * maxInset
+        let sourceToOutput = simd_inverse(uprightOutputToSourceMatrix(vertical: vertical, horizontal: horizontal, size: size))
+        let frame = AUQuad.fullFrame(size)
+        return AUQuad(
+            topLeft: transform(frame.topLeft, by: sourceToOutput),
+            topRight: transform(frame.topRight, by: sourceToOutput),
+            bottomRight: transform(frame.bottomRight, by: sourceToOutput),
+            bottomLeft: transform(frame.bottomLeft, by: sourceToOutput)
+        )
+    }
 
-        var quad = AUQuad.fullFrame(size)
-
-        if vertical > 0.0 {
-            quad.topLeft.x += verticalInset
-            quad.topRight.x -= verticalInset
-            quad.bottomRight.x += verticalInset
-            quad.bottomLeft.x -= verticalInset
-        } else if vertical < 0.0 {
-            quad.topLeft.x -= verticalInset
-            quad.topRight.x += verticalInset
-            quad.bottomLeft.x += verticalInset
-            quad.bottomRight.x -= verticalInset
+    static func uprightOutputToSourceMatrix(vertical: Double, horizontal: Double, size: AUSize) -> simd_float3x3 {
+        guard size.width > 0.0, size.height > 0.0 else {
+            return matrix(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
         }
 
-        if horizontal > 0.0 {
-            quad.topLeft.y -= horizontalInset
-            quad.topRight.y += horizontalInset
-            quad.bottomRight.y -= horizontalInset
-            quad.bottomLeft.y += horizontalInset
-        } else if horizontal < 0.0 {
-            quad.topLeft.y += horizontalInset
-            quad.topRight.y -= horizontalInset
-            quad.bottomRight.y += horizontalInset
-            quad.bottomLeft.y -= horizontalInset
-        }
+        let centerX = size.width / 2.0
+        let centerY = size.height / 2.0
+        let scale = max(size.width, size.height, 1.0)
+        let maxProjectiveStrength = 1.5
+        let verticalStrength = max(-1.0, min(1.0, vertical)) * maxProjectiveStrength / scale
+        let horizontalStrength = -max(-1.0, min(1.0, horizontal)) * maxProjectiveStrength / scale
 
-        return quad
+        let toCenter = matrix(
+            1.0, 0.0, -centerX,
+            0.0, 1.0, -centerY,
+            0.0, 0.0, 1.0
+        )
+        let perspective = matrix(
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            horizontalStrength, verticalStrength, 1.0
+        )
+        let fromCenter = matrix(
+            1.0, 0.0, centerX,
+            0.0, 1.0, centerY,
+            0.0, 0.0, 1.0
+        )
+
+        return multiply(multiply(fromCenter, perspective), toCenter)
     }
 
     static func lineCandidates(
@@ -139,7 +172,7 @@ enum AnyUprightGeometry {
             }
 
             let deviation = signedDeviationRadians(of: line, from: orientation)
-            guard abs(deviation) <= maxDeviationRadians else {
+            guard isStrictlyWithinDeviationLimit(deviation, limit: maxDeviationRadians) else {
                 return nil
             }
 
@@ -181,8 +214,50 @@ enum AnyUprightGeometry {
         rotationCorrectionRadians(from: lines, orientation: .horizontal, maximumCount: maximumCount)
     }
 
+    static func dominantHorizonCorrectionRadians(from lines: [AULineSegment], maximumCount: Int = 2) -> Double? {
+        dominantRotationCorrectionRadians(from: lines, orientation: .horizontal, maximumCount: maximumCount)
+    }
+
     static func rotationCorrectionRadians(from lines: [AULineSegment], orientation: AUReferenceOrientation, maximumCount: Int = 2) -> Double? {
         let candidates = Array(lineCandidates(from: lines, orientation: orientation).prefix(maximumCount))
+        let totalWeight = candidates.reduce(0.0) { $0 + $1.length }
+        guard totalWeight > 0.0 else {
+            return nil
+        }
+
+        let weightedDeviation = candidates.reduce(0.0) { partial, candidate in
+            partial + candidate.signedDeviationRadians * candidate.length
+        } / totalWeight
+
+        return -weightedDeviation
+    }
+
+    static func dominantRotationCorrectionRadians(
+        from lines: [AULineSegment],
+        orientation: AUReferenceOrientation,
+        maximumCount: Int = 2,
+        maxDeviationRadians: Double = .pi / 6.0,
+        minimumLength: Double = 1.0
+    ) -> Double? {
+        let candidates = Array(lines.compactMap { line -> AULineCandidate? in
+            let length = line.length
+            guard length >= minimumLength else {
+                return nil
+            }
+
+            let deviation = signedDeviationRadians(of: line, from: orientation)
+            guard isStrictlyWithinDeviationLimit(deviation, limit: maxDeviationRadians) else {
+                return nil
+            }
+
+            return AULineCandidate(
+                line: line,
+                orientation: orientation,
+                signedDeviationRadians: deviation,
+                length: length
+            )
+        }.prefix(maximumCount))
+
         let totalWeight = candidates.reduce(0.0) { $0 + $1.length }
         guard totalWeight > 0.0 else {
             return nil
@@ -346,6 +421,55 @@ enum AnyUprightGeometry {
         ))
     }
 
+    private static func objectPoint(for corner: AUQuadCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
+        let base = objectBasePoint(for: corner)
+        let percent = percentOffset(for: corner, in: offsets)
+        let pixels = pixelOffset(for: corner, in: offsets)
+        return AUPoint(
+            x: base.x + percent.x + pixels.x / size.width,
+            y: base.y + percent.y + pixels.y / size.height
+        )
+    }
+
+    private static func objectBasePoint(for corner: AUQuadCorner) -> AUPoint {
+        switch corner {
+        case .topLeft:
+            return AUPoint(x: 0.0, y: 1.0)
+        case .topRight:
+            return AUPoint(x: 1.0, y: 1.0)
+        case .bottomRight:
+            return AUPoint(x: 1.0, y: 0.0)
+        case .bottomLeft:
+            return AUPoint(x: 0.0, y: 0.0)
+        }
+    }
+
+    private static func percentOffset(for corner: AUQuadCorner, in offsets: AUCornerOffsets) -> AUPoint {
+        switch corner {
+        case .topLeft:
+            return offsets.topLeftPercent
+        case .topRight:
+            return offsets.topRightPercent
+        case .bottomRight:
+            return offsets.bottomRightPercent
+        case .bottomLeft:
+            return offsets.bottomLeftPercent
+        }
+    }
+
+    private static func pixelOffset(for corner: AUQuadCorner, in offsets: AUCornerOffsets) -> AUPoint {
+        switch corner {
+        case .topLeft:
+            return offsets.topLeftPixels
+        case .topRight:
+            return offsets.topRightPixels
+        case .bottomRight:
+            return offsets.bottomRightPixels
+        case .bottomLeft:
+            return offsets.bottomLeftPixels
+        }
+    }
+
     private static func solve(_ augmented: [[Double]]) -> [Double]? {
         var matrix = augmented
         let rowCount = 8
@@ -397,15 +521,14 @@ enum AnyUprightGeometry {
         }
 
         func objective(_ parameter: Double) -> Double {
-            let quad: AUQuad
+            let sourceToOutput: simd_float3x3
             switch orientation {
             case .vertical:
-                quad = uprightQuad(vertical: parameter, horizontal: 0.0, size: size)
+                sourceToOutput = simd_inverse(uprightOutputToSourceMatrix(vertical: parameter, horizontal: 0.0, size: size))
             case .horizontal:
-                quad = uprightQuad(vertical: 0.0, horizontal: parameter, size: size)
+                sourceToOutput = simd_inverse(uprightOutputToSourceMatrix(vertical: 0.0, horizontal: parameter, size: size))
             }
 
-            let sourceToOutput = homography(from: AUQuad.fullFrame(size), to: quad)
             return usableLines.reduce(0.0) { partial, line in
                 let transformed = transform(line, by: sourceToOutput)
                 let deviation = signedDeviationRadians(of: transformed, from: orientation)
@@ -430,6 +553,10 @@ enum AnyUprightGeometry {
             }
             return angle + .pi / 2.0
         }
+    }
+
+    private static func isStrictlyWithinDeviationLimit(_ deviation: Double, limit: Double) -> Bool {
+        abs(deviation) < max(0.0, limit - 0.0000000001)
     }
 
     private static func normalizedLineAngleRadians(_ angle: Double) -> Double {

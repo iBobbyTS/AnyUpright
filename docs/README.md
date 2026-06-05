@@ -26,6 +26,7 @@ Current implementation:
 - `Fill Frame` controls whether the rotated image is zoomed enough to avoid black edges.
 - `Analyze Horizon` starts FxAnalysis near the current parameter time when the host provides one, runs Vision horizon detection, and writes the detected correction back to `Rotation`.
 - If Vision does not return a horizon observation, the implementation falls back to the shared Sobel/Hough horizontal-line detector and estimates rotation from the best near-horizontal references.
+- Horizon analysis writeback debugging notes live in `docs/debug/2026-06-05-horizon-analysis-writeback.md`.
 
 Workflow:
 
@@ -131,7 +132,7 @@ The current traditional line detector is a CPU reference implementation based on
 - Lightroom's [Upright](https://helpx.adobe.com/lightroom-classic/help/guided-upright-perspective-correction.html) modes include Level, Vertical, Auto, Full, and Guided workflows. Guided Upright lets users draw guides that should become horizontal or vertical, which matches the planned manual reference-line model.
 - OpenCV's [`HoughLines` / `HoughLinesP`](https://docs.opencv.org/4.x/d9/db0/tutorial_hough_lines.html) and [`LineSegmentDetector`](https://docs.opencv.org/master/db/d73/classcv_1_1LineSegmentDetector.html) are the practical reference algorithms for candidate line extraction. The repo should keep the public data model independent from OpenCV so a future implementation can choose Vision, traditional CPU code, Metal kernels, or a small pre-trained model without changing render semantics.
 - FxPlug 4 provides [`FxAnalysis`](https://developer.apple.com/documentation/professional_video_applications/fxanalysisapi) for explicit frame analysis and [`FxOnScreenControl`](https://developer.apple.com/documentation/professional_video_applications/fxonscreencontrolapi_v4) for canvas drawing, hit testing, and mouse events. Automatic and semi-automatic modes should analyze a representative frame, write keyframeable parameters, and let the existing Metal warp renderer handle playback.
-- FxPlug angle parameters have asymmetric units: `getFloatValue` returns angle slider values in radians, while `setFloatValue` writes angle parameters in counter-clockwise degrees. Horizon and Upright preserve this split by storing render state in radians and writing analysis results back in degrees.
+- FxPlug angle parameters are handled as radians in the current Motion validation path: `getFloatValue` returns angle slider values in radians, and `setFloatValue` writes angle parameter values that Motion displays after radians-to-degrees conversion. This differs from the FxPlug SDK header comment that says angle writes use degrees, so Horizon and Upright keep internal analysis rotation values in radians and write radians back to angle parameters. See `docs/debug/2026-06-05-horizon-analysis-writeback.md` for the validation notes that led to this convention.
 
 ## Validation Expectations
 

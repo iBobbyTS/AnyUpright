@@ -145,8 +145,8 @@ private struct UprightGuideLine {
 }
 
 private func singleFrameAnalysisRange(near requestedTime: CMTime, within inputTimeRange: CMTimeRange) -> CMTimeRange {
-    let singleFrameHint = CMTime(value: 1, timescale: 600)
-    let duration = CMTimeCompare(inputTimeRange.duration, singleFrameHint) < 0 ? inputTimeRange.duration : singleFrameHint
+    let analysisWindow = CMTime(seconds: 0.05, preferredTimescale: 600)
+    let duration = CMTimeCompare(inputTimeRange.duration, analysisWindow) < 0 ? inputTimeRange.duration : analysisWindow
     var start = inputTimeRange.start
 
     if requestedTime.isValid,
@@ -217,7 +217,7 @@ private enum AnyUprightAnalysisImage {
 class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private let analysisLock = NSLock()
     private let analysisContext = CIContext(options: nil)
-    private var detectedRotationDegrees: Double?
+    private var detectedRotationRadians: Double?
     private var detectedRotationTime = CMTime.zero
     private var requestedAnalysisTime = CMTime.zero
 
@@ -279,12 +279,20 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
         analysisLock.lock()
-        detectedRotationDegrees = nil
+        detectedRotationRadians = nil
         detectedRotationTime = analysisRange.start
         analysisLock.unlock()
     }
 
     func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
+        analysisLock.lock()
+        let alreadyDetected = detectedRotationRadians != nil
+        analysisLock.unlock()
+
+        if alreadyDetected {
+            return
+        }
+
         guard let image = AnyUprightAnalysisImage.ciImage(from: frame) else {
             return
         }
@@ -326,30 +334,28 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         }
 
         analysisLock.lock()
-        detectedRotationDegrees = rotationRadians * 180.0 / .pi
+        detectedRotationRadians = rotationRadians
         detectedRotationTime = frameTime
         analysisLock.unlock()
     }
 
     func cleanupAnalysis() throws {
         analysisLock.lock()
-        let rotationDegrees = detectedRotationDegrees
+        let rotationRadians = detectedRotationRadians
         let rotationTime = detectedRotationTime
         let requestedTime = requestedAnalysisTime
         analysisLock.unlock()
 
-        guard let rotationDegrees else {
+        let writeTime = parameterWriteTime(preferred: requestedTime, fallback: rotationTime)
+        guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
             return
         }
 
-        let writeTime = parameterWriteTime(preferred: requestedTime, fallback: rotationTime)
-        performParameterAction {
-            guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
-                return
-            }
-
-            _ = settingAPI.setFloatValue(rotationDegrees, toParameter: HorizonParam.rotation.rawValue, at: writeTime)
+        guard let rotationRadians else {
+            return
         }
+
+        _ = settingAPI.setFloatValue(rotationRadians, toParameter: HorizonParam.rotation.rawValue, at: writeTime)
     }
 }
 
@@ -632,7 +638,7 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
     private var pendingAnalysisMode: UprightAnalysisMode?
     private var detectedVerticalPerspective: Double?
     private var detectedHorizontalPerspective: Double?
-    private var detectedRotationDegrees: Double?
+    private var detectedRotationRadians: Double?
     private var detectedCandidates: [UprightDetectedCandidate] = []
     private var detectedPerspectiveTime = CMTime.zero
     private var requestedAnalysisTime = CMTime.zero
@@ -913,7 +919,7 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         analysisLock.lock()
         detectedVerticalPerspective = nil
         detectedHorizontalPerspective = nil
-        detectedRotationDegrees = nil
+        detectedRotationRadians = nil
         detectedCandidates = []
         detectedPerspectiveTime = analysisRange.start
         analysisLock.unlock()
@@ -932,7 +938,7 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         let size = AUSize(width: Double(grayscaleImage.width), height: Double(grayscaleImage.height))
         var verticalPerspective: Double?
         var horizontalPerspective: Double?
-        var rotationDegrees: Double?
+        var rotationRadians: Double?
         var verticalReferenceLines: [AULineSegment] = []
         var horizontalReferenceLines: [AULineSegment] = []
         var candidates: [UprightDetectedCandidate] = []
@@ -999,14 +1005,14 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
             let rotationLines = horizontalReferenceLines.isEmpty ? verticalReferenceLines : horizontalReferenceLines
             let rotationOrientation: AUReferenceOrientation = horizontalReferenceLines.isEmpty ? .vertical : .horizontal
             if let rotation = AnyUprightGeometry.rotationCorrectionRadians(from: rotationLines, orientation: rotationOrientation) {
-                rotationDegrees = rotation * 180.0 / .pi
+                rotationRadians = rotation
             }
         }
 
         analysisLock.lock()
         detectedVerticalPerspective = verticalPerspective
         detectedHorizontalPerspective = horizontalPerspective
-        detectedRotationDegrees = rotationDegrees
+        detectedRotationRadians = rotationRadians
         detectedCandidates = Array(candidates.prefix(AnyUprightUprightCandidates.slotCount))
         detectedPerspectiveTime = frameTime
         analysisLock.unlock()
@@ -1017,31 +1023,29 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         let mode = pendingAnalysisMode
         let vertical = detectedVerticalPerspective
         let horizontal = detectedHorizontalPerspective
-        let rotation = detectedRotationDegrees
+        let rotation = detectedRotationRadians
         let candidates = detectedCandidates
         let time = parameterWriteTime(preferred: requestedAnalysisTime, fallback: detectedPerspectiveTime)
         pendingAnalysisMode = nil
         analysisLock.unlock()
 
-        performParameterAction {
-            guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
-                return
-            }
+        guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
+            return
+        }
 
-            if mode?.isCandidateDetection == true {
-                writeCandidateSlots(candidates, settingAPI: settingAPI, time: time)
-                return
-            }
+        if mode?.isCandidateDetection == true {
+            writeCandidateSlots(candidates, settingAPI: settingAPI, time: time)
+            return
+        }
 
-            if let vertical {
-                _ = settingAPI.setFloatValue(vertical, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
-            }
-            if let horizontal {
-                _ = settingAPI.setFloatValue(horizontal, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
-            }
-            if let rotation {
-                _ = settingAPI.setFloatValue(rotation, toParameter: UprightParam.rotation.rawValue, at: time)
-            }
+        if let vertical {
+            _ = settingAPI.setFloatValue(vertical, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
+        }
+        if let horizontal {
+            _ = settingAPI.setFloatValue(horizontal, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
+        }
+        if let rotation {
+            _ = settingAPI.setFloatValue(rotation, toParameter: UprightParam.rotation.rawValue, at: time)
         }
     }
 
@@ -1089,7 +1093,7 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         let rotationLines = horizontalLines.isEmpty ? verticalLines : horizontalLines
         let rotationOrientation: AUReferenceOrientation = horizontalLines.isEmpty ? .vertical : .horizontal
         if let rotation = AnyUprightGeometry.rotationCorrectionRadians(from: rotationLines, orientation: rotationOrientation) {
-            settingAPI.setFloatValue(rotation * 180.0 / .pi, toParameter: UprightParam.rotation.rawValue, at: time)
+            settingAPI.setFloatValue(rotation, toParameter: UprightParam.rotation.rawValue, at: time)
         }
     }
 

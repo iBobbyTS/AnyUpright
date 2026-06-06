@@ -24,7 +24,7 @@ Original Motion symptom: a visible overlay could appear, but it did not follow t
 - 2026-06-06 fresh-instance check: adding a new Quad filter instance eventually produced `quad-osc-init`, `drawing-coordinates canvas`, `draw-enter`, `hit-enter`, and renderer logs, so the separate OSC class can be instantiated by Motion when the filter instance is fresh enough.
 - The OSC `drawOSC` callback reports `width=3840 height=2160`, while the `destinationImage` IOSurface/logged surface is `1670 x 844`. Mouse events also arrive in the surface-local coordinate system, not in raw object or full canvas pixels. Hit-testing must therefore map event surface coordinates back through the object canvas frame before comparing against canvas-space handles.
 - The pre-fix renderer logged the default top-left handle as canvas `(659.1,719.2)` mapping to surface pixel `(167.0,84.4)`, while the matching Motion mouse event near that visible handle was around `(167.4,760.5)`. That was a Y-axis mismatch in the renderer's canvas-pixel path, not in the source-quad object geometry.
-- 2026-06-06 01:17 local fix: `AnyUprightOSCOverlayRenderer.localPixel` no longer flips Y for `.pixels` coordinates. The expected default top-left handle now maps consistently with `AUCanvasSurfaceMapper.eventPoint(fromCanvasPoint:)`, around `(167.0,759.6)` for the captured `1670 x 844` surface.
+- 2026-06-06 01:17 local fix: `AnyUprightOSCOverlayRenderer.localPixel` no longer flips Y for `.pixels` coordinates. In the Metal overlay path, the expected default top-left handle maps to bottom-origin render-target pixel coordinates around `(167.0,759.6)` for the captured `1670 x 844` surface. Do not reuse that value as a Motion mouse-event coordinate; later 2026-06-06 testing showed OSC mouse events are top-origin surface-local coordinates.
 - After rebuilding and relaunching the wrapper, automation attempts with `osascript`, `CGEvent`, and Computer Use did not successfully select a fresh Motion filter instance or trigger new `draw-enter` logs. `osascript` was blocked by auxiliary access (`-25211`), and Computer Use repeatedly reported an inactive app state before click/drag. Do not treat the absence of new logs in that pass as proof that the Y fix failed; it only means Motion did not run the fresh OSC callback path during that automated check.
 
 ## Similar Code And References Checked
@@ -269,3 +269,22 @@ Current status: the Source Quad OSC overlay is no longer just a static visual ov
 - Toggled `Show Corner Adjuster` off and captured `/tmp/anyupright-mirror-vertical-applied.png`. In that applied state, the blue OSC handles disappeared and the selected area rendered as the vertically mirrored patch over the original shot/grid, matching the same shader-side `WarpSelectionOverOriginal` path as horizontal mirror.
 - Toggled `Show Corner Adjuster` back on after the probe and confirmed Motion accessibility again reported `Show Corner Adjuster = 1`. The Motion document was not saved.
 - Tooling note: do not trust rough inspector coordinates for this Motion layout. The successful `Stretch Mode` popup hit was around logical `(260, 348)`, and the successful `Mirror Vertical` menu item was around logical `(255, 372)` on a `2992 x 1934` screenshot. The successful `Show Corner Adjuster` checkbox hit was around logical `(283, 371)`.
+
+## 2026-06-06 Source Quad Event Y-Axis Fix
+
+- User report: the visible Source Quad handles and the final `Stretch to Frame` result did not correspond, and dragging was vertically inverted. Putting the mouse on the visible top-left handle dragged the bottom-left handle; whole-quad drags also moved vertically opposite to the pointer.
+- Root cause: the overlay renderer and the mouse-event mapper were using different implicit Y origins, but `AUCanvasSurfaceMapper` treated them as the same. The Metal overlay path uses bottom-origin local pixels after converting canvas coordinates into the render target. Motion mouse events delivered to the OSC callbacks are surface-local/top-origin. Mapping event Y with `minY + y / height` therefore turned a visual top event into the bottom canvas/object point.
+- Fix: keep the existing overlay renderer coordinate path unchanged, and invert only `AUCanvasSurfaceMapper`'s event conversion:
+  - `eventPoint(fromCanvasPoint:)` now maps visual/canvas top to small event Y.
+  - `canvasPoint(fromEventPoint:)` now maps small event Y back to the canvas top (`maxY` side).
+- Regression coverage:
+  - `testCanvasSurfaceMapperConvertsFxPlugOSCEvents` now asserts that the visual top-left handle converts to event Y `84.4`, while bottom-left converts to `759.6` for the known Motion surface/frame sample.
+  - `testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents` now also asserts that a visible Source Quad object-space drag maps to the Y-flipped source-image sample point used by the final homography.
+- Automated checks passed after the fix:
+  - `swift tools/audit-feature-surface.swift`
+  - `swift tools/validate-fxplug-manifest.swift`
+  - `xcrun swiftc AnyUprightTests/AnyUprightGeometryTests.swift AnyUpright/Plugin/AnyUprightGeometry.swift AnyUpright/Plugin/AnyUprightUprightCandidates.swift AnyUpright/Plugin/AnyUprightLineDetection.swift -o /tmp/AnyUprightGeometryTests && /tmp/AnyUprightGeometryTests`
+  - `xcrun swiftc -parse-as-library tools/render-warp-previews.swift AnyUpright/Plugin/AnyUprightGeometry.swift -o /tmp/AnyUprightRenderWarpPreviews && /tmp/AnyUprightRenderWarpPreviews .agent-work/test-assets .agent-work/warp-previews`
+  - `git diff --check`
+  - `xcodebuild -project AnyUpright.xcodeproj -scheme "Wrapper Application" -configuration Debug -derivedDataPath /Users/ibobby/Library/Developer/Xcode/DerivedData/AnyUpright-fmxlkbxylbewbfgffirfqheenyke build`
+- Host-app validation status: Motion loaded the rebuilt `AnyUpright XPC Service` from the expected DerivedData path, and the selected filter had `Mode = Source Quad`, `Stretch Mode = Stretch to Frame`, `Show Corner Adjuster = on`, and `Publish OSC = on`. The active Motion viewer then showed a black frame, so this pass did not perform a reliable live drag screenshot comparison. Re-test in Motion with a visible source frame before treating the manual drag symptom as host-verified.

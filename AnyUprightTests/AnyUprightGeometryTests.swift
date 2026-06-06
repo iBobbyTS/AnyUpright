@@ -213,8 +213,10 @@ struct AnyUprightGeometryTests {
             fromNormalizedObjectQuad: AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size),
             size: size
         )
+        let updatedSourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
         try assertEqual(pixels, AUPoint(x: 25.0, y: -15.0), "source object-space drag offset")
         try assertEqual(updatedObjectPixels.topLeft, draggedPixel, "source object-space drag target")
+        try assertEqual(updatedSourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "source quad should sample the Y-flipped image point matching the visible handle")
     }
 
     static func testCanvasSurfaceMapperConvertsFxPlugOSCEvents() throws {
@@ -230,11 +232,16 @@ struct AnyUprightGeometryTests {
         )
 
         let canvasTopLeftHandle = AUPoint(x: 659.1, y: 719.2)
+        let canvasBottomLeftHandle = AUPoint(x: 659.1, y: 143.2)
         let eventPoint = mapper.eventPoint(fromCanvasPoint: canvasTopLeftHandle)
+        let bottomEventPoint = mapper.eventPoint(fromCanvasPoint: canvasBottomLeftHandle)
         let roundTrippedCanvas = mapper.canvasPoint(fromEventPoint: eventPoint)
 
         try assertApprox(eventPoint.x, 167.0, "top-left handle event x")
-        try assertApprox(eventPoint.y, 759.6, "top-left handle event y")
+        try assertApprox(eventPoint.y, 84.4, "top-left handle event y")
+        try assertApprox(bottomEventPoint.x, 167.0, "bottom-left handle event x")
+        try assertApprox(bottomEventPoint.y, 759.6, "bottom-left handle event y")
+        try assertTrue(eventPoint.y < bottomEventPoint.y, "surface-local mouse events should put visual top above visual bottom")
         try assertEqual(roundTrippedCanvas, canvasTopLeftHandle, "event point should map back to canvas point")
     }
 

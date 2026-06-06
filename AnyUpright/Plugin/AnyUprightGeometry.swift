@@ -128,14 +128,14 @@ struct AUCanvasSurfaceMapper {
     func eventPoint(fromCanvasPoint point: AUPoint) -> AUPoint {
         AUPoint(
             x: (point.x - minX) / width * surfaceSize.width,
-            y: (point.y - minY) / height * surfaceSize.height
+            y: (1.0 - (point.y - minY) / height) * surfaceSize.height
         )
     }
 
     func canvasPoint(fromEventPoint point: AUPoint) -> AUPoint {
         AUPoint(
             x: minX + point.x / surfaceSize.width * width,
-            y: minY + point.y / surfaceSize.height * height
+            y: maxY - point.y / surfaceSize.height * height
         )
     }
 }

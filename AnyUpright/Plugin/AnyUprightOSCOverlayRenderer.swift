@@ -4,16 +4,17 @@
 //
 
 import Foundation
+import IOSurface
 import Metal
 
 struct AUOSCOverlayStyle {
-    var lineColor = SIMD4<Float>(1.0, 1.0, 1.0, 0.95)
-    var shadowColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.65)
+    var lineColor = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
+    var shadowColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.75)
     var dimOutsideColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.30)
-    var handleColor = SIMD4<Float>(0.18, 0.44, 1.0, 0.95)
+    var handleColor = SIMD4<Float>(0.0, 0.55, 1.0, 1.0)
     var activeHandleColor = SIMD4<Float>(1.0, 0.85, 0.25, 1.0)
-    var lineThickness: Double = 2.0
-    var handleRadius: Double = 7.0
+    var lineThickness: Double = 3.0
+    var handleRadius: Double = 15.0
 }
 
 struct AUOSCHandle {
@@ -25,6 +26,26 @@ struct AUOSCStyledSegment {
     var start: AUPoint
     var end: AUPoint
     var style: AUOSCOverlayStyle
+}
+
+private struct AUOSCOverlayPixelFrame {
+    var minX: Double
+    var minY: Double
+    var maxX: Double
+    var maxY: Double
+
+    var width: Double {
+        max(1.0, maxX - minX)
+    }
+
+    var height: Double {
+        max(1.0, maxY - minY)
+    }
+}
+
+enum AUOSCOverlayCoordinateSpace {
+    case normalized
+    case pixels
 }
 
 final class AnyUprightOSCOverlayRenderer {
@@ -41,6 +62,9 @@ final class AnyUprightOSCOverlayRenderer {
         handles: [AUOSCHandle],
         activePart: Int,
         destinationImage: FxImageTile,
+        destinationSize: AUSize? = nil,
+        canvasFrame: [AUPoint]? = nil,
+        coordinateSpace: AUOSCOverlayCoordinateSpace = .normalized,
         style: AUOSCOverlayStyle = AUOSCOverlayStyle()
     ) {
         guard points.count >= 2 else {
@@ -57,6 +81,9 @@ final class AnyUprightOSCOverlayRenderer {
             handles: handles,
             activePart: activePart,
             destinationImage: destinationImage,
+            destinationSize: destinationSize,
+            canvasFrame: canvasFrame,
+            coordinateSpace: coordinateSpace,
             style: style
         )
     }
@@ -66,6 +93,10 @@ final class AnyUprightOSCOverlayRenderer {
         handles: [AUOSCHandle],
         activePart: Int,
         destinationImage: FxImageTile,
+        destinationSize: AUSize? = nil,
+        canvasFrame: [AUPoint]? = nil,
+        coordinateSpace: AUOSCOverlayCoordinateSpace = .normalized,
+        dimmingFrame: [AUPoint]? = nil,
         style: AUOSCOverlayStyle = AUOSCOverlayStyle()
     ) {
         guard points.count == 4 else {
@@ -74,6 +105,9 @@ final class AnyUprightOSCOverlayRenderer {
                 handles: handles,
                 activePart: activePart,
                 destinationImage: destinationImage,
+                destinationSize: destinationSize,
+                canvasFrame: canvasFrame,
+                coordinateSpace: coordinateSpace,
                 style: style
             )
             return
@@ -89,8 +123,11 @@ final class AnyUprightOSCOverlayRenderer {
             handles: handles,
             activePart: activePart,
             destinationImage: destinationImage,
+            destinationSize: destinationSize,
+            canvasFrame: canvasFrame,
+            coordinateSpace: coordinateSpace,
             handleStyle: style,
-            dimmingQuads: outsideDimmingQuads(around: points)
+            dimmingQuads: outsideDimmingQuads(around: points, frame: dimmingFrame)
         )
     }
 
@@ -99,6 +136,9 @@ final class AnyUprightOSCOverlayRenderer {
         handles: [AUOSCHandle],
         activePart: Int,
         destinationImage: FxImageTile,
+        destinationSize: AUSize? = nil,
+        canvasFrame: [AUPoint]? = nil,
+        coordinateSpace: AUOSCOverlayCoordinateSpace = .normalized,
         style: AUOSCOverlayStyle = AUOSCOverlayStyle()
     ) {
         renderStyledSegments(
@@ -106,6 +146,9 @@ final class AnyUprightOSCOverlayRenderer {
             handles: handles,
             activePart: activePart,
             destinationImage: destinationImage,
+            destinationSize: destinationSize,
+            canvasFrame: canvasFrame,
+            coordinateSpace: coordinateSpace,
             handleStyle: style
         )
     }
@@ -115,6 +158,9 @@ final class AnyUprightOSCOverlayRenderer {
         handles: [AUOSCHandle],
         activePart: Int,
         destinationImage: FxImageTile,
+        destinationSize: AUSize? = nil,
+        canvasFrame: [AUPoint]? = nil,
+        coordinateSpace: AUOSCOverlayCoordinateSpace = .normalized,
         handleStyle: AUOSCOverlayStyle = AUOSCOverlayStyle(),
         dimmingQuads: [[AUPoint]] = []
     ) {
@@ -122,23 +168,39 @@ final class AnyUprightOSCOverlayRenderer {
             return
         }
 
-        let pixelFormat = MetalDeviceCache.FxMTLPixelFormat(for: destinationImage)
         let deviceCache = MetalDeviceCache.deviceCache
-        guard let device = deviceCache.device(with: destinationImage.deviceRegistryID),
-              let outputTexture = destinationImage.metalTexture(for: device),
-              let commandQueue = device.makeCommandQueue(),
-              let commandBuffer = commandQueue.makeCommandBuffer(),
-              let pipelineState = pipelineState(device: device, pixelFormat: pixelFormat) else {
+        guard let device = deviceCache.device(with: destinationImage.deviceRegistryID) ?? MTLCreateSystemDefaultDevice() else {
+            return
+        }
+        guard let outputTexture = destinationImage.metalTexture(for: device) else {
+            return
+        }
+        guard let commandQueue = device.makeCommandQueue(),
+              let commandBuffer = commandQueue.makeCommandBuffer() else {
             return
         }
 
-        let tileBounds = destinationImage.tilePixelBounds
-        let width = max(1.0, Double(tileBounds.right - tileBounds.left))
-        let height = max(1.0, Double(tileBounds.top - tileBounds.bottom))
+        guard let pipelineState = pipelineState(device: device, pixelFormat: outputTexture.pixelFormat) else {
+            return
+        }
+
+        let surfaceWidth = max(1.0, Double(destinationImage.ioSurface.map { IOSurfaceGetWidth($0) } ?? outputTexture.width))
+        let surfaceHeight = max(1.0, Double(destinationImage.ioSurface.map { IOSurfaceGetHeight($0) } ?? outputTexture.height))
+        let width = surfaceWidth
+        let height = surfaceHeight
+        let coordinateFrame = pixelFrame(
+            for: destinationImage,
+            destinationSize: destinationSize,
+            canvasFrame: canvasFrame,
+            coordinateSpace: coordinateSpace,
+            textureWidth: width,
+            textureHeight: height
+        )
+        let coordinateSize = AUSize(width: coordinateFrame.width, height: coordinateFrame.height)
         var vertices: [AnyUprightOverlayVertex2D] = []
 
         for quad in dimmingQuads where quad.count == 4 {
-            appendObjectQuad(quad, color: handleStyle.dimOutsideColor, width: width, height: height, to: &vertices)
+            appendCoordinateQuad(quad, color: handleStyle.dimOutsideColor, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
         }
         for segment in segments {
             appendLine(
@@ -146,6 +208,9 @@ final class AnyUprightOSCOverlayRenderer {
                 to: segment.end,
                 color: segment.style.shadowColor,
                 thickness: segment.style.lineThickness + 2.0,
+                coordinateSpace: coordinateSpace,
+                coordinateSize: coordinateSize,
+                pixelFrame: coordinateFrame,
                 width: width,
                 height: height,
                 to: &vertices
@@ -157,6 +222,9 @@ final class AnyUprightOSCOverlayRenderer {
                 to: segment.end,
                 color: segment.style.lineColor,
                 thickness: segment.style.lineThickness,
+                coordinateSpace: coordinateSpace,
+                coordinateSize: coordinateSize,
+                pixelFrame: coordinateFrame,
                 width: width,
                 height: height,
                 to: &vertices
@@ -164,8 +232,8 @@ final class AnyUprightOSCOverlayRenderer {
         }
         for handle in handles {
             let color = handle.part == activePart ? handleStyle.activeHandleColor : handleStyle.handleColor
-            appendSquare(center: handle.point, radius: handleStyle.handleRadius + 2.0, color: handleStyle.shadowColor, width: width, height: height, to: &vertices)
-            appendSquare(center: handle.point, radius: handleStyle.handleRadius, color: color, width: width, height: height, to: &vertices)
+            appendSquare(center: handle.point, radius: handleStyle.handleRadius + 2.0, color: handleStyle.shadowColor, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
+            appendSquare(center: handle.point, radius: handleStyle.handleRadius, color: color, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
         }
 
         guard !vertices.isEmpty else {
@@ -198,16 +266,22 @@ final class AnyUprightOSCOverlayRenderer {
         commandBuffer.waitUntilCompleted()
     }
 
-    private func outsideDimmingQuads(around points: [AUPoint]) -> [[AUPoint]] {
+    private func outsideDimmingQuads(around points: [AUPoint], frame: [AUPoint]? = nil) -> [[AUPoint]] {
         let topLeft = points[0]
         let topRight = points[1]
         let bottomRight = points[2]
         let bottomLeft = points[3]
 
-        let frameTopLeft = AUPoint(x: 0.0, y: 1.0)
-        let frameTopRight = AUPoint(x: 1.0, y: 1.0)
-        let frameBottomRight = AUPoint(x: 1.0, y: 0.0)
-        let frameBottomLeft = AUPoint(x: 0.0, y: 0.0)
+        let framePoints = frame?.count == 4 ? frame! : [
+            AUPoint(x: 0.0, y: 1.0),
+            AUPoint(x: 1.0, y: 1.0),
+            AUPoint(x: 1.0, y: 0.0),
+            AUPoint(x: 0.0, y: 0.0)
+        ]
+        let frameTopLeft = framePoints[0]
+        let frameTopRight = framePoints[1]
+        let frameBottomRight = framePoints[2]
+        let frameBottomLeft = framePoints[3]
 
         return [
             [frameTopLeft, frameTopRight, topRight, topLeft],
@@ -263,12 +337,15 @@ final class AnyUprightOSCOverlayRenderer {
         to end: AUPoint,
         color: SIMD4<Float>,
         thickness: Double,
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        coordinateSize: AUSize,
+        pixelFrame: AUOSCOverlayPixelFrame,
         width: Double,
         height: Double,
         to vertices: inout [AnyUprightOverlayVertex2D]
     ) {
-        let startPixel = SIMD2<Double>(start.x * width, start.y * height)
-        let endPixel = SIMD2<Double>(end.x * width, end.y * height)
+        let startPixel = localPixel(from: start, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
+        let endPixel = localPixel(from: end, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
         let delta = endPixel - startPixel
         let length = max(0.0001, hypot(delta.x, delta.y))
         let normal = SIMD2<Double>(-delta.y / length, delta.x / length) * (thickness / 2.0)
@@ -289,11 +366,14 @@ final class AnyUprightOSCOverlayRenderer {
         center: AUPoint,
         radius: Double,
         color: SIMD4<Float>,
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        coordinateSize: AUSize,
+        pixelFrame: AUOSCOverlayPixelFrame,
         width: Double,
         height: Double,
         to vertices: inout [AnyUprightOverlayVertex2D]
     ) {
-        let centerPixel = SIMD2<Double>(center.x * width, center.y * height)
+        let centerPixel = localPixel(from: center, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
         appendQuad(
             p0: centerPixel + SIMD2<Double>(-radius, -radius),
             p1: centerPixel + SIMD2<Double>(radius, -radius),
@@ -306,14 +386,17 @@ final class AnyUprightOSCOverlayRenderer {
         )
     }
 
-    private func appendObjectQuad(
+    private func appendCoordinateQuad(
         _ points: [AUPoint],
         color: SIMD4<Float>,
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        coordinateSize: AUSize,
+        pixelFrame: AUOSCOverlayPixelFrame,
         width: Double,
         height: Double,
         to vertices: inout [AnyUprightOverlayVertex2D]
     ) {
-        let pixels = points.map { SIMD2<Double>($0.x * width, $0.y * height) }
+        let pixels = points.map { localPixel(from: $0, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height) }
         appendQuad(
             p0: pixels[0],
             p1: pixels[1],
@@ -323,6 +406,86 @@ final class AnyUprightOSCOverlayRenderer {
             width: width,
             height: height,
             to: &vertices
+        )
+    }
+
+    private func localPixel(
+        from point: AUPoint,
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        coordinateSize: AUSize,
+        pixelFrame: AUOSCOverlayPixelFrame,
+        width: Double,
+        height: Double
+    ) -> SIMD2<Double> {
+        switch coordinateSpace {
+        case .normalized:
+            return SIMD2<Double>(point.x * width, point.y * height)
+        case .pixels:
+            let normalizedX = (point.x - pixelFrame.minX) / max(coordinateSize.width, 1.0)
+            let normalizedY = (point.y - pixelFrame.minY) / max(coordinateSize.height, 1.0)
+            return SIMD2<Double>(normalizedX * width, normalizedY * height)
+        }
+    }
+
+    private func pixelFrame(
+        for destinationImage: FxImageTile,
+        destinationSize: AUSize?,
+        canvasFrame: [AUPoint]?,
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        textureWidth: Double,
+        textureHeight: Double
+    ) -> AUOSCOverlayPixelFrame {
+        if coordinateSpace == .pixels {
+            if let canvasFrame = canvasFrameFromPoints(canvasFrame) {
+                return canvasFrame
+            }
+
+            return AUOSCOverlayPixelFrame(
+                minX: 0.0,
+                minY: 0.0,
+                maxX: textureWidth,
+                maxY: textureHeight
+            )
+        }
+
+        let imageFrame = pixelFrame(for: destinationImage.imagePixelBounds)
+        if imageFrame.width > 1.0, imageFrame.height > 1.0 {
+            return imageFrame
+        }
+
+        return AUOSCOverlayPixelFrame(
+            minX: 0.0,
+            minY: 0.0,
+            maxX: max(1.0, destinationSize?.width ?? 1.0),
+            maxY: max(1.0, destinationSize?.height ?? 1.0)
+        )
+    }
+
+    private func canvasFrameFromPoints(_ points: [AUPoint]?) -> AUOSCOverlayPixelFrame? {
+        guard let points, points.count >= 2 else {
+            return nil
+        }
+
+        let xs = points.map(\.x)
+        let ys = points.map(\.y)
+        guard let minX = xs.min(),
+              let maxX = xs.max(),
+              let minY = ys.min(),
+              let maxY = ys.max(),
+              maxX - minX > 1.0,
+              maxY - minY > 1.0 else {
+            return nil
+        }
+
+        return AUOSCOverlayPixelFrame(minX: minX, minY: minY, maxX: maxX, maxY: maxY)
+    }
+
+    private func pixelFrame(for rect: FxRect) -> AUOSCOverlayPixelFrame {
+        AUOSCOverlayPixelFrame(
+            minX: Double(rect.left),
+            minY: Double(rect.bottom),
+            maxX: Double(rect.right),
+            maxY: Double(rect.top)
         )
     }
 

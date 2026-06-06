@@ -10,7 +10,7 @@ AnyUpright is a suite of FxPlug effects for single-frame-assisted perspective an
 - There is no package manager, Docker runtime, or CI workflow yet.
 - Geometry tests live in `AnyUprightTests/` and can be run as a lightweight Swift executable.
 - The shared geometry layer now includes line candidate filtering, horizon correction estimation, and centered perspective parameter estimation from reference lines.
-- Quad and Upright expose FxPlug onscreen controls in addition to inspector parameters.
+- Quad and Upright expose FxPlug onscreen controls through separate `FxOnScreenControl` plug-in entries linked to their filter UUIDs with `supportedPlugins`.
 - `tools/render-warp-previews.swift` generates CPU-rendered preview PNGs from the same geometry matrices used by the Metal renderer, so matrix semantics can be checked without launching a host app.
 
 ## Effects
@@ -50,6 +50,7 @@ Current implementation:
 
 - `AnyUpright Quad Manual` is registered as a separate FxPlug filter.
 - `Mode` selects `Output Corners` or `Source Quad`.
+- `Stretch Mode` is shown only in `Source Quad` mode. `Stretch to Frame` maps the selected quadrilateral to the full output frame. `Mirror Horizontal` and `Mirror Vertical` mirror only the selected source quadrilateral and composite it back over the original frame, matching the Reverse Corner Pin use case of fixing backwards text after a shot flop.
 - `Show Corner Adjuster` is shown only in `Source Quad` mode. It is enabled by default: when enabled, the four handles are shown at the current source quadrilateral, handle drags only move the handles, and the image is not warped. Disable it to hide the handles and map the selected source quadrilateral to the full output frame.
 - In `Source Quad` mode, the default source quadrilateral is the central 80% of the frame. The onscreen adjuster dims the outside area to 70% brightness, leaves the selected quadrilateral at original brightness, and connects the four handles with a visible quadrilateral outline.
 - In `Output Corners` mode, each visible output corner exposes `X %`, `Y %`, `X px`, and `Y px` offsets in the inspector.
@@ -57,12 +58,13 @@ Current implementation:
 - Final offset is `percentage * current frame dimension + pixels`.
 - Positive `X` moves right. Positive `Y` moves up.
 - In `Output Corners` mode, the four offsets are a destination/output quadrilateral and map back to the full source frame, matching the direction a user sees in the Motion canvas.
-- In `Source Quad` mode, the four offsets describe a source quadrilateral that maps to the full output frame, matching a document-scanner or Microsoft Lens style correction.
-- The current onscreen control draws the active quadrilateral and four handles in object space. Dragging a handle writes the corresponding pixel offset while preserving any existing percentage offset.
+- In `Source Quad` mode, the same corner offset parameters describe a source quadrilateral that maps to the full output frame, matching a document-scanner or Microsoft Lens style correction. Those parameter groups are hidden in the inspector while this mode is active.
+- The current onscreen control is a canvas-space `FxOnScreenControl`: it converts the active object-space quadrilateral to canvas space for drawing and hit testing, maps Motion's surface-local event points back to canvas coordinates when needed, then converts the dragged point back to object space before writing persistent pixel offsets. In `Source Quad` mode, dragging a handle writes the corresponding hidden source-corner pixel offset. In `Output Corners` mode, dragging a handle writes the corresponding output-corner pixel offset while preserving any existing percentage offset.
+- A hidden point-parameter experiment was intentionally backed out: Motion accepted `setXValue(_:yValue:)` during OSC drags but subsequent reads still returned the default points. Source Quad now uses the float-parameter path because Motion was verified to persist those writes.
 
 Two intended modes:
 
-1. Source quad to full frame: user drags four points around an object such as a phone screen; editing can display handles without moving the image, and applying maps that quadrilateral to the original frame size.
+1. Source quad to full frame or mirrored source patch: user drags four points around an object such as a phone screen or sign; editing can display handles without moving the image, and applying either maps that quadrilateral to the original frame size or mirrors the pinned area back into the shot.
 2. Frame-corner warp: user drags the four output corners and sees the warped image in realtime; the stretched result is the actual output.
 
 Primary risks:
@@ -118,8 +120,9 @@ Use one repository and one product suite, but expose three separate Final Cut ef
 - Geometry: normalized points, lines, homography, affine transforms, vanishing-point helpers, and coordinate conversion.
 - Detection: frame downsampling, edge/line detection, candidate scoring, and analysis result serialization.
 - Rendering: shared Metal pipeline for affine and projective texture warps.
-- UI/controls: reusable Metal onscreen overlay drawing, object-space hit testing, and parameter writeback where FxPlug APIs permit it.
-- Quad object-space conversion: `AnyUprightGeometry.quadObjectPoints` and `cornerPixelOffset` own the Motion/FxPlug handle coordinate semantics so corner names, X direction, and Y direction stay testable outside the host app.
+- UI/controls: reusable Metal onscreen overlay drawing, canvas-space hit testing, object/canvas conversion through `FxOnScreenControlAPI_v4`, and parameter writeback where FxPlug APIs permit it.
+- FxPlug OSC registration: Quad and Upright use separate OSC classes linked with `supportedPlugins`. Apple documentation describes this as the expected shape for onscreen controls, and an installed Pixel Film Studios FxPlug (`PFSMaskV2`) uses the same `supportedPlugins` key in its plist. If Motion does not call OSC methods, first suspect stale PlugInKit registration or host instance caching before changing coordinate math. In Motion's Metal OSC path, the `drawOSC` width/height values can describe the source object, while the drawable tile is represented by `destinationImage`; Quad canvas overlays should map canvas coordinates to the destination texture/tile dimensions instead of treating `width` and `height` as the viewport.
+- Quad object-space conversion: `AnyUprightGeometry.quadObjectPoints`, `sourceQuadObjectPoints`, and `cornerPixelOffset` own the Motion/FxPlug handle coordinate semantics so corner names, X direction, and Y direction stay testable outside the host app. `Source Quad` stores the four handles as hidden percent/pixel offsets; `Output Corners` exposes the same offsets in the inspector.
 - Upright candidate slots: fixed inspector slot IDs, object/image coordinate conversion, selection limits, and onscreen hit testing live in `AnyUprightUprightCandidates.swift`; FxPlug parameter read/write remains in the effect class.
 
 Playback rendering should use precomputed parameters only. Detection should be explicit, cached, or analysis-driven instead of happening on every frame.
@@ -134,6 +137,8 @@ The current traditional line detector is a CPU reference implementation based on
 - Lightroom's [Upright](https://helpx.adobe.com/lightroom-classic/help/guided-upright-perspective-correction.html) modes include Level, Vertical, Auto, Full, and Guided workflows. Guided Upright lets users draw guides that should become horizontal or vertical, which matches the planned manual reference-line model.
 - OpenCV's [`HoughLines` / `HoughLinesP`](https://docs.opencv.org/4.x/d9/db0/tutorial_hough_lines.html) and [`LineSegmentDetector`](https://docs.opencv.org/master/db/d73/classcv_1_1LineSegmentDetector.html) are the practical reference algorithms for candidate line extraction. The repo should keep the public data model independent from OpenCV so a future implementation can choose Vision, traditional CPU code, Metal kernels, or a small pre-trained model without changing render semantics.
 - FxPlug 4 provides [`FxAnalysis`](https://developer.apple.com/documentation/professional_video_applications/fxanalysisapi) for explicit frame analysis and [`FxOnScreenControl`](https://developer.apple.com/documentation/professional_video_applications/fxonscreencontrolapi_v4) for canvas drawing, hit testing, and mouse events. Automatic and semi-automatic modes should analyze a representative frame, write keyframeable parameters, and let the existing Metal warp renderer handle playback.
+- Open-source search did not turn up a usable FxPlug corner-pin onscreen-control implementation. Checked public FxPlug examples and plug-ins include FxKit, Spectra, GyroflowToolbox, pravMotion, FxBrightness, and SpliceKit; they do not provide a working four-corner `FxOnScreenControl` reference. FxFactory Reverse Corner Pin is the closest product UX reference, but it is closed source. Its public product page describes the target behavior as stretching a perspective area defined by four pins into a rectangle, with keyframeable pins for static shots or camera motion.
+- For Reverse Corner Pin-style behavior, the closest open implementation references found so far are OBS/StreamFX corner-pin or 3D-transform effects. They are useful for render/math semantics but not for FxPlug OSC interaction because they do not exercise Motion/FCP's object-space to canvas-space conversion, hit testing, or parameter writeback APIs.
 - FxPlug angle parameters are handled as radians in the current Motion validation path: `getFloatValue` returns angle slider values in radians, and `setFloatValue` writes angle parameter values that Motion displays after radians-to-degrees conversion. This differs from the FxPlug SDK header comment that says angle writes use degrees, so Horizon and Upright keep internal analysis rotation values in radians and write radians back to angle parameters. See `docs/debug/2026-06-05-horizon-analysis-writeback.md` for the validation notes that led to this convention.
 
 ## Validation Expectations
@@ -160,6 +165,8 @@ xcodebuild -project AnyUpright.xcodeproj -scheme "Wrapper Application" -configur
 ```
 
 If Xcode reports a missing Metal Toolchain during build, install it with Xcode's suggested `xcodebuild -downloadComponent MetalToolchain` before repeating the full build.
+
+When debugging Motion integration, avoid registering multiple builds with the same wrapper bundle ID at the same time. In particular, mixing a `/tmp/AnyUprightDerivedData` build with Xcode's default `~/Library/Developer/Xcode/DerivedData/.../AnyUpright.app` can leave Motion using a stale path-based PlugInKit object; OSC entries may then fail to attach even when the plist is correct. If this happens, quit or kill the stale wrapper/XPC process, unregister the stale wrapper with `lsregister -u /path/to/AnyUpright.app`, rebuild/register the intended wrapper, and then restart Motion or re-add the effect instance.
 
 ### Local Test Assets
 
@@ -199,11 +206,13 @@ Horizon:
 Quad:
 
 - Apply `AnyUpright Quad Manual` to `quad-phone-screen.png`.
+- Enable Motion's `Publish OSC` checkbox for the effect before testing onscreen handles; Motion may leave this host control off for newly added filters.
 - In `Output Corners` mode, drag the four onscreen handles; the image should warp in realtime.
 - In `Output Corners` mode, `Show Corner Adjuster` should be hidden and the four corner coordinate groups should be visible.
 - In `Source Quad` mode with `Show Corner Adjuster` on, the four handles should start at the central 80% of the frame, the outside area should be dimmed to 70% brightness, and dragging the handles around the phone-screen quadrilateral should not warp the image while editing.
 - In `Source Quad` mode, the four corner coordinate groups should be hidden because positioning happens through onscreen handles.
 - Turn `Show Corner Adjuster` off; the selected screen quadrilateral should map to the full output frame and the handles should be hidden.
+- With `Show Corner Adjuster` off and `Stretch Mode = Mirror Horizontal` or `Mirror Vertical`, only the selected quadrilateral should be mirrored over the original image; outside the quadrilateral should remain unchanged.
 
 Upright:
 

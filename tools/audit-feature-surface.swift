@@ -19,6 +19,7 @@ enum FeatureSurfaceAuditFailure: Error, CustomStringConvertible {
 struct FeaturePluginExpectation {
     var className: String
     var protocols: Set<String>
+    var supportedPlugins: Set<String> = []
 }
 
 struct AuditFeatureSurface {
@@ -27,12 +28,14 @@ struct AuditFeatureSurface {
         let infoPlist = root.appendingPathComponent("AnyUpright/Plugin/Info.plist")
         let effects = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightManualEffects.swift"), encoding: .utf8)
         let geometry = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightGeometry.swift"), encoding: .utf8)
+        let overlay = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightOSCOverlayRenderer.swift"), encoding: .utf8)
         let warp = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightWarpEffect.swift"), encoding: .utf8)
+        let metal = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightWarp.metal"), encoding: .utf8)
         let candidates = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightUprightCandidates.swift"), encoding: .utf8)
 
         try auditRegisteredPlugins(infoPlist)
         try auditHorizon(effects)
-        try auditQuad(effects, geometry: geometry)
+        try auditQuad(effects, geometry: geometry, overlay: overlay, metal: metal)
         try auditUpright(effects, geometry: geometry, warp: warp, candidates: candidates)
 
         print("AnyUpright feature surface audit passed")
@@ -47,8 +50,10 @@ struct AuditFeatureSurface {
 
         let expected = [
             FeaturePluginExpectation(className: "AnyUprightHorizonManualPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
-            FeaturePluginExpectation(className: "AnyUprightQuadManualPlugIn", protocols: ["FxFilter", "FxOnScreenControl"]),
-            FeaturePluginExpectation(className: "AnyUprightUprightManualPlugIn", protocols: ["FxFilter", "FxAnalyzer", "FxOnScreenControl"])
+            FeaturePluginExpectation(className: "AnyUprightQuadManualPlugIn", protocols: ["FxFilter"]),
+            FeaturePluginExpectation(className: "AnyUprightQuadManualOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]),
+            FeaturePluginExpectation(className: "AnyUprightUprightManualPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
+            FeaturePluginExpectation(className: "AnyUprightUprightManualOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB"])
         ]
 
         for item in expected {
@@ -57,6 +62,8 @@ struct AuditFeatureSurface {
             }
             let protocols = Set(plugin["protocolNames"] as? [String] ?? [])
             try assertEqual(protocols, item.protocols, "\(item.className) protocols")
+            let supportedPlugins = Set(plugin["supportedPlugins"] as? [String] ?? [])
+            try assertEqual(supportedPlugins, item.supportedPlugins, "\(item.className) supported plugins")
         }
     }
 
@@ -68,17 +75,33 @@ struct AuditFeatureSurface {
         try require(effects, "singleFrameAnalysisRange", "Horizon analysis targets a representative frame")
     }
 
-    private static func auditQuad(_ effects: String, geometry: String) throws {
+    private static func auditQuad(_ effects: String, geometry: String, overlay: String, metal: String) throws {
         try require(effects, "Output Corners", "Quad exposes realtime output-corner mode")
         try require(effects, "Source Quad", "Quad exposes Lens-style source-quad mode")
         try require(effects, "Show Corner Adjuster", "Quad can show source-quad handles without applying the warp")
-        try require(effects, "FxOnScreenControl_v4", "Quad exposes onscreen controls")
+        try require(effects, "Stretch Mode", "Quad exposes Reverse Corner Pin-style source stretch mode")
+        try require(effects, "Mirror Horizontal", "Quad can mirror the pinned source area horizontally")
+        try require(effects, "Mirror Vertical", "Quad can mirror the pinned source area vertically")
+        try require(effects, "class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect", "Quad filter owns render parameters")
+        try require(effects, "class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Quad exposes onscreen controls as a separate FxPlug class")
+        try require(effects, "hiddenCollapsedFlags", "Source Quad hides the offset controls while keeping them as persistent state")
+        try require(effects, "sourceCornerPixelOffset", "Source Quad OSC writes hidden source-corner pixel offsets")
         try require(effects, "renderQuadAdjuster", "Source Quad draws a dedicated adjuster overlay")
         try require(geometry, "quadOutputToSourceMatrix", "Quad render matrix is centralized in geometry")
+        try require(geometry, "AUSourceQuadStretchMode", "Source Quad stretch modes are testable geometry state")
+        try require(geometry, "quadSelectionToOutputRectMatrix", "Source Quad mirror modes identify the selected output area")
         try require(geometry, "sourceQuadDefault", "Source Quad has a central default quadrilateral")
-        try require(geometry, "sourceQuadObjectPoints", "Source Quad handles use their own object-space base")
+        try require(geometry, "sourceQuadObjectPoints", "Source Quad converts persistent offsets into object-space handles")
         try require(geometry, "guard !showCornerAdjuster else", "Source Quad mode can preview handles without warping")
         try require(geometry, "cornerPixelOffset", "Quad OSC writes stable corner pixel offsets")
+        try require(overlay, "IOSurfaceGetWidth", "OSC renderer uses the destination IOSurface width for canvas overlays")
+        try require(overlay, "IOSurfaceGetHeight", "OSC renderer uses the destination IOSurface height for canvas overlays")
+        try require(overlay, "width = surfaceWidth", "OSC renderer treats the destination surface as the overlay viewport")
+        try require(overlay, "height = surfaceHeight", "OSC renderer treats the destination surface as the overlay viewport")
+        try require(overlay, "outputTexture.pixelFormat", "OSC renderer uses the actual Metal texture pixel format")
+        try require(overlay, "MTLCreateSystemDefaultDevice", "OSC renderer can fall back when the destination registry ID is unavailable")
+        try require(metal, "? warpState->fallbackOutputToSource", "Selection mirror fallback only applies outside the selected quad")
+        try require(metal, ": warpState->outputToSource", "Full-frame Quad warps use the primary output-to-source matrix")
     }
 
     private static func auditUpright(_ effects: String, geometry: String, warp: String, candidates: String) throws {
@@ -90,6 +113,8 @@ struct AuditFeatureSurface {
         try require(effects, "Detect Full Candidates", "Upright exposes semi-auto full detection")
         try require(effects, "Apply Selected Full", "Upright can apply selected semi-auto candidates")
         try require(effects, "Apply Guided Full", "Upright can apply manually drawn guides")
+        try require(effects, "class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer", "Upright filter is separated from its onscreen control")
+        try require(effects, "class AnyUprightUprightManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Upright exposes onscreen controls as a separate FxPlug class")
         try require(effects, "guide4Enabled", "Upright exposes four guide lines")
         try require(effects, "guide4Start", "Upright exposes the fourth guide start handle")
         try require(effects, "guide4End", "Upright exposes the fourth guide end handle")

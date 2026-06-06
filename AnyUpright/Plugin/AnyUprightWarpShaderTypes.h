@@ -8,6 +8,9 @@
 
 #import <simd/simd.h>
 
+#define AURM_WarpFullFrame 0
+#define AURM_WarpSelectionOverOriginal 1
+
 typedef enum AnyUprightVertexInputIndex {
     AUVII_Vertices        = 0,
     AUVII_ViewportSize    = 1,
@@ -34,8 +37,14 @@ typedef struct AnyUprightOverlayVertex2D {
 
 typedef struct AnyUprightWarpState {
     matrix_float3x3 outputToSource;
+    matrix_float3x3 fallbackOutputToSource;
+    matrix_float3x3 selectionOutputToRect;
     vector_float2 outputSize;
     vector_float2 inputSize;
+    int renderMode;
+    int reserved0;
+    int reserved1;
+    int reserved2;
 } AnyUprightWarpState;
 
 #endif /* AnyUprightWarpShaderTypes_h */

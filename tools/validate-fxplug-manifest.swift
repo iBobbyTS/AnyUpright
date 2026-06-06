@@ -24,6 +24,7 @@ struct ExpectedPlugin {
     var protocols: Set<String>
     var localizedDisplayName: String
     var localizedDescription: String
+    var supportedPlugins: Set<String> = []
 }
 
 struct ValidateFxPlugManifest {
@@ -53,18 +54,38 @@ struct ValidateFxPlugManifest {
                 displayNameKey: "AnyUpright::Quad Manual Name",
                 descriptionKey: "AnyUpright::Quad Manual Description",
                 uuid: "9BB4C7D9-9384-4C8F-927D-4F716DA78B14",
-                protocols: ["FxFilter", "FxOnScreenControl"],
+                protocols: ["FxFilter"],
                 localizedDisplayName: "AnyUpright Quad Manual",
                 localizedDescription: "Manual four-corner source and output perspective correction."
+            ),
+            ExpectedPlugin(
+                className: "AnyUprightQuadManualOSCPlugIn",
+                displayNameKey: "AnyUpright::Quad Manual OSC Name",
+                descriptionKey: "AnyUpright::Quad Manual OSC Description",
+                uuid: "1E97E435-F4A5-4252-8B14-86F44BAD0BF7",
+                protocols: ["FxOnScreenControl"],
+                localizedDisplayName: "AnyUpright Quad Manual Controls",
+                localizedDescription: "Onscreen corner controls for AnyUpright Quad Manual.",
+                supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]
             ),
             ExpectedPlugin(
                 className: "AnyUprightUprightManualPlugIn",
                 displayNameKey: "AnyUpright::Upright Manual Name",
                 descriptionKey: "AnyUpright::Upright Manual Description",
                 uuid: "A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB",
-                protocols: ["FxFilter", "FxAnalyzer", "FxOnScreenControl"],
+                protocols: ["FxFilter", "FxAnalyzer"],
                 localizedDisplayName: "AnyUpright Upright Manual",
                 localizedDescription: "Lightroom-style manual, guided, automatic, and semi-automatic upright correction."
+            ),
+            ExpectedPlugin(
+                className: "AnyUprightUprightManualOSCPlugIn",
+                displayNameKey: "AnyUpright::Upright Manual OSC Name",
+                descriptionKey: "AnyUpright::Upright Manual OSC Description",
+                uuid: "FEF0BD6C-BB81-4E37-B5BD-8C163FBB7782",
+                protocols: ["FxOnScreenControl"],
+                localizedDisplayName: "AnyUpright Upright Manual Controls",
+                localizedDescription: "Onscreen guide and candidate line controls for AnyUpright Upright Manual.",
+                supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB"]
             )
         ]
 
@@ -102,6 +123,7 @@ struct ValidateFxPlugManifest {
             try assertEqual(plugin["displayName"] as? String, item.displayNameKey, "\(item.className) display key")
             try assertEqual(plugin["infoString"] as? String, item.descriptionKey, "\(item.className) description key")
             try assertEqual(Set(try requireStringArray(plugin["protocolNames"], "\(item.className) protocolNames")), item.protocols, "\(item.className) protocols")
+            try assertEqual(Set(plugin["supportedPlugins"] as? [String] ?? []), item.supportedPlugins, "\(item.className) supported plugins")
             try assertEqual(displayNames[item.displayNameKey] as? String, item.localizedDisplayName, "\(item.className) localized display name")
             try assertEqual(descriptions[item.descriptionKey] as? String, item.localizedDescription, "\(item.className) localized description")
         }

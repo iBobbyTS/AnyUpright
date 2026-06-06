@@ -86,10 +86,31 @@
 			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
+			</array>
+			<key>uuid</key>
+			<string>9BB4C7D9-9384-4C8F-927D-4F716DA78B14</string>
+			<key>version</key>
+			<string>1.0</string>
+		</dict>
+		<dict>
+			<key>className</key>
+			<string>AnyUprightQuadManualOSCPlugIn</string>
+			<key>displayName</key>
+			<string>AnyUpright::Quad Manual OSC Name</string>
+			<key>group</key>
+			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<key>infoString</key>
+			<string>AnyUpright::Quad Manual OSC Description</string>
+			<key>protocolNames</key>
+			<array>
 				<string>FxOnScreenControl</string>
 			</array>
-				<key>uuid</key>
-			<string>9BB4C7D9-9384-4C8F-927D-4F716DA78B14</string>
+			<key>supportedPlugins</key>
+			<array>
+				<string>9BB4C7D9-9384-4C8F-927D-4F716DA78B14</string>
+			</array>
+			<key>uuid</key>
+			<string>1E97E435-F4A5-4252-8B14-86F44BAD0BF7</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>
@@ -102,14 +123,35 @@
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 			<key>infoString</key>
 			<string>AnyUpright::Upright Manual Description</string>
-				<key>protocolNames</key>
+			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
 				<string>FxAnalyzer</string>
-				<string>FxOnScreenControl</string>
 			</array>
 			<key>uuid</key>
 			<string>A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB</string>
+			<key>version</key>
+			<string>1.0</string>
+		</dict>
+		<dict>
+			<key>className</key>
+			<string>AnyUprightUprightManualOSCPlugIn</string>
+			<key>displayName</key>
+			<string>AnyUpright::Upright Manual OSC Name</string>
+			<key>group</key>
+			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<key>infoString</key>
+			<string>AnyUpright::Upright Manual OSC Description</string>
+			<key>protocolNames</key>
+			<array>
+				<string>FxOnScreenControl</string>
+			</array>
+			<key>supportedPlugins</key>
+			<array>
+				<string>A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB</string>
+			</array>
+			<key>uuid</key>
+			<string>FEF0BD6C-BB81-4E37-B5BD-8C163FBB7782</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>

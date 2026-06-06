@@ -2,4 +2,6 @@
 
 "AnyUpright::Horizon Manual Description" = "Automatic horizon correction with manual rotation and optional fill.";
 "AnyUpright::Quad Manual Description" = "Manual four-corner source and output perspective correction.";
+"AnyUpright::Quad Manual OSC Description" = "Onscreen corner controls for AnyUpright Quad Manual.";
 "AnyUpright::Upright Manual Description" = "Lightroom-style manual, guided, automatic, and semi-automatic upright correction.";
+"AnyUpright::Upright Manual OSC Description" = "Onscreen guide and candidate line controls for AnyUpright Upright Manual.";

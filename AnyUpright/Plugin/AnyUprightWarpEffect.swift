@@ -18,6 +18,7 @@ struct AnyUprightParameterState {
     var fillFrame: Int32 = 0
     var quadMode: Int32 = AUQuadTransformMode.outputCorners.rawValue
     var showCornerAdjuster: Int32 = 1
+    var sourceQuadStretchMode: Int32 = AUSourceQuadStretchMode.stretch.rawValue
     var rotationRadians: Float = 0.0
     var verticalPerspective: Float = 0.0
     var horizontalPerspective: Float = 0.0
@@ -41,6 +42,35 @@ struct AnyUprightParameterState {
     var bottomLeftPercentY: Float = 0.0
     var bottomLeftPixelX: Float = 0.0
     var bottomLeftPixelY: Float = 0.0
+}
+
+class AnyUprightOSCPlugIn: NSObject {
+    let _apiManager: PROAPIAccessing!
+
+    required init?(apiManager: PROAPIAccessing) {
+        _apiManager = apiManager
+        super.init()
+    }
+
+    func parameterRetrievalAPI() -> FxParameterRetrievalAPI_v6? {
+        _apiManager?.api(for: FxParameterRetrievalAPI_v6.self) as? FxParameterRetrievalAPI_v6
+    }
+
+    func parameterSettingAPI() -> FxParameterSettingAPI_v5? {
+        _apiManager?.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5
+    }
+
+    func objectPixelSizeForOSC(defaultSize: AUSize = AUSize(width: 1920.0, height: 1080.0)) -> AUSize {
+        guard let oscAPI = _apiManager.api(for: FxOnScreenControlAPI_v4.self) as? FxOnScreenControlAPI_v4 else {
+            return defaultSize
+        }
+
+        var width: UInt = 0
+        var height: UInt = 0
+        var pixelAspectRatio = 1.0
+        oscAPI.objectWidth(&width, height: &height, pixelAspectRatio: &pixelAspectRatio)
+        return AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
+    }
 }
 
 class AnyUprightWarpEffect: NSObject, FxTileableEffect {
@@ -156,8 +186,12 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         deviceCache.returnCommandQueueToCache(commandQueue: commandQueue)
     }
 
-    func parameterRetrievalAPI() -> FxParameterRetrievalAPI_v6 {
-        _apiManager!.api(for: FxParameterRetrievalAPI_v6.self) as! FxParameterRetrievalAPI_v6
+    func parameterRetrievalAPI() -> FxParameterRetrievalAPI_v6? {
+        _apiManager?.api(for: FxParameterRetrievalAPI_v6.self) as? FxParameterRetrievalAPI_v6
+    }
+
+    func parameterSettingAPI() -> FxParameterSettingAPI_v5? {
+        _apiManager?.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5
     }
 
     func defaultFlags() -> FxParameterFlags {
@@ -214,11 +248,20 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         let destinationSize = size(from: destinationImage.imagePixelBounds)
         let sourceSize = size(from: sourceImage.imagePixelBounds)
         let matrix = outputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
+        let fallback = fallbackOutputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
+        let selectionToRect = selectionOutputToRectMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
+        let renderMode = renderMode(from: parameterState)
 
         return AnyUprightWarpState(
             outputToSource: matrix,
+            fallbackOutputToSource: fallback,
+            selectionOutputToRect: selectionToRect,
             outputSize: vector_float2(Float(destinationSize.width), Float(destinationSize.height)),
-            inputSize: vector_float2(Float(sourceSize.width), Float(sourceSize.height))
+            inputSize: vector_float2(Float(sourceSize.width), Float(sourceSize.height)),
+            renderMode: renderMode,
+            reserved0: 0,
+            reserved1: 0,
+            reserved2: 0
         )
     }
 
@@ -233,9 +276,11 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
         case .quad:
             let mode = AUQuadTransformMode(rawValue: state.quadMode) ?? .outputCorners
+            let stretchMode = AUSourceQuadStretchMode(rawValue: state.sourceQuadStretchMode) ?? .stretch
             return AnyUprightGeometry.quadOutputToSourceMatrix(
                 from: cornerOffsets(from: state),
                 mode: mode,
+                stretchMode: stretchMode,
                 showCornerAdjuster: state.showCornerAdjuster != 0,
                 outputSize: outputSize,
                 sourceSize: sourceSize
@@ -261,7 +306,41 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         }
     }
 
-    private func cornerOffsets(from state: AnyUprightParameterState) -> AUCornerOffsets {
+    private func fallbackOutputToSourceMatrix(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {
+        guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad else {
+            return outputToSourceMatrix(from: state, outputSize: outputSize, sourceSize: sourceSize)
+        }
+
+        return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: sourceSize)
+    }
+
+    private func selectionOutputToRectMatrix(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {
+        guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
+              AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad,
+              state.showCornerAdjuster == 0 else {
+            return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: outputSize)
+        }
+
+        return AnyUprightGeometry.quadSelectionToOutputRectMatrix(
+            from: cornerOffsets(from: state),
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+    }
+
+    private func renderMode(from state: AnyUprightParameterState) -> Int32 {
+        guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
+              AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad,
+              state.showCornerAdjuster == 0,
+              let stretchMode = AUSourceQuadStretchMode(rawValue: state.sourceQuadStretchMode),
+              stretchMode != .stretch else {
+            return Int32(AURM_WarpFullFrame)
+        }
+
+        return Int32(AURM_WarpSelectionOverOriginal)
+    }
+
+    func cornerOffsets(from state: AnyUprightParameterState) -> AUCornerOffsets {
         AUCornerOffsets(
             topLeftPercent: AUPoint(x: Double(state.topLeftPercentX), y: Double(state.topLeftPercentY)),
             topRightPercent: AUPoint(x: Double(state.topRightPercentX), y: Double(state.topRightPercentY)),

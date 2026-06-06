@@ -27,7 +27,10 @@ struct AnyUprightGeometryTests {
         try testQuadOutputCornersKeepTheirNamedPositions()
         try testQuadSourceDefaultsToCentralEightyPercent()
         try testQuadSourceObjectDragPreservesCentralBase()
+        try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
+        try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
         try testQuadSourceModeShowsAdjusterBeforeApplyingWarp()
+        try testQuadSourceMirrorModesSampleWithinSelectedQuad()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
         try testUprightVerticalAndHorizontalPerspectiveGenerateCenteredQuads()
         try testUprightPerspectiveKeepsFrameCenterAnchored()
@@ -185,6 +188,56 @@ struct AnyUprightGeometryTests {
         try assertEqual(sourceQuad.topLeft, AUPoint(x: 40.0, y: 20.0), "source dragged top-left source point")
     }
 
+    static func testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        var offsets = AUCornerOffsets()
+        let defaultObjectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+        let defaultPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: defaultObjectPoints, size: size)
+
+        try assertEqual(defaultPixels.topLeft, AUPoint(x: 20.0, y: 90.0), "source object top-left pixel")
+        try assertEqual(defaultPixels.topRight, AUPoint(x: 180.0, y: 90.0), "source object top-right pixel")
+        try assertEqual(defaultPixels.bottomRight, AUPoint(x: 180.0, y: 10.0), "source object bottom-right pixel")
+        try assertEqual(defaultPixels.bottomLeft, AUPoint(x: 20.0, y: 10.0), "source object bottom-left pixel")
+
+        let draggedPixel = AUPoint(x: 45.0, y: 75.0)
+        let draggedNormalized = AnyUprightGeometry.normalizedObjectPoint(fromObjectPixelPoint: draggedPixel, size: size)
+        let pixels = AnyUprightGeometry.sourceCornerPixelOffset(
+            forObjectPoint: draggedNormalized,
+            corner: .topLeft,
+            offsets: offsets,
+            size: size
+        )
+
+        offsets.topLeftPixels = pixels
+        let updatedObjectPixels = AnyUprightGeometry.objectPixelQuad(
+            fromNormalizedObjectQuad: AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size),
+            size: size
+        )
+        try assertEqual(pixels, AUPoint(x: 25.0, y: -15.0), "source object-space drag offset")
+        try assertEqual(updatedObjectPixels.topLeft, draggedPixel, "source object-space drag target")
+    }
+
+    static func testCanvasSurfaceMapperConvertsFxPlugOSCEvents() throws {
+        let canvasFrame = [
+            AUPoint(x: 531.1, y: 791.2),
+            AUPoint(x: 1811.1, y: 791.2),
+            AUPoint(x: 1811.1, y: 71.2),
+            AUPoint(x: 531.1, y: 71.2)
+        ]
+        let mapper = try unwrap(
+            AUCanvasSurfaceMapper(canvasFrame: canvasFrame, surfaceSize: AUSize(width: 1670.0, height: 844.0)),
+            "canvas mapper"
+        )
+
+        let canvasTopLeftHandle = AUPoint(x: 659.1, y: 719.2)
+        let eventPoint = mapper.eventPoint(fromCanvasPoint: canvasTopLeftHandle)
+        let roundTrippedCanvas = mapper.canvasPoint(fromEventPoint: eventPoint)
+
+        try assertApprox(eventPoint.x, 167.0, "top-left handle event x")
+        try assertApprox(eventPoint.y, 759.6, "top-left handle event y")
+        try assertEqual(roundTrippedCanvas, canvasTopLeftHandle, "event point should map back to canvas point")
+    }
+
     static func testQuadSourceModeShowsAdjusterBeforeApplyingWarp() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
@@ -216,6 +269,46 @@ struct AnyUprightGeometryTests {
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: sourceQuad.topRight)
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: sourceQuad.bottomRight)
         try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: sourceQuad.bottomLeft)
+    }
+
+    static func testQuadSourceMirrorModesSampleWithinSelectedQuad() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let offsets = AUCornerOffsets()
+        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let selectionToRect = AnyUprightGeometry.quadSelectionToOutputRectMatrix(
+            from: offsets,
+            outputSize: size,
+            sourceSize: size
+        )
+        let horizontalMirror = AnyUprightGeometry.quadOutputToSourceMatrix(
+            from: offsets,
+            mode: .sourceQuad,
+            stretchMode: .mirrorHorizontal,
+            showCornerAdjuster: false,
+            outputSize: size,
+            sourceSize: size
+        )
+        let verticalMirror = AnyUprightGeometry.quadOutputToSourceMatrix(
+            from: offsets,
+            mode: .sourceQuad,
+            stretchMode: .mirrorVertical,
+            showCornerAdjuster: false,
+            outputSize: size,
+            sourceSize: size
+        )
+
+        try assertMaps(selectionToRect, sourceQuad.topLeft, to: AUPoint(x: 0.0, y: 0.0))
+        try assertMaps(selectionToRect, sourceQuad.bottomRight, to: AUPoint(x: size.width, y: size.height))
+
+        try assertMaps(horizontalMirror, sourceQuad.topLeft, to: sourceQuad.topRight)
+        try assertMaps(horizontalMirror, sourceQuad.topRight, to: sourceQuad.topLeft)
+        try assertMaps(horizontalMirror, sourceQuad.bottomLeft, to: sourceQuad.bottomRight)
+        try assertMaps(horizontalMirror, sourceQuad.bottomRight, to: sourceQuad.bottomLeft)
+
+        try assertMaps(verticalMirror, sourceQuad.topLeft, to: sourceQuad.bottomLeft)
+        try assertMaps(verticalMirror, sourceQuad.bottomLeft, to: sourceQuad.topLeft)
+        try assertMaps(verticalMirror, sourceQuad.topRight, to: sourceQuad.bottomRight)
+        try assertMaps(verticalMirror, sourceQuad.bottomRight, to: sourceQuad.topRight)
     }
 
     static func testHorizonFillScaleOnlyZoomsWhenNeeded() throws {

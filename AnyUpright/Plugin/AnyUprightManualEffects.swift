@@ -4,7 +4,9 @@
 //
 
 import Foundation
+import AppKit
 import CoreImage
+import IOSurface
 import Vision
 
 private enum HorizonParam: UInt32 {
@@ -14,6 +16,7 @@ private enum HorizonParam: UInt32 {
 }
 
 private enum QuadParam: UInt32 {
+    case sourceQuadStretchMode = 197
     case mode = 198
     case showCornerAdjuster = 199
     case topLeftPercentX = 200
@@ -47,6 +50,12 @@ private enum QuadOSCPart: Int {
     case topRight = 2
     case bottomRight = 3
     case bottomLeft = 4
+    case quad = 5
+}
+
+private struct QuadOSCDragState {
+    var part: QuadOSCPart
+    var lastCanvasPoint: AUPoint
 }
 
 private enum UprightParam: UInt32 {
@@ -151,6 +160,53 @@ private struct UprightGuideLine {
     var end: AUPoint
 }
 
+private let uprightGuideSpecs = [
+    UprightGuideSpec(
+        enabled: .guide1Enabled,
+        orientation: .guide1Orientation,
+        start: .guide1Start,
+        end: .guide1End,
+        startPart: .guide1Start,
+        endPart: .guide1End,
+        defaultOrientation: .vertical,
+        defaultStart: AUPoint(x: 0.35, y: 0.2),
+        defaultEnd: AUPoint(x: 0.35, y: 0.8)
+    ),
+    UprightGuideSpec(
+        enabled: .guide2Enabled,
+        orientation: .guide2Orientation,
+        start: .guide2Start,
+        end: .guide2End,
+        startPart: .guide2Start,
+        endPart: .guide2End,
+        defaultOrientation: .vertical,
+        defaultStart: AUPoint(x: 0.65, y: 0.2),
+        defaultEnd: AUPoint(x: 0.65, y: 0.8)
+    ),
+    UprightGuideSpec(
+        enabled: .guide3Enabled,
+        orientation: .guide3Orientation,
+        start: .guide3Start,
+        end: .guide3End,
+        startPart: .guide3Start,
+        endPart: .guide3End,
+        defaultOrientation: .horizontal,
+        defaultStart: AUPoint(x: 0.2, y: 0.35),
+        defaultEnd: AUPoint(x: 0.8, y: 0.35)
+    ),
+    UprightGuideSpec(
+        enabled: .guide4Enabled,
+        orientation: .guide4Orientation,
+        start: .guide4Start,
+        end: .guide4End,
+        startPart: .guide4Start,
+        endPart: .guide4End,
+        defaultOrientation: .horizontal,
+        defaultStart: AUPoint(x: 0.2, y: 0.65),
+        defaultEnd: AUPoint(x: 0.8, y: 0.65)
+    )
+]
+
 private func singleFrameAnalysisRange(near requestedTime: CMTime, within inputTimeRange: CMTimeRange) -> CMTimeRange {
     let analysisWindow = CMTime(seconds: 0.05, preferredTimescale: 600)
     let duration = CMTimeCompare(inputTimeRange.duration, analysisWindow) < 0 ? inputTimeRange.duration : analysisWindow
@@ -252,8 +308,11 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
-        let paramAPI = parameterRetrievalAPI()
         var result = AnyUprightParameterState(effectKind: AnyUprightEffectKind.horizon.rawValue)
+        guard let paramAPI = parameterRetrievalAPI() else {
+            return result
+        }
+
         var rotation = 0.0
         var fillFrame = ObjCBool(false)
 
@@ -366,10 +425,84 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 }
 
-@objc(AnyUprightQuadManualPlugIn)
-class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
-    private let overlayRenderer = AnyUprightOSCOverlayRenderer()
+private func quadFloatParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ param: QuadParam, _ time: CMTime) -> Float {
+    var value = 0.0
+    paramAPI.getFloatValue(&value, fromParameter: param.rawValue, at: time)
+    return Float(value)
+}
 
+private func quadParameterState(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> AnyUprightParameterState {
+    var result = AnyUprightParameterState(effectKind: AnyUprightEffectKind.quad.rawValue)
+    guard let paramAPI else {
+        return result
+    }
+
+    var mode = Int32(AUQuadTransformMode.outputCorners.rawValue)
+    var showCornerAdjuster = ObjCBool(true)
+    var stretchMode = Int32(AUSourceQuadStretchMode.stretch.rawValue)
+
+    paramAPI.getIntValue(&stretchMode, fromParameter: QuadParam.sourceQuadStretchMode.rawValue, at: time)
+    paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
+    paramAPI.getBoolValue(&showCornerAdjuster, fromParameter: QuadParam.showCornerAdjuster.rawValue, at: time)
+    result.sourceQuadStretchMode = stretchMode
+    result.quadMode = mode
+    result.showCornerAdjuster = showCornerAdjuster.boolValue ? 1 : 0
+
+    result.topLeftPercentX = quadFloatParam(paramAPI, .topLeftPercentX, time)
+    result.topLeftPercentY = quadFloatParam(paramAPI, .topLeftPercentY, time)
+    result.topLeftPixelX = quadFloatParam(paramAPI, .topLeftPixelX, time)
+    result.topLeftPixelY = quadFloatParam(paramAPI, .topLeftPixelY, time)
+
+    result.topRightPercentX = quadFloatParam(paramAPI, .topRightPercentX, time)
+    result.topRightPercentY = quadFloatParam(paramAPI, .topRightPercentY, time)
+    result.topRightPixelX = quadFloatParam(paramAPI, .topRightPixelX, time)
+    result.topRightPixelY = quadFloatParam(paramAPI, .topRightPixelY, time)
+
+    result.bottomRightPercentX = quadFloatParam(paramAPI, .bottomRightPercentX, time)
+    result.bottomRightPercentY = quadFloatParam(paramAPI, .bottomRightPercentY, time)
+    result.bottomRightPixelX = quadFloatParam(paramAPI, .bottomRightPixelX, time)
+    result.bottomRightPixelY = quadFloatParam(paramAPI, .bottomRightPixelY, time)
+
+    result.bottomLeftPercentX = quadFloatParam(paramAPI, .bottomLeftPercentX, time)
+    result.bottomLeftPercentY = quadFloatParam(paramAPI, .bottomLeftPercentY, time)
+    result.bottomLeftPixelX = quadFloatParam(paramAPI, .bottomLeftPixelX, time)
+    result.bottomLeftPixelY = quadFloatParam(paramAPI, .bottomLeftPixelY, time)
+
+    return result
+}
+
+private func quadMode(from state: AnyUprightParameterState) -> AUQuadTransformMode {
+    AUQuadTransformMode(rawValue: state.quadMode) ?? .outputCorners
+}
+
+private func shouldShowQuadCornerAdjuster(from state: AnyUprightParameterState, mode: AUQuadTransformMode) -> Bool {
+    mode == .sourceQuad && state.showCornerAdjuster != 0
+}
+
+private func quadCornerOffsets(from state: AnyUprightParameterState) -> AUCornerOffsets {
+    AUCornerOffsets(
+        topLeftPercent: AUPoint(x: Double(state.topLeftPercentX), y: Double(state.topLeftPercentY)),
+        topRightPercent: AUPoint(x: Double(state.topRightPercentX), y: Double(state.topRightPercentY)),
+        bottomRightPercent: AUPoint(x: Double(state.bottomRightPercentX), y: Double(state.bottomRightPercentY)),
+        bottomLeftPercent: AUPoint(x: Double(state.bottomLeftPercentX), y: Double(state.bottomLeftPercentY)),
+        topLeftPixels: AUPoint(x: Double(state.topLeftPixelX), y: Double(state.topLeftPixelY)),
+        topRightPixels: AUPoint(x: Double(state.topRightPixelX), y: Double(state.topRightPixelY)),
+        bottomRightPixels: AUPoint(x: Double(state.bottomRightPixelX), y: Double(state.bottomRightPixelY)),
+        bottomLeftPixels: AUPoint(x: Double(state.bottomLeftPixelX), y: Double(state.bottomLeftPixelY))
+    )
+}
+
+private func quadObjectPoints(from state: AnyUprightParameterState, size: AUSize, mode: AUQuadTransformMode) -> AUQuad {
+    switch mode {
+    case .outputCorners:
+        return AnyUprightGeometry.quadObjectPoints(from: quadCornerOffsets(from: state), size: size)
+    case .sourceQuad:
+        return AnyUprightGeometry.sourceQuadObjectPoints(from: quadCornerOffsets(from: state), size: size)
+    }
+}
+
+@objc(AnyUprightQuadManualPlugIn)
+class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect {
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         paramAPI.addPopupMenu(
             withName: "Mode",
@@ -377,6 +510,13 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
             defaultValue: UInt32(AUQuadTransformMode.outputCorners.rawValue),
             menuEntries: ["Output Corners", "Source Quad"],
             parameterFlags: defaultFlags()
+        )
+        paramAPI.addPopupMenu(
+            withName: "Stretch Mode",
+            parameterID: QuadParam.sourceQuadStretchMode.rawValue,
+            defaultValue: UInt32(AUSourceQuadStretchMode.stretch.rawValue),
+            menuEntries: ["Stretch to Frame", "Mirror Horizontal", "Mirror Vertical"],
+            parameterFlags: showCornerAdjusterHiddenFlags()
         )
         paramAPI.addToggleButton(
             withName: "Show Corner Adjuster",
@@ -391,41 +531,17 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
-        let paramAPI = parameterRetrievalAPI()
-        var result = AnyUprightParameterState(effectKind: AnyUprightEffectKind.quad.rawValue)
-        var mode = Int32(AUQuadTransformMode.outputCorners.rawValue)
-        var showCornerAdjuster = ObjCBool(true)
-
-        paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: renderTime)
-        paramAPI.getBoolValue(&showCornerAdjuster, fromParameter: QuadParam.showCornerAdjuster.rawValue, at: renderTime)
-        result.quadMode = mode
-        result.showCornerAdjuster = showCornerAdjuster.boolValue ? 1 : 0
-
-        result.topLeftPercentX = floatParam(paramAPI, .topLeftPercentX, renderTime)
-        result.topLeftPercentY = floatParam(paramAPI, .topLeftPercentY, renderTime)
-        result.topLeftPixelX = floatParam(paramAPI, .topLeftPixelX, renderTime)
-        result.topLeftPixelY = floatParam(paramAPI, .topLeftPixelY, renderTime)
-
-        result.topRightPercentX = floatParam(paramAPI, .topRightPercentX, renderTime)
-        result.topRightPercentY = floatParam(paramAPI, .topRightPercentY, renderTime)
-        result.topRightPixelX = floatParam(paramAPI, .topRightPixelX, renderTime)
-        result.topRightPixelY = floatParam(paramAPI, .topRightPixelY, renderTime)
-
-        result.bottomRightPercentX = floatParam(paramAPI, .bottomRightPercentX, renderTime)
-        result.bottomRightPercentY = floatParam(paramAPI, .bottomRightPercentY, renderTime)
-        result.bottomRightPixelX = floatParam(paramAPI, .bottomRightPixelX, renderTime)
-        result.bottomRightPixelY = floatParam(paramAPI, .bottomRightPixelY, renderTime)
-
-        result.bottomLeftPercentX = floatParam(paramAPI, .bottomLeftPercentX, renderTime)
-        result.bottomLeftPercentY = floatParam(paramAPI, .bottomLeftPercentY, renderTime)
-        result.bottomLeftPixelX = floatParam(paramAPI, .bottomLeftPixelX, renderTime)
-        result.bottomLeftPixelY = floatParam(paramAPI, .bottomLeftPixelY, renderTime)
-
-        return result
+        quadParameterState(at: renderTime, paramAPI: parameterRetrievalAPI())
     }
 
     func pluginInstanceAddedToDocument() {
         syncQuadInspectorVisibility(at: currentParameterTime())
+    }
+
+    @objc(finishInitialSetup:)
+    func finishInitialSetup(_ error: AutoreleasingUnsafeMutablePointer<NSError?>?) -> Bool {
+        syncQuadInspectorVisibility(at: currentParameterTime())
+        return true
     }
 
     func parameterChanged(_ paramID: UInt32, at time: CMTime) throws {
@@ -473,16 +589,11 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
         )
     }
 
-    private func floatParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ param: QuadParam, _ time: CMTime) -> Float {
-        var value = 0.0
-        paramAPI.getFloatValue(&value, fromParameter: param.rawValue, at: time)
-        return Float(value)
-    }
-
     private func syncQuadInspectorVisibility(at time: CMTime) {
-        let paramAPI = parameterRetrievalAPI()
         var mode = Int32(AUQuadTransformMode.outputCorners.rawValue)
-        paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
+        if let paramAPI = parameterRetrievalAPI() {
+            paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
+        }
 
         guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
             return
@@ -491,6 +602,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
         let selectedMode = AUQuadTransformMode(rawValue: mode) ?? .outputCorners
         let isSourceQuad = selectedMode == .sourceQuad
 
+        _ = settingAPI.setParameterFlags(isSourceQuad ? defaultFlags() : showCornerAdjusterHiddenFlags(), toParameter: QuadParam.sourceQuadStretchMode.rawValue)
         _ = settingAPI.setParameterFlags(isSourceQuad ? defaultFlags() : showCornerAdjusterHiddenFlags(), toParameter: QuadParam.showCornerAdjuster.rawValue)
 
         let cornerFlags = isSourceQuad ? hiddenCollapsedFlags() : collapsedFlags()
@@ -506,136 +618,288 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
     private func hiddenCollapsedFlags() -> FxParameterFlags {
         FxParameterFlags(kFxParameterFlag_HIDDEN | kFxParameterFlag_COLLAPSED)
     }
+}
 
-    func drawingCoordinates() -> FxDrawingCoordinates {
-        FxDrawingCoordinates(kFxDrawingCoordinates_OBJECT)
+@objc(AnyUprightQuadManualOSCPlugIn)
+class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
+    private let overlayRenderer = AnyUprightOSCOverlayRenderer()
+    private let dragStateLock = NSLock()
+    private let surfaceSizeLock = NSLock()
+    private var dragState: QuadOSCDragState?
+    private var lastSurfaceSize = AUSize(width: 1.0, height: 1.0)
+
+    required init?(apiManager: PROAPIAccessing) {
+        super.init(apiManager: apiManager)
     }
 
+    @objc(drawingCoordinates)
+    func drawingCoordinates() -> FxDrawingCoordinates {
+        return FxDrawingCoordinates(kFxDrawingCoordinates_CANVAS)
+    }
+
+    @objc(drawOSCWithWidth:height:activePart:destinationImage:atTime:)
     func drawOSC(withWidth width: Int, height: Int, activePart: Int, destinationImage: FxImageTile, at time: CMTime) {
-        let mode = quadMode(at: time)
-        guard mode != .sourceQuad || shouldShowCornerAdjuster(at: time) else {
+        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
+        let mode = quadMode(from: state)
+        guard shouldShowQuadCornerAdjuster(from: state, mode: mode) else {
             return
         }
 
-        let size = AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
-        let points = quadObjectPoints(at: time, size: size, mode: mode)
+        let objectSize = objectPixelSizeForOSC()
+        let objectPoints = quadObjectPoints(from: state, size: objectSize, mode: mode)
+        let canvasPoints = quadCanvasPoints(from: objectPoints)
+        let canvasFrame = objectCanvasFrame()
+        updateLastSurfaceSize(from: destinationImage, fallback: AUSize(width: Double(width), height: Double(height)))
         let handles = [
-            AUOSCHandle(point: points.topLeft, part: QuadOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: points.topRight, part: QuadOSCPart.topRight.rawValue),
-            AUOSCHandle(point: points.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: points.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
         ]
-        let orderedPoints = [points.topLeft, points.topRight, points.bottomRight, points.bottomLeft]
+        let orderedPoints = [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]
 
-        if mode == .sourceQuad {
-            overlayRenderer.renderQuadAdjuster(
-                points: orderedPoints,
-                handles: handles,
-                activePart: activePart,
-                destinationImage: destinationImage
-            )
-        } else {
-            overlayRenderer.renderQuad(
-                points: orderedPoints,
-                handles: handles,
-                activePart: activePart,
-                destinationImage: destinationImage
-            )
-        }
+        overlayRenderer.renderQuadAdjuster(
+            points: orderedPoints,
+            handles: handles,
+            activePart: activePart,
+            destinationImage: destinationImage,
+            destinationSize: AUSize(width: Double(width), height: Double(height)),
+            canvasFrame: canvasFrame,
+            coordinateSpace: .pixels,
+            dimmingFrame: canvasFrame
+        )
     }
 
+    @objc(hitTestOSCAtMousePositionX:mousePositionY:activePart:atTime:)
     func hitTestOSC(atMousePositionX mousePositionX: Double, mousePositionY: Double, activePart: UnsafeMutablePointer<Int>?, at time: CMTime) {
-        let mode = quadMode(at: time)
-        guard mode != .sourceQuad || shouldShowCornerAdjuster(at: time) else {
+        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
+        let mode = quadMode(from: state)
+        guard shouldShowQuadCornerAdjuster(from: state, mode: mode) else {
             activePart?.pointee = QuadOSCPart.none.rawValue
             return
         }
 
         let size = objectPixelSizeForOSC()
-        let points = quadObjectPoints(at: time, size: size, mode: mode)
+        let objectPoints = quadObjectPoints(from: state, size: size, mode: mode)
+        let canvasPoints = quadCanvasPoints(from: objectPoints)
+        let canvasFrame = objectCanvasFrame()
         let handles = [
-            AUOSCHandle(point: points.topLeft, part: QuadOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: points.topRight, part: QuadOSCPart.topRight.rawValue),
-            AUOSCHandle(point: points.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: points.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
         ]
-        let mouse = AUPoint(x: mousePositionX, y: mousePositionY)
-        let hitRadius = 12.0
-
-        activePart?.pointee = QuadOSCPart.none.rawValue
+        let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
+        let mouse = eventMapper(for: canvasFrame)?.canvasPoint(fromEventPoint: eventPoint) ?? eventPoint
+        let hitRadius = 24.0
+        var matchedPart = QuadOSCPart.none.rawValue
         for handle in handles {
-            let dx = (mouse.x - handle.point.x) * size.width
-            let dy = (mouse.y - handle.point.y) * size.height
-            if hypot(dx, dy) <= hitRadius {
-                activePart?.pointee = handle.part
-                return
+            let dx = mouse.x - handle.point.x
+            let dy = mouse.y - handle.point.y
+            let distance = hypot(dx, dy)
+            if distance <= hitRadius {
+                matchedPart = handle.part
+                break
             }
         }
+        if matchedPart == QuadOSCPart.none.rawValue,
+           isPoint(mouse, insideQuad: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]) {
+            matchedPart = QuadOSCPart.quad.rawValue
+        }
+        activePart?.pointee = matchedPart
     }
 
+    @objc(mouseDownAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
+        let mode = quadMode(from: state)
+        let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
+        let mouse = eventMapper(for: objectCanvasFrame())?.canvasPoint(fromEventPoint: eventPoint) ?? eventPoint
+
+        guard shouldShowQuadCornerAdjuster(from: state, mode: mode),
+              let part = QuadOSCPart(rawValue: activePart),
+              part != .none else {
+            setDragState(nil)
+            forceUpdate?.pointee = false
+            return
+        }
+
+        setDragState(QuadOSCDragState(part: part, lastCanvasPoint: mouse))
         forceUpdate?.pointee = true
     }
 
+    @objc(mouseDraggedAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseDragged(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
-        let mode = quadMode(at: time)
-        guard (mode != .sourceQuad || shouldShowCornerAdjuster(at: time)),
-              let part = QuadOSCPart(rawValue: activePart),
-              part != .none,
-              let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
+        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
+        let mode = quadMode(from: state)
+        let storedState = currentDragState()
+        let part = validDragPart(from: activePart) ?? storedState?.part
+
+        guard shouldShowQuadCornerAdjuster(from: state, mode: mode),
+              let part,
+              let settingAPI = parameterSettingAPI() else {
             forceUpdate?.pointee = false
             return
         }
 
         let size = objectPixelSizeForOSC()
-        let point = AUPoint(x: mousePositionX, y: mousePositionY)
-        setCorner(point, part: part, mode: mode, size: size, settingAPI: settingAPI, time: time)
+        let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
+        let canvasPoint = eventMapper(for: objectCanvasFrame())?.canvasPoint(fromEventPoint: eventPoint) ?? eventPoint
+        let draggedObjectPoint = objectPoint(fromCanvasPoint: canvasPoint)
+        if part == .quad, let previousCanvasPoint = storedState?.lastCanvasPoint {
+            let previousObjectPoint = objectPoint(fromCanvasPoint: previousCanvasPoint)
+            let pixelDelta = AUPoint(
+                x: (draggedObjectPoint.x - previousObjectPoint.x) * size.width,
+                y: (draggedObjectPoint.y - previousObjectPoint.y) * size.height
+            )
+            translateQuad(from: state, pixelDelta: pixelDelta, settingAPI: settingAPI, time: time)
+            setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint))
+            forceUpdate?.pointee = true
+            return
+        }
+
+        setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint))
+        setCorner(draggedObjectPoint, part: part, mode: mode, offsets: quadCornerOffsets(from: state), size: size, settingAPI: settingAPI, time: time)
         forceUpdate?.pointee = true
     }
 
+    @objc(mouseUpAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseUp(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        setDragState(nil)
         forceUpdate?.pointee = true
     }
 
+    @objc(mouseEnteredAtPositionX:positionY:modifiers:forceUpdate:atTime:)
+    func mouseEntered(atPositionX mousePositionX: Double, positionY mousePositionY: Double, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        forceUpdate?.pointee = false
+    }
+
+    @objc(mouseMovedAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
+    func mouseMoved(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        if validDragPart(from: activePart) != nil {
+            setCursor(NSCursor.pointingHand)
+        } else {
+            setCursor(NSCursor.arrow)
+        }
+        forceUpdate?.pointee = false
+    }
+
+    @objc(mouseExitedAtPositionX:positionY:modifiers:forceUpdate:atTime:)
+    func mouseExited(atPositionX mousePositionX: Double, positionY mousePositionY: Double, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        setCursor(NSCursor.arrow)
+        forceUpdate?.pointee = false
+    }
+
+    @objc(keyDownAtPositionX:positionY:keyPressed:modifiers:forceUpdate:didHandle:atTime:)
     func keyDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, keyPressed: UInt16, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, didHandle: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         forceUpdate?.pointee = false
         didHandle?.pointee = false
     }
 
+    @objc(keyUpAtPositionX:positionY:keyPressed:modifiers:forceUpdate:didHandle:atTime:)
     func keyUp(atPositionX mousePositionX: Double, positionY mousePositionY: Double, keyPressed: UInt16, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, didHandle: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         forceUpdate?.pointee = false
         didHandle?.pointee = false
     }
 
-    private func shouldShowCornerAdjuster(at time: CMTime) -> Bool {
-        guard quadMode(at: time) == .sourceQuad else {
-            return true
+    private func quadCanvasPoints(from objectPoints: AUQuad) -> AUQuad {
+        AUQuad(
+            topLeft: canvasPoint(fromObjectPoint: objectPoints.topLeft),
+            topRight: canvasPoint(fromObjectPoint: objectPoints.topRight),
+            bottomRight: canvasPoint(fromObjectPoint: objectPoints.bottomRight),
+            bottomLeft: canvasPoint(fromObjectPoint: objectPoints.bottomLeft)
+        )
+    }
+
+    private func objectCanvasFrame() -> [AUPoint] {
+        [
+            canvasPoint(fromObjectPoint: AUPoint(x: 0.0, y: 1.0)),
+            canvasPoint(fromObjectPoint: AUPoint(x: 1.0, y: 1.0)),
+            canvasPoint(fromObjectPoint: AUPoint(x: 1.0, y: 0.0)),
+            canvasPoint(fromObjectPoint: AUPoint(x: 0.0, y: 0.0))
+        ]
+    }
+
+    private func canvasPoint(fromObjectPoint point: AUPoint) -> AUPoint {
+        convertPoint(point, from: kFxDrawingCoordinates_OBJECT, to: kFxDrawingCoordinates_CANVAS)
+    }
+
+    private func objectPoint(fromCanvasPoint point: AUPoint) -> AUPoint {
+        convertPoint(point, from: kFxDrawingCoordinates_CANVAS, to: kFxDrawingCoordinates_OBJECT)
+    }
+
+    private func convertPoint(_ point: AUPoint, from fromSpace: Int, to toSpace: Int) -> AUPoint {
+        guard let oscAPI = _apiManager.api(for: FxOnScreenControlAPI_v4.self) as? FxOnScreenControlAPI_v4 else {
+            return point
         }
 
-        let paramAPI = parameterRetrievalAPI()
-        var showCornerAdjuster = ObjCBool(true)
-        paramAPI.getBoolValue(&showCornerAdjuster, fromParameter: QuadParam.showCornerAdjuster.rawValue, at: time)
-        return showCornerAdjuster.boolValue
+        var x = 0.0
+        var y = 0.0
+        oscAPI.convertPoint(
+            fromSpace: FxDrawingCoordinates(fromSpace),
+            fromX: point.x,
+            fromY: point.y,
+            toSpace: FxDrawingCoordinates(toSpace),
+            toX: &x,
+            toY: &y
+        )
+        return AUPoint(x: x, y: y)
     }
 
-    private func quadMode(at time: CMTime) -> AUQuadTransformMode {
-        let paramAPI = parameterRetrievalAPI()
-        var mode = Int32(AUQuadTransformMode.outputCorners.rawValue)
-        paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
-        return AUQuadTransformMode(rawValue: mode) ?? .outputCorners
-    }
-
-    private func quadObjectPoints(at time: CMTime, size: AUSize, mode: AUQuadTransformMode) -> AUQuad {
-        let offsets = cornerOffsets(at: time)
-        switch mode {
-        case .outputCorners:
-            return AnyUprightGeometry.quadObjectPoints(from: offsets, size: size)
-        case .sourceQuad:
-            return AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+    private func setCursor(_ cursor: NSCursor) {
+        guard let oscAPI = _apiManager.api(for: FxOnScreenControlAPI_v4.self) as? FxOnScreenControlAPI_v4 else {
+            return
         }
+
+        oscAPI.setCursor(cursor)
     }
 
-    private func setCorner(_ point: AUPoint, part: QuadOSCPart, mode: AUQuadTransformMode, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    private func setDragState(_ state: QuadOSCDragState?) {
+        dragStateLock.lock()
+        dragState = state
+        dragStateLock.unlock()
+    }
+
+    private func currentDragState() -> QuadOSCDragState? {
+        dragStateLock.lock()
+        let state = dragState
+        dragStateLock.unlock()
+        return state
+    }
+
+    private func updateLastSurfaceSize(from image: FxImageTile, fallback: AUSize) {
+        let width = Double(image.ioSurface.map { IOSurfaceGetWidth($0) } ?? Int(max(1.0, fallback.width)))
+        let height = Double(image.ioSurface.map { IOSurfaceGetHeight($0) } ?? Int(max(1.0, fallback.height)))
+
+        surfaceSizeLock.lock()
+        lastSurfaceSize = AUSize(width: max(1.0, width), height: max(1.0, height))
+        surfaceSizeLock.unlock()
+    }
+
+    private func currentSurfaceSize() -> AUSize {
+        surfaceSizeLock.lock()
+        let size = lastSurfaceSize
+        surfaceSizeLock.unlock()
+        return size
+    }
+
+    private func eventMapper(for canvasFrame: [AUPoint]) -> AUCanvasSurfaceMapper? {
+        let surfaceSize = currentSurfaceSize()
+        guard surfaceSize.width > 1.0, surfaceSize.height > 1.0 else {
+            return nil
+        }
+
+        return AUCanvasSurfaceMapper(canvasFrame: canvasFrame, surfaceSize: surfaceSize)
+    }
+
+    private func validDragPart(from rawValue: Int) -> QuadOSCPart? {
+        guard let part = QuadOSCPart(rawValue: rawValue), part != .none else {
+            return nil
+        }
+        return part
+    }
+
+    private func setCorner(_ point: AUPoint, part: QuadOSCPart, mode: AUQuadTransformMode, offsets: AUCornerOffsets, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         let ids: (corner: AUQuadCorner, pixelX: QuadParam, pixelY: QuadParam)
 
         switch part {
@@ -647,99 +911,148 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect, FxOnScreenControl_v4 {
             ids = (.bottomRight, .bottomRightPixelX, .bottomRightPixelY)
         case .bottomLeft:
             ids = (.bottomLeft, .bottomLeftPixelX, .bottomLeftPixelY)
-        case .none:
+        case .none, .quad:
             return
         }
 
-        let offsets = cornerOffsets(at: time)
-        let pixels: AUPoint
         switch mode {
         case .outputCorners:
-            pixels = AnyUprightGeometry.cornerPixelOffset(
+            let pixels = AnyUprightGeometry.cornerPixelOffset(
                 forObjectPoint: point,
                 corner: ids.corner,
                 offsets: offsets,
                 size: size
             )
+            settingAPI.setFloatValue(pixels.x, toParameter: ids.pixelX.rawValue, at: time)
+            settingAPI.setFloatValue(pixels.y, toParameter: ids.pixelY.rawValue, at: time)
+
         case .sourceQuad:
-            pixels = AnyUprightGeometry.sourceCornerPixelOffset(
+            let pixels = AnyUprightGeometry.sourceCornerPixelOffset(
                 forObjectPoint: point,
                 corner: ids.corner,
                 offsets: offsets,
                 size: size
             )
+            settingAPI.setFloatValue(pixels.x, toParameter: ids.pixelX.rawValue, at: time)
+            settingAPI.setFloatValue(pixels.y, toParameter: ids.pixelY.rawValue, at: time)
+        }
+    }
+
+    private func translateQuad(from state: AnyUprightParameterState, pixelDelta: AUPoint, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+        let offsets = quadCornerOffsets(from: state)
+        settingAPI.setFloatValue(offsets.topLeftPixels.x + pixelDelta.x, toParameter: QuadParam.topLeftPixelX.rawValue, at: time)
+        settingAPI.setFloatValue(offsets.topLeftPixels.y + pixelDelta.y, toParameter: QuadParam.topLeftPixelY.rawValue, at: time)
+        settingAPI.setFloatValue(offsets.topRightPixels.x + pixelDelta.x, toParameter: QuadParam.topRightPixelX.rawValue, at: time)
+        settingAPI.setFloatValue(offsets.topRightPixels.y + pixelDelta.y, toParameter: QuadParam.topRightPixelY.rawValue, at: time)
+        settingAPI.setFloatValue(offsets.bottomRightPixels.x + pixelDelta.x, toParameter: QuadParam.bottomRightPixelX.rawValue, at: time)
+        settingAPI.setFloatValue(offsets.bottomRightPixels.y + pixelDelta.y, toParameter: QuadParam.bottomRightPixelY.rawValue, at: time)
+        settingAPI.setFloatValue(offsets.bottomLeftPixels.x + pixelDelta.x, toParameter: QuadParam.bottomLeftPixelX.rawValue, at: time)
+        settingAPI.setFloatValue(offsets.bottomLeftPixels.y + pixelDelta.y, toParameter: QuadParam.bottomLeftPixelY.rawValue, at: time)
+    }
+
+    private func isPoint(_ point: AUPoint, insideQuad quad: [AUPoint]) -> Bool {
+        guard quad.count == 4 else {
+            return false
         }
 
-        settingAPI.setFloatValue(pixels.x, toParameter: ids.pixelX.rawValue, at: time)
-        settingAPI.setFloatValue(pixels.y, toParameter: ids.pixelY.rawValue, at: time)
+        var hasPositive = false
+        var hasNegative = false
+        for index in 0..<quad.count {
+            let current = quad[index]
+            let next = quad[(index + 1) % quad.count]
+            let cross = (next.x - current.x) * (point.y - current.y) - (next.y - current.y) * (point.x - current.x)
+            hasPositive = hasPositive || cross > 0.0
+            hasNegative = hasNegative || cross < 0.0
+            if hasPositive && hasNegative {
+                return false
+            }
+        }
+        return true
+    }
+}
+
+private func uprightGuideLines(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> [UprightGuideLine] {
+    guard let paramAPI else {
+        return []
     }
 
-    private func cornerOffsets(at time: CMTime) -> AUCornerOffsets {
-        let paramAPI = parameterRetrievalAPI()
-        return AUCornerOffsets(
-            topLeftPercent: AUPoint(x: Double(floatParam(paramAPI, .topLeftPercentX, time)), y: Double(floatParam(paramAPI, .topLeftPercentY, time))),
-            topRightPercent: AUPoint(x: Double(floatParam(paramAPI, .topRightPercentX, time)), y: Double(floatParam(paramAPI, .topRightPercentY, time))),
-            bottomRightPercent: AUPoint(x: Double(floatParam(paramAPI, .bottomRightPercentX, time)), y: Double(floatParam(paramAPI, .bottomRightPercentY, time))),
-            bottomLeftPercent: AUPoint(x: Double(floatParam(paramAPI, .bottomLeftPercentX, time)), y: Double(floatParam(paramAPI, .bottomLeftPercentY, time))),
-            topLeftPixels: AUPoint(x: Double(floatParam(paramAPI, .topLeftPixelX, time)), y: Double(floatParam(paramAPI, .topLeftPixelY, time))),
-            topRightPixels: AUPoint(x: Double(floatParam(paramAPI, .topRightPixelX, time)), y: Double(floatParam(paramAPI, .topRightPixelY, time))),
-            bottomRightPixels: AUPoint(x: Double(floatParam(paramAPI, .bottomRightPixelX, time)), y: Double(floatParam(paramAPI, .bottomRightPixelY, time))),
-            bottomLeftPixels: AUPoint(x: Double(floatParam(paramAPI, .bottomLeftPixelX, time)), y: Double(floatParam(paramAPI, .bottomLeftPixelY, time)))
+    return uprightGuideSpecs.compactMap { spec in
+        var enabled = ObjCBool(false)
+        var orientationRaw = Int32(spec.defaultOrientation.rawValue)
+        paramAPI.getBoolValue(&enabled, fromParameter: spec.enabled.rawValue, at: time)
+        paramAPI.getIntValue(&orientationRaw, fromParameter: spec.orientation.rawValue, at: time)
+        guard enabled.boolValue else {
+            return nil
+        }
+
+        return UprightGuideLine(
+            spec: spec,
+            orientation: UprightGuideOrientation(rawValue: orientationRaw) ?? spec.defaultOrientation,
+            start: uprightPointParam(paramAPI, spec.start, defaultValue: spec.defaultStart, time: time),
+            end: uprightPointParam(paramAPI, spec.end, defaultValue: spec.defaultEnd, time: time)
         )
     }
+}
 
+private func uprightCandidateLines(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> [UprightCandidateLine] {
+    guard let paramAPI else {
+        return []
+    }
+
+    return AnyUprightUprightCandidates.specs.compactMap { spec in
+        var visible = ObjCBool(false)
+        var selected = ObjCBool(false)
+        var orientationRaw = Int32(UprightGuideOrientation.vertical.rawValue)
+        paramAPI.getBoolValue(&visible, fromParameter: spec.visible, at: time)
+        paramAPI.getBoolValue(&selected, fromParameter: spec.selected, at: time)
+        paramAPI.getIntValue(&orientationRaw, fromParameter: spec.orientation, at: time)
+
+        guard visible.boolValue else {
+            return nil
+        }
+
+        return UprightCandidateLine(
+            spec: spec,
+            selected: selected.boolValue,
+            orientation: UprightGuideOrientation(rawValue: orientationRaw) ?? .vertical,
+            start: uprightPointParam(paramAPI, spec.start, defaultValue: AUPoint(x: 0.0, y: 0.0), time: time),
+            end: uprightPointParam(paramAPI, spec.end, defaultValue: AUPoint(x: 0.0, y: 0.0), time: time)
+        )
+    }
+}
+
+private func uprightPointParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ param: UprightParam, defaultValue: AUPoint, time: CMTime) -> AUPoint {
+    uprightPointParam(paramAPI, param.rawValue, defaultValue: defaultValue, time: time)
+}
+
+private func uprightPointParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ parameterID: UInt32, defaultValue: AUPoint, time: CMTime) -> AUPoint {
+    var x = defaultValue.x
+    var y = defaultValue.y
+    paramAPI.getXValue(&x, yValue: &y, fromParameter: parameterID, at: time)
+    return AUPoint(x: x, y: y)
+}
+
+private func endpointParameter(for part: UprightOSCPart) -> UprightParam? {
+    for spec in uprightGuideSpecs {
+        if spec.startPart == part {
+            return spec.start
+        }
+        if spec.endPart == part {
+            return spec.end
+        }
+    }
+    return nil
+}
+
+private func imageLine(from guide: UprightGuideLine, size: AUSize) -> AULineSegment {
+    AULineSegment(
+        start: AUPoint(x: guide.start.x * size.width, y: (1.0 - guide.start.y) * size.height),
+        end: AUPoint(x: guide.end.x * size.width, y: (1.0 - guide.end.y) * size.height)
+    )
 }
 
 @objc(AnyUprightUprightManualPlugIn)
-class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScreenControl_v4 {
-    private static let guideSpecs = [
-        UprightGuideSpec(
-            enabled: .guide1Enabled,
-            orientation: .guide1Orientation,
-            start: .guide1Start,
-            end: .guide1End,
-            startPart: .guide1Start,
-            endPart: .guide1End,
-            defaultOrientation: .vertical,
-            defaultStart: AUPoint(x: 0.35, y: 0.2),
-            defaultEnd: AUPoint(x: 0.35, y: 0.8)
-        ),
-        UprightGuideSpec(
-            enabled: .guide2Enabled,
-            orientation: .guide2Orientation,
-            start: .guide2Start,
-            end: .guide2End,
-            startPart: .guide2Start,
-            endPart: .guide2End,
-            defaultOrientation: .vertical,
-            defaultStart: AUPoint(x: 0.65, y: 0.2),
-            defaultEnd: AUPoint(x: 0.65, y: 0.8)
-        ),
-        UprightGuideSpec(
-            enabled: .guide3Enabled,
-            orientation: .guide3Orientation,
-            start: .guide3Start,
-            end: .guide3End,
-            startPart: .guide3Start,
-            endPart: .guide3End,
-            defaultOrientation: .horizontal,
-            defaultStart: AUPoint(x: 0.2, y: 0.35),
-            defaultEnd: AUPoint(x: 0.8, y: 0.35)
-        ),
-        UprightGuideSpec(
-            enabled: .guide4Enabled,
-            orientation: .guide4Orientation,
-            start: .guide4Start,
-            end: .guide4End,
-            startPart: .guide4Start,
-            endPart: .guide4End,
-            defaultOrientation: .horizontal,
-            defaultStart: AUPoint(x: 0.2, y: 0.65),
-            defaultEnd: AUPoint(x: 0.8, y: 0.65)
-        )
-    ]
-
-    private let overlayRenderer = AnyUprightOSCOverlayRenderer()
+class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private let analysisLock = NSLock()
     private let analysisContext = CIContext(options: nil)
     private var pendingAnalysisMode: UprightAnalysisMode?
@@ -859,7 +1172,7 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
 
     private func addGuideParameters(_ paramAPI: FxParameterCreationAPI_v5) {
         paramAPI.startParameterSubGroup("Guides", parameterID: 390, parameterFlags: collapsedFlags())
-        for (index, spec) in Self.guideSpecs.enumerated() {
+        for (index, spec) in uprightGuideSpecs.enumerated() {
             let title = "Guide \(index + 1)"
             paramAPI.startParameterSubGroup(title, parameterID: UInt32(391 + index), parameterFlags: collapsedFlags())
             paramAPI.addToggleButton(
@@ -938,8 +1251,11 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
-        let paramAPI = parameterRetrievalAPI()
         var result = AnyUprightParameterState(effectKind: AnyUprightEffectKind.upright.rawValue)
+        guard let paramAPI = parameterRetrievalAPI() else {
+            return result
+        }
+
         var vertical = 0.0
         var horizontal = 0.0
         var rotation = 0.0
@@ -1158,7 +1474,7 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
 
     private func applyGuided(_ mode: UprightAnalysisMode) {
         let time = currentParameterTime()
-        let guides = guideLines(at: time)
+        let guides = uprightGuideLines(at: time, paramAPI: parameterRetrievalAPI())
         let verticalLines = guides
             .filter { $0.orientation == .vertical }
             .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
@@ -1171,7 +1487,7 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
 
     private func applySelected(_ mode: UprightAnalysisMode) {
         let time = currentParameterTime()
-        let candidates = candidateLines(at: time)
+        let candidates = uprightCandidateLines(at: time, paramAPI: parameterRetrievalAPI())
         let verticalLines = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .vertical)
         let horizontalLines = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .horizontal)
 
@@ -1201,152 +1517,6 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         let rotationOrientation: AUReferenceOrientation = horizontalLines.isEmpty ? .vertical : .horizontal
         if let rotation = AnyUprightGeometry.rotationCorrectionRadians(from: rotationLines, orientation: rotationOrientation) {
             settingAPI.setFloatValue(rotation, toParameter: UprightParam.rotation.rawValue, at: time)
-        }
-    }
-
-    func drawingCoordinates() -> FxDrawingCoordinates {
-        FxDrawingCoordinates(kFxDrawingCoordinates_OBJECT)
-    }
-
-    func drawOSC(withWidth width: Int, height: Int, activePart: Int, destinationImage: FxImageTile, at time: CMTime) {
-        let guides = guideLines(at: time)
-        let candidates = candidateLines(at: time)
-        var segments = candidates.map { candidate in
-            AUOSCStyledSegment(
-                start: candidate.start,
-                end: candidate.end,
-                style: candidateStyle(candidate, activePart: activePart)
-            )
-        }
-        segments.append(contentsOf: guides.map {
-            AUOSCStyledSegment(start: $0.start, end: $0.end, style: guideStyle())
-        })
-        let handles = guides.flatMap {
-            [
-                AUOSCHandle(point: $0.start, part: $0.spec.startPart.rawValue),
-                AUOSCHandle(point: $0.end, part: $0.spec.endPart.rawValue)
-            ]
-        }
-        overlayRenderer.renderStyledSegments(
-            segments,
-            handles: handles,
-            activePart: activePart,
-            destinationImage: destinationImage
-        )
-    }
-
-    func hitTestOSC(atMousePositionX mousePositionX: Double, mousePositionY: Double, activePart: UnsafeMutablePointer<Int>?, at time: CMTime) {
-        let size = objectPixelSizeForOSC()
-        let mouse = AUPoint(x: mousePositionX, y: mousePositionY)
-        activePart?.pointee = UprightOSCPart.none.rawValue
-
-        for guide in guideLines(at: time) {
-            let handles = [
-                AUOSCHandle(point: guide.start, part: guide.spec.startPart.rawValue),
-                AUOSCHandle(point: guide.end, part: guide.spec.endPart.rawValue)
-            ]
-            for handle in handles {
-                let dx = (mouse.x - handle.point.x) * size.width
-                let dy = (mouse.y - handle.point.y) * size.height
-                if hypot(dx, dy) <= 12.0 {
-                    activePart?.pointee = handle.part
-                    return
-                }
-            }
-        }
-
-        for candidate in candidateLines(at: time) {
-            if AnyUprightUprightCandidates.distanceFromPointToSegment(mouse, start: candidate.start, end: candidate.end, size: size) <= 8.0 {
-                activePart?.pointee = candidate.spec.linePart
-                return
-            }
-        }
-    }
-
-    func mouseDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
-        if let candidateIndex = AnyUprightUprightCandidates.candidateIndex(for: activePart),
-           let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 {
-            let candidates = candidateLines(at: time)
-            if let candidate = candidates.first(where: { $0.spec.linePart == activePart }) {
-                let selected = AnyUprightUprightCandidates.selectionValueAfterToggling(candidate, within: candidates)
-                settingAPI.setBoolValue(selected, toParameter: AnyUprightUprightCandidates.specs[candidateIndex].selected, at: time)
-            }
-        }
-        forceUpdate?.pointee = true
-    }
-
-    func mouseDragged(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
-        guard AnyUprightUprightCandidates.candidateIndex(for: activePart) == nil else {
-            forceUpdate?.pointee = true
-            return
-        }
-
-        guard let part = UprightOSCPart(rawValue: activePart),
-              let endpoint = endpointParameter(for: part),
-              let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
-            forceUpdate?.pointee = false
-            return
-        }
-
-        settingAPI.setXValue(mousePositionX, yValue: mousePositionY, toParameter: endpoint.rawValue, at: time)
-        forceUpdate?.pointee = true
-    }
-
-    func mouseUp(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
-        forceUpdate?.pointee = true
-    }
-
-    func keyDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, keyPressed: UInt16, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, didHandle: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
-        forceUpdate?.pointee = false
-        didHandle?.pointee = false
-    }
-
-    func keyUp(atPositionX mousePositionX: Double, positionY mousePositionY: Double, keyPressed: UInt16, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, didHandle: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
-        forceUpdate?.pointee = false
-        didHandle?.pointee = false
-    }
-
-    private func guideLines(at time: CMTime) -> [UprightGuideLine] {
-        let paramAPI = parameterRetrievalAPI()
-        return Self.guideSpecs.compactMap { spec in
-            var enabled = ObjCBool(false)
-            var orientationRaw = Int32(spec.defaultOrientation.rawValue)
-            paramAPI.getBoolValue(&enabled, fromParameter: spec.enabled.rawValue, at: time)
-            paramAPI.getIntValue(&orientationRaw, fromParameter: spec.orientation.rawValue, at: time)
-            guard enabled.boolValue else {
-                return nil
-            }
-
-            return UprightGuideLine(
-                spec: spec,
-                orientation: UprightGuideOrientation(rawValue: orientationRaw) ?? spec.defaultOrientation,
-                start: pointParam(paramAPI, spec.start, defaultValue: spec.defaultStart, time: time),
-                end: pointParam(paramAPI, spec.end, defaultValue: spec.defaultEnd, time: time)
-            )
-        }
-    }
-
-    private func candidateLines(at time: CMTime) -> [UprightCandidateLine] {
-        let paramAPI = parameterRetrievalAPI()
-        return AnyUprightUprightCandidates.specs.compactMap { spec in
-            var visible = ObjCBool(false)
-            var selected = ObjCBool(false)
-            var orientationRaw = Int32(UprightGuideOrientation.vertical.rawValue)
-            paramAPI.getBoolValue(&visible, fromParameter: spec.visible, at: time)
-            paramAPI.getBoolValue(&selected, fromParameter: spec.selected, at: time)
-            paramAPI.getIntValue(&orientationRaw, fromParameter: spec.orientation, at: time)
-
-            guard visible.boolValue else {
-                return nil
-            }
-
-            return UprightCandidateLine(
-                spec: spec,
-                selected: selected.boolValue,
-                orientation: UprightGuideOrientation(rawValue: orientationRaw) ?? .vertical,
-                start: pointParam(paramAPI, spec.start, defaultValue: AUPoint(x: 0.0, y: 0.0), time: time),
-                end: pointParam(paramAPI, spec.end, defaultValue: AUPoint(x: 0.0, y: 0.0), time: time)
-            )
         }
     }
 
@@ -1380,39 +1550,124 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         }
     }
 
-    private func pointParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ param: UprightParam, defaultValue: AUPoint, time: CMTime) -> AUPoint {
-        var x = defaultValue.x
-        var y = defaultValue.y
-        paramAPI.getXValue(&x, yValue: &y, fromParameter: param.rawValue, at: time)
-        return AUPoint(x: x, y: y)
+}
+
+@objc(AnyUprightUprightManualOSCPlugIn)
+class AnyUprightUprightManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
+    private let overlayRenderer = AnyUprightOSCOverlayRenderer()
+
+    @objc(drawingCoordinates)
+    func drawingCoordinates() -> FxDrawingCoordinates {
+        return FxDrawingCoordinates(kFxDrawingCoordinates_OBJECT)
     }
 
-    private func pointParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ parameterID: UInt32, defaultValue: AUPoint, time: CMTime) -> AUPoint {
-        var x = defaultValue.x
-        var y = defaultValue.y
-        paramAPI.getXValue(&x, yValue: &y, fromParameter: parameterID, at: time)
-        return AUPoint(x: x, y: y)
-    }
-
-    private func endpointParameter(for part: UprightOSCPart) -> UprightParam? {
-        for spec in Self.guideSpecs {
-            if spec.startPart == part {
-                return spec.start
-            }
-            if spec.endPart == part {
-                return spec.end
-            }
+    @objc(drawOSCWithWidth:height:activePart:destinationImage:atTime:)
+    func drawOSC(withWidth width: Int, height: Int, activePart: Int, destinationImage: FxImageTile, at time: CMTime) {
+        let paramAPI = parameterRetrievalAPI()
+        let guides = uprightGuideLines(at: time, paramAPI: paramAPI)
+        let candidates = uprightCandidateLines(at: time, paramAPI: paramAPI)
+        var segments = candidates.map { candidate in
+            AUOSCStyledSegment(
+                start: candidate.start,
+                end: candidate.end,
+                style: candidateStyle(candidate, activePart: activePart)
+            )
         }
-        return nil
-    }
-
-    private func imageLine(from guide: UprightGuideLine, size: AUSize) -> AULineSegment {
-        AULineSegment(
-            start: AUPoint(x: guide.start.x * size.width, y: (1.0 - guide.start.y) * size.height),
-            end: AUPoint(x: guide.end.x * size.width, y: (1.0 - guide.end.y) * size.height)
+        segments.append(contentsOf: guides.map {
+            AUOSCStyledSegment(start: $0.start, end: $0.end, style: guideStyle())
+        })
+        let handles = guides.flatMap {
+            [
+                AUOSCHandle(point: $0.start, part: $0.spec.startPart.rawValue),
+                AUOSCHandle(point: $0.end, part: $0.spec.endPart.rawValue)
+            ]
+        }
+        overlayRenderer.renderStyledSegments(
+            segments,
+            handles: handles,
+            activePart: activePart,
+            destinationImage: destinationImage,
+            destinationSize: AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
         )
     }
 
+    @objc(hitTestOSCAtMousePositionX:mousePositionY:activePart:atTime:)
+    func hitTestOSC(atMousePositionX mousePositionX: Double, mousePositionY: Double, activePart: UnsafeMutablePointer<Int>?, at time: CMTime) {
+        let paramAPI = parameterRetrievalAPI()
+        let size = objectPixelSizeForOSC()
+        let mouse = AUPoint(x: mousePositionX, y: mousePositionY)
+        activePart?.pointee = UprightOSCPart.none.rawValue
+
+        for guide in uprightGuideLines(at: time, paramAPI: paramAPI) {
+            let handles = [
+                AUOSCHandle(point: guide.start, part: guide.spec.startPart.rawValue),
+                AUOSCHandle(point: guide.end, part: guide.spec.endPart.rawValue)
+            ]
+            for handle in handles {
+                let dx = (mouse.x - handle.point.x) * size.width
+                let dy = (mouse.y - handle.point.y) * size.height
+                if hypot(dx, dy) <= 12.0 {
+                    activePart?.pointee = handle.part
+                    return
+                }
+            }
+        }
+
+        for candidate in uprightCandidateLines(at: time, paramAPI: paramAPI) {
+            if AnyUprightUprightCandidates.distanceFromPointToSegment(mouse, start: candidate.start, end: candidate.end, size: size) <= 8.0 {
+                activePart?.pointee = candidate.spec.linePart
+                return
+            }
+        }
+    }
+
+    @objc(mouseDownAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
+    func mouseDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        if let candidateIndex = AnyUprightUprightCandidates.candidateIndex(for: activePart),
+           let settingAPI = parameterSettingAPI() {
+            let candidates = uprightCandidateLines(at: time, paramAPI: parameterRetrievalAPI())
+            if let candidate = candidates.first(where: { $0.spec.linePart == activePart }) {
+                let selected = AnyUprightUprightCandidates.selectionValueAfterToggling(candidate, within: candidates)
+                settingAPI.setBoolValue(selected, toParameter: AnyUprightUprightCandidates.specs[candidateIndex].selected, at: time)
+            }
+        }
+        forceUpdate?.pointee = true
+    }
+
+    @objc(mouseDraggedAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
+    func mouseDragged(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        guard AnyUprightUprightCandidates.candidateIndex(for: activePart) == nil else {
+            forceUpdate?.pointee = true
+            return
+        }
+
+        guard let part = UprightOSCPart(rawValue: activePart),
+              let endpoint = endpointParameter(for: part),
+              let settingAPI = parameterSettingAPI() else {
+            forceUpdate?.pointee = false
+            return
+        }
+
+        settingAPI.setXValue(mousePositionX, yValue: mousePositionY, toParameter: endpoint.rawValue, at: time)
+        forceUpdate?.pointee = true
+    }
+
+    @objc(mouseUpAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
+    func mouseUp(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        forceUpdate?.pointee = true
+    }
+
+    @objc(keyDownAtPositionX:positionY:keyPressed:modifiers:forceUpdate:didHandle:atTime:)
+    func keyDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, keyPressed: UInt16, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, didHandle: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        forceUpdate?.pointee = false
+        didHandle?.pointee = false
+    }
+
+    @objc(keyUpAtPositionX:positionY:keyPressed:modifiers:forceUpdate:didHandle:atTime:)
+    func keyUp(atPositionX mousePositionX: Double, positionY mousePositionY: Double, keyPressed: UInt16, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, didHandle: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        forceUpdate?.pointee = false
+        didHandle?.pointee = false
+    }
 
     private func guideStyle() -> AUOSCOverlayStyle {
         AUOSCOverlayStyle()
@@ -1430,5 +1685,4 @@ class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer, FxOnScree
         }
         return style
     }
-
 }

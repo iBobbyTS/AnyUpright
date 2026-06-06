@@ -51,6 +51,12 @@ enum AUQuadTransformMode: Int32 {
     case sourceQuad = 1
 }
 
+enum AUSourceQuadStretchMode: Int32 {
+    case stretch = 0
+    case mirrorHorizontal = 1
+    case mirrorVertical = 2
+}
+
 enum AUQuadCorner {
     case topLeft
     case topRight
@@ -79,6 +85,59 @@ struct AUCornerOffsets {
     var topRightPixels: AUPoint = AUPoint(x: 0.0, y: 0.0)
     var bottomRightPixels: AUPoint = AUPoint(x: 0.0, y: 0.0)
     var bottomLeftPixels: AUPoint = AUPoint(x: 0.0, y: 0.0)
+}
+
+struct AUCanvasSurfaceMapper {
+    var minX: Double
+    var minY: Double
+    var maxX: Double
+    var maxY: Double
+    var surfaceSize: AUSize
+
+    var width: Double {
+        max(1.0, maxX - minX)
+    }
+
+    var height: Double {
+        max(1.0, maxY - minY)
+    }
+
+    init?(canvasFrame: [AUPoint], surfaceSize: AUSize) {
+        guard canvasFrame.count >= 2 else {
+            return nil
+        }
+
+        let xs = canvasFrame.map(\.x)
+        let ys = canvasFrame.map(\.y)
+        guard let minX = xs.min(),
+              let maxX = xs.max(),
+              let minY = ys.min(),
+              let maxY = ys.max(),
+              maxX - minX > 1.0,
+              maxY - minY > 1.0 else {
+            return nil
+        }
+
+        self.minX = minX
+        self.minY = minY
+        self.maxX = maxX
+        self.maxY = maxY
+        self.surfaceSize = AUSize(width: max(1.0, surfaceSize.width), height: max(1.0, surfaceSize.height))
+    }
+
+    func eventPoint(fromCanvasPoint point: AUPoint) -> AUPoint {
+        AUPoint(
+            x: (point.x - minX) / width * surfaceSize.width,
+            y: (point.y - minY) / height * surfaceSize.height
+        )
+    }
+
+    func canvasPoint(fromEventPoint point: AUPoint) -> AUPoint {
+        AUPoint(
+            x: minX + point.x / surfaceSize.width * width,
+            y: minY + point.y / surfaceSize.height * height
+        )
+    }
 }
 
 enum AnyUprightGeometry {
@@ -125,6 +184,22 @@ enum AnyUprightGeometry {
         quadObjectPoints(from: offsets, base: sourceQuadObjectBase(), size: size)
     }
 
+    static func objectPixelQuad(fromNormalizedObjectQuad quad: AUQuad, size: AUSize) -> AUQuad {
+        AUQuad(
+            topLeft: objectPixelPoint(fromNormalizedObjectPoint: quad.topLeft, size: size),
+            topRight: objectPixelPoint(fromNormalizedObjectPoint: quad.topRight, size: size),
+            bottomRight: objectPixelPoint(fromNormalizedObjectPoint: quad.bottomRight, size: size),
+            bottomLeft: objectPixelPoint(fromNormalizedObjectPoint: quad.bottomLeft, size: size)
+        )
+    }
+
+    static func normalizedObjectPoint(fromObjectPixelPoint point: AUPoint, size: AUSize) -> AUPoint {
+        AUPoint(
+            x: point.x / max(size.width, 1.0),
+            y: point.y / max(size.height, 1.0)
+        )
+    }
+
     private static func quadObjectPoints(from offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUQuad {
         AUQuad(
             topLeft: objectPoint(for: .topLeft, offsets: offsets, base: base, size: size),
@@ -149,6 +224,10 @@ enum AnyUprightGeometry {
             x: (point.x - base.x - percent.x) * size.width,
             y: (point.y - base.y - percent.y) * size.height
         )
+    }
+
+    private static func objectPixelPoint(fromNormalizedObjectPoint point: AUPoint, size: AUSize) -> AUPoint {
+        AUPoint(x: point.x * size.width, y: point.y * size.height)
     }
 
     static func uprightQuad(vertical: Double, horizontal: Double, size: AUSize) -> AUQuad {
@@ -315,6 +394,7 @@ enum AnyUprightGeometry {
     static func quadOutputToSourceMatrix(
         from offsets: AUCornerOffsets,
         mode: AUQuadTransformMode,
+        stretchMode: AUSourceQuadStretchMode = .stretch,
         showCornerAdjuster: Bool,
         outputSize: AUSize,
         sourceSize: AUSize
@@ -329,9 +409,71 @@ enum AnyUprightGeometry {
                 return homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
             }
 
-            let sourceQuad = sourceQuad(from: offsets, size: sourceSize)
-            return homography(from: AUQuad.fullFrame(outputSize), to: sourceQuad)
+            let selectedSourceQuad = sourceQuad(from: offsets, size: sourceSize)
+            switch stretchMode {
+            case .stretch:
+                return homography(from: AUQuad.fullFrame(outputSize), to: selectedSourceQuad)
+            case .mirrorHorizontal:
+                return mirroredSelectionOutputToSourceMatrix(
+                    from: offsets,
+                    mirror: horizontalMirrorMatrix(size: outputSize),
+                    outputSize: outputSize,
+                    sourceSize: sourceSize
+                )
+            case .mirrorVertical:
+                return mirroredSelectionOutputToSourceMatrix(
+                    from: offsets,
+                    mirror: verticalMirrorMatrix(size: outputSize),
+                    outputSize: outputSize,
+                    sourceSize: sourceSize
+                )
+            }
         }
+    }
+
+    static func quadSelectionToOutputRectMatrix(
+        from offsets: AUCornerOffsets,
+        outputSize: AUSize,
+        sourceSize: AUSize
+    ) -> simd_float3x3 {
+        let selectedSourceQuad = sourceQuad(from: offsets, size: sourceSize)
+        let outputQuad = AUQuad(
+            topLeft: scalePoint(selectedSourceQuad.topLeft, from: sourceSize, to: outputSize),
+            topRight: scalePoint(selectedSourceQuad.topRight, from: sourceSize, to: outputSize),
+            bottomRight: scalePoint(selectedSourceQuad.bottomRight, from: sourceSize, to: outputSize),
+            bottomLeft: scalePoint(selectedSourceQuad.bottomLeft, from: sourceSize, to: outputSize)
+        )
+        return homography(from: outputQuad, to: AUQuad.fullFrame(outputSize))
+    }
+
+    static func identityOutputToSourceMatrix(outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {
+        homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
+    }
+
+    private static func mirroredSelectionOutputToSourceMatrix(
+        from offsets: AUCornerOffsets,
+        mirror: simd_float3x3,
+        outputSize: AUSize,
+        sourceSize: AUSize
+    ) -> simd_float3x3 {
+        let selectionToRect = quadSelectionToOutputRectMatrix(from: offsets, outputSize: outputSize, sourceSize: sourceSize)
+        let rectToSource = homography(from: AUQuad.fullFrame(outputSize), to: sourceQuad(from: offsets, size: sourceSize))
+        return multiply(multiply(rectToSource, mirror), selectionToRect)
+    }
+
+    private static func horizontalMirrorMatrix(size: AUSize) -> simd_float3x3 {
+        matrix(-1.0, 0.0, size.width, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+    }
+
+    private static func verticalMirrorMatrix(size: AUSize) -> simd_float3x3 {
+        matrix(1.0, 0.0, 0.0, 0.0, -1.0, size.height, 0.0, 0.0, 1.0)
+    }
+
+    private static func scalePoint(_ point: AUPoint, from sourceSize: AUSize, to outputSize: AUSize) -> AUPoint {
+        AUPoint(
+            x: point.x / max(sourceSize.width, 1.0) * outputSize.width,
+            y: point.y / max(sourceSize.height, 1.0) * outputSize.height
+        )
     }
 
     static func rotationScaleToFill(angleRadians: Double, size: AUSize) -> Double {

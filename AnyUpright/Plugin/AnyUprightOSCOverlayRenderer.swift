@@ -57,6 +57,33 @@ final class AnyUprightOSCOverlayRenderer {
     private static var pipelineCache: [PipelineKey: MTLRenderPipelineState] = [:]
     private static let pipelineLock = NSLock()
 
+    func clear(destinationImage: FxImageTile) {
+        let deviceCache = MetalDeviceCache.deviceCache
+        guard let device = deviceCache.device(with: destinationImage.deviceRegistryID) ?? MTLCreateSystemDefaultDevice(),
+              let outputTexture = destinationImage.metalTexture(for: device),
+              let commandQueue = device.makeCommandQueue(),
+              let commandBuffer = commandQueue.makeCommandBuffer() else {
+            return
+        }
+
+        let colorAttachment = MTLRenderPassColorAttachmentDescriptor()
+        colorAttachment.texture = outputTexture
+        colorAttachment.clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0)
+        colorAttachment.loadAction = .clear
+        colorAttachment.storeAction = .store
+
+        let descriptor = MTLRenderPassDescriptor()
+        descriptor.colorAttachments[0] = colorAttachment
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else {
+            return
+        }
+
+        encoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+    }
+
     func renderQuad(
         points: [AUPoint],
         handles: [AUOSCHandle],

@@ -10,6 +10,7 @@
 
 #define AURM_WarpFullFrame 0
 #define AURM_WarpSelectionOverOriginal 1
+#define AURM_SourceQuadAdjusterPreview 2
 
 typedef enum AnyUprightVertexInputIndex {
     AUVII_Vertices        = 0,

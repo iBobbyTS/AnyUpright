@@ -28,6 +28,7 @@ struct AnyUprightGeometryTests {
         try testQuadSourceDefaultsToCentralEightyPercent()
         try testQuadSourceObjectDragPreservesCentralBase()
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
+        try testQuadSourceAdjusterPreviewAndApplyUseSameSelection()
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
         try testQuadSourceModeShowsAdjusterBeforeApplyingWarp()
         try testQuadSourceMirrorModesSampleWithinSelectedQuad()
@@ -172,18 +173,16 @@ struct AnyUprightGeometryTests {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
 
-        let pixels = AnyUprightGeometry.sourceCornerPixelOffset(
+        let percent = AnyUprightGeometry.sourceCornerPercentOffset(
             forObjectPoint: AUPoint(x: 0.20, y: 0.80),
-            corner: .topLeft,
-            offsets: offsets,
-            size: size
+            corner: .topLeft
         )
-        offsets.topLeftPixels = pixels
+        offsets.topLeftPercent = percent
 
         let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
         let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
 
-        try assertEqual(pixels, AUPoint(x: 20.0, y: -10.0), "source dragged top-left pixel offset")
+        try assertEqual(percent, AUPoint(x: 0.10, y: -0.10), "source dragged top-left percent offset")
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "source dragged top-left object point")
         try assertEqual(sourceQuad.topLeft, AUPoint(x: 40.0, y: 20.0), "source dragged top-left source point")
     }
@@ -201,22 +200,61 @@ struct AnyUprightGeometryTests {
 
         let draggedPixel = AUPoint(x: 45.0, y: 75.0)
         let draggedNormalized = AnyUprightGeometry.normalizedObjectPoint(fromObjectPixelPoint: draggedPixel, size: size)
-        let pixels = AnyUprightGeometry.sourceCornerPixelOffset(
+        let percent = AnyUprightGeometry.sourceCornerPercentOffset(
             forObjectPoint: draggedNormalized,
-            corner: .topLeft,
-            offsets: offsets,
-            size: size
+            corner: .topLeft
         )
 
-        offsets.topLeftPixels = pixels
+        offsets.topLeftPercent = percent
         let updatedObjectPixels = AnyUprightGeometry.objectPixelQuad(
             fromNormalizedObjectQuad: AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size),
             size: size
         )
         let updatedSourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
-        try assertEqual(pixels, AUPoint(x: 25.0, y: -15.0), "source object-space drag offset")
+        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "source object-space drag percent offset")
         try assertEqual(updatedObjectPixels.topLeft, draggedPixel, "source object-space drag target")
         try assertEqual(updatedSourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "source quad should sample the Y-flipped image point matching the visible handle")
+    }
+
+    static func testQuadSourceAdjusterPreviewAndApplyUseSameSelection() throws {
+        let outputSize = AUSize(width: 300.0, height: 150.0)
+        let sourceSize = AUSize(width: 600.0, height: 300.0)
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPercent = AUPoint(x: 0.10, y: -0.05)
+        offsets.topRightPercent = AUPoint(x: -0.08, y: -0.02)
+        offsets.bottomRightPercent = AUPoint(x: -0.12, y: 0.07)
+        offsets.bottomLeftPercent = AUPoint(x: 0.04, y: 0.08)
+
+        let selectedSourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: sourceSize)
+        let previewSelectionToRect = AnyUprightGeometry.quadSelectionToOutputRectMatrix(
+            from: offsets,
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+        let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
+            from: offsets,
+            mode: .sourceQuad,
+            showCornerAdjuster: false,
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+
+        let selectedOutputQuad = AUQuad(
+            topLeft: AUPoint(x: selectedSourceQuad.topLeft.x / 2.0, y: selectedSourceQuad.topLeft.y / 2.0),
+            topRight: AUPoint(x: selectedSourceQuad.topRight.x / 2.0, y: selectedSourceQuad.topRight.y / 2.0),
+            bottomRight: AUPoint(x: selectedSourceQuad.bottomRight.x / 2.0, y: selectedSourceQuad.bottomRight.y / 2.0),
+            bottomLeft: AUPoint(x: selectedSourceQuad.bottomLeft.x / 2.0, y: selectedSourceQuad.bottomLeft.y / 2.0)
+        )
+
+        try assertMaps(previewSelectionToRect, selectedOutputQuad.topLeft, to: AUPoint(x: 0.0, y: 0.0))
+        try assertMaps(previewSelectionToRect, selectedOutputQuad.topRight, to: AUPoint(x: outputSize.width, y: 0.0))
+        try assertMaps(previewSelectionToRect, selectedOutputQuad.bottomRight, to: AUPoint(x: outputSize.width, y: outputSize.height))
+        try assertMaps(previewSelectionToRect, selectedOutputQuad.bottomLeft, to: AUPoint(x: 0.0, y: outputSize.height))
+
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: selectedSourceQuad.topLeft)
+        try assertMaps(appliedMatrix, AUPoint(x: outputSize.width, y: 0.0), to: selectedSourceQuad.topRight)
+        try assertMaps(appliedMatrix, AUPoint(x: outputSize.width, y: outputSize.height), to: selectedSourceQuad.bottomRight)
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: outputSize.height), to: selectedSourceQuad.bottomLeft)
     }
 
     static func testCanvasSurfaceMapperConvertsFxPlugOSCEvents() throws {

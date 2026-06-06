@@ -288,3 +288,36 @@ Current status: the Source Quad OSC overlay is no longer just a static visual ov
   - `git diff --check`
   - `xcodebuild -project AnyUpright.xcodeproj -scheme "Wrapper Application" -configuration Debug -derivedDataPath /Users/ibobby/Library/Developer/Xcode/DerivedData/AnyUpright-fmxlkbxylbewbfgffirfqheenyke build`
 - Host-app validation status: Motion loaded the rebuilt `AnyUpright XPC Service` from the expected DerivedData path, and the selected filter had `Mode = Source Quad`, `Stretch Mode = Stretch to Frame`, `Show Corner Adjuster = on`, and `Publish OSC = on`. The active Motion viewer then showed a black frame, so this pass did not perform a reliable live drag screenshot comparison. Re-test in Motion with a visible source frame before treating the manual drag symptom as host-verified.
+
+## 2026-06-06 Source Quad Stretch Mismatch Follow-Up
+
+- User report after the Y-axis fix: dragging was closer, but the applied `Stretch to Frame` image still did not exactly match the selected four-handle region.
+- Additional evidence from the Motion screenshot: the project had two visible `IMG_0850` rows. When validating `Stretch to Frame`, hide or disable duplicate underlying media layers; otherwise the stretched result can visually blend with the original layer underneath and look like a wrong warp.
+- Code-level risk found: Source Quad handles were persisted primarily as pixel offsets derived from the current OSC object size. FxPlug render-time `sourceSize` can differ from the OSC object size because of proxy/render scale, still-image/video metadata, or host surface sizing. That makes the visible handle region and render-time source quadrilateral diverge even when the corner order is correct.
+- Fix: Source Quad OSC drags now persist corner movement as hidden percentage offsets relative to the normalized source-quad base, and clear the matching pixel offsets. Whole-quad Source Quad drags also write percentage deltas and clear pixel offsets. `Output Corners` continues to use pixel offsets because that mode is explicitly output-frame pixel manipulation.
+- Regression coverage: `testQuadSourceObjectDragPreservesCentralBase` and `testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents` now verify percent-offset Source Quad writes and that the final source quad samples the Y-flipped image point matching the visible handle.
+- Automated checks passed:
+  - `swift tools/audit-feature-surface.swift`
+  - `swift tools/validate-fxplug-manifest.swift`
+  - `xcrun swiftc AnyUprightTests/AnyUprightGeometryTests.swift AnyUpright/Plugin/AnyUprightGeometry.swift AnyUpright/Plugin/AnyUprightUprightCandidates.swift AnyUpright/Plugin/AnyUprightLineDetection.swift -o /tmp/AnyUprightGeometryTests && /tmp/AnyUprightGeometryTests`
+  - `xcrun swiftc -parse-as-library tools/render-warp-previews.swift AnyUpright/Plugin/AnyUprightGeometry.swift -o /tmp/AnyUprightRenderWarpPreviews && /tmp/AnyUprightRenderWarpPreviews .agent-work/test-assets .agent-work/warp-previews`
+  - `git diff --check`
+  - `xcodebuild -project AnyUpright.xcodeproj -scheme "Wrapper Application" -configuration Debug -derivedDataPath /Users/ibobby/Library/Developer/Xcode/DerivedData/AnyUpright-fmxlkbxylbewbfgffirfqheenyke build`
+
+## 2026-06-06 Product Definition Correction
+
+- User report: the drag/edit area should follow the video image, not the Motion/FCP canvas; the current canvas OSC overlay can detach from the video image and is not visible in Final Cut.
+- Product decision: Source Quad edit-mode visuals now belong to the filter render output. `Show Corner Adjuster = on` renders the original image unchanged, dims pixels outside the selected source quadrilateral to 70% brightness, draws the selected quadrilateral outline, and draws four handle markers directly into the output frame.
+- The Quad `FxOnScreenControl` remains the interactive input path where the host supports OSC, but it clears its own host overlay surface instead of drawing a second visible canvas-space overlay. This prevents Motion from showing two visual layers with different coordinate owners.
+- The same `quadSelectionToOutputRectMatrix` is used by the edit preview to identify the selected source quadrilateral and by mirror modes to identify the selected patch. Turning `Show Corner Adjuster` off still uses `quadOutputToSourceMatrix(..., showCornerAdjuster: false)` to map the saved source quad to the full output frame.
+- Consequence for FCP: the visual adjuster should be visible because it is now part of the effect output. Mouse dragging still depends on host OSC support; if FCP does not dispatch OSC interactions, the visible layer can still be used as a preview but interaction will need a future FCP-compatible input strategy.
+- Automated checks passed after the render-output overlay change:
+  - `xcrun swiftc AnyUpright/Plugin/AnyUprightGeometry.swift AnyUpright/Plugin/AnyUprightLineDetection.swift AnyUpright/Plugin/AnyUprightUprightCandidates.swift AnyUprightTests/AnyUprightGeometryTests.swift -o /tmp/AnyUprightGeometryTests && /tmp/AnyUprightGeometryTests`
+  - `xcrun swiftc tools/validate-fxplug-manifest.swift -o /tmp/AnyUprightValidateManifest && /tmp/AnyUprightValidateManifest .`
+  - `xcrun swiftc tools/audit-feature-surface.swift -o /tmp/AnyUprightAuditFeatureSurface && /tmp/AnyUprightAuditFeatureSurface .`
+  - `xcrun swiftc -parse-as-library tools/render-warp-previews.swift AnyUpright/Plugin/AnyUprightGeometry.swift -o /tmp/AnyUprightRenderWarpPreviews && /tmp/AnyUprightRenderWarpPreviews .agent-work/test-assets .agent-work/warp-previews`
+  - `xcrun swiftc tools/validate-warp-previews.swift -o /tmp/AnyUprightValidateWarpPreviews && /tmp/AnyUprightValidateWarpPreviews .agent-work/warp-previews`
+  - `SDK=$(xcrun --sdk macosx --show-sdk-path) && xcrun swiftc -typecheck AnyUpright/Plugin/*.swift -sdk "$SDK" -F /Library/Developer/SDKs/FxPlug.sdk/Library/Frameworks -F /Library/Developer/Frameworks -I AnyUpright/Plugin -import-objc-header "AnyUpright/Plugin/XPC Service-Bridging-Header.h"`
+  - `git diff --check`
+  - `xcodebuild -project AnyUpright.xcodeproj -scheme "Wrapper Application" -configuration Debug -derivedDataPath /Users/ibobby/Library/Developer/Xcode/DerivedData/AnyUpright-fmxlkbxylbewbfgffirfqheenyke build`
+- Motion validation: `Quad.moef` showed the Source Quad dimming, outline, and blue handles with `Show Corner Adjuster = on` and Motion's host `Publish OSC = off`. This confirms the visible edit layer no longer depends on the host OSC overlay surface.

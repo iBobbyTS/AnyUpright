@@ -217,6 +217,11 @@ enum AnyUprightGeometry {
         cornerPixelOffset(forObjectPoint: point, corner: corner, offsets: offsets, base: sourceQuadObjectBase(), size: size)
     }
 
+    static func sourceCornerPercentOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner) -> AUPoint {
+        let base = objectBasePoint(for: corner, in: sourceQuadObjectBase())
+        return AUPoint(x: point.x - base.x, y: point.y - base.y)
+    }
+
     private static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner, offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUPoint {
         let base = objectBasePoint(for: corner, in: base)
         let percent = percentOffset(for: corner, in: offsets)

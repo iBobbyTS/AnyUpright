@@ -104,6 +104,21 @@ struct RenderWarpPreviews {
         )
         try assertMaps(previewMatrix, AUPoint(x: 321.0, y: 654.0), to: AUPoint(x: 321.0, y: 654.0), label: "source quad edit preview should keep image still")
 
+        let selectionToRect = AnyUprightGeometry.quadSelectionToOutputRectMatrix(
+            from: offsets,
+            outputSize: size,
+            sourceSize: size
+        )
+        try assertTrue(!isInsideSelection(AUPoint(x: 30.0, y: 30.0), selectionToRect: selectionToRect, outputSize: size), "source quad preview outside probe should be outside")
+        try assertTrue(isInsideSelection(sourceQuad.topLeft, selectionToRect: selectionToRect, outputSize: size), "source quad preview inside probe should be inside")
+        try saveSourceQuadAdjusterPreview(
+            image,
+            outputSize: size,
+            selectionToRect: selectionToRect,
+            outputToSource: previewMatrix,
+            url: outputDirectory.appendingPathComponent("quad-source-adjuster-preview.png")
+        )
+
         let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
             mode: .sourceQuad,
@@ -120,11 +135,6 @@ struct RenderWarpPreviews {
             mode: .sourceQuad,
             stretchMode: .mirrorHorizontal,
             showCornerAdjuster: false,
-            outputSize: size,
-            sourceSize: size
-        )
-        let selectionToRect = AnyUprightGeometry.quadSelectionToOutputRectMatrix(
-            from: offsets,
             outputSize: size,
             sourceSize: size
         )
@@ -217,6 +227,49 @@ struct RenderWarpPreviews {
         try saveRGBA(RGBAImage(width: outputWidth, height: outputHeight, pixels: rgba), url: url)
     }
 
+    private static func saveSourceQuadAdjusterPreview(
+        _ image: RGBAImage,
+        outputSize: AUSize,
+        selectionToRect: simd_float3x3,
+        outputToSource: simd_float3x3,
+        url: URL
+    ) throws {
+        let outputWidth = Int(outputSize.width.rounded())
+        let outputHeight = Int(outputSize.height.rounded())
+        var rgba = Array(repeating: UInt8(0), count: outputWidth * outputHeight * 4)
+
+        for y in 0..<outputHeight {
+            for x in 0..<outputWidth {
+                let outputPoint = AUPoint(x: Double(x), y: Double(y))
+                let source = AnyUprightGeometry.transform(outputPoint, by: outputToSource)
+                var color = image.sample(x: source.x, y: source.y)
+                let rectPoint = AnyUprightGeometry.transform(outputPoint, by: selectionToRect)
+                let inside = rectPoint.x >= 0.0 &&
+                    rectPoint.x <= outputSize.width &&
+                    rectPoint.y >= 0.0 &&
+                    rectPoint.y <= outputSize.height
+
+                if !inside {
+                    color = dimmed(color, factor: 0.70)
+                }
+                if isNearSelectionBorder(rectPoint, outputSize: outputSize) {
+                    color = (255, 255, 255, 255)
+                }
+                if isNearSelectionHandle(rectPoint, outputSize: outputSize) {
+                    color = (0, 140, 255, 255)
+                }
+
+                let index = (y * outputWidth + x) * 4
+                rgba[index] = color.0
+                rgba[index + 1] = color.1
+                rgba[index + 2] = color.2
+                rgba[index + 3] = color.3
+            }
+        }
+
+        try saveRGBA(RGBAImage(width: outputWidth, height: outputHeight, pixels: rgba), url: url)
+    }
+
     private static func saveSelectionOverOriginal(
         _ image: RGBAImage,
         outputSize: AUSize,
@@ -246,6 +299,44 @@ struct RenderWarpPreviews {
         }
 
         try saveRGBA(RGBAImage(width: outputWidth, height: outputHeight, pixels: rgba), url: url)
+    }
+
+    private static func dimmed(_ color: (UInt8, UInt8, UInt8, UInt8), factor: Double) -> (UInt8, UInt8, UInt8, UInt8) {
+        (
+            UInt8(Double(color.0) * factor),
+            UInt8(Double(color.1) * factor),
+            UInt8(Double(color.2) * factor),
+            color.3
+        )
+    }
+
+    private static func isNearSelectionBorder(_ point: AUPoint, outputSize: AUSize) -> Bool {
+        let outsideDistance = max(
+            max(-point.x, point.x - outputSize.width),
+            max(-point.y, point.y - outputSize.height)
+        )
+        guard outsideDistance <= 4.0 else {
+            return false
+        }
+
+        let distance = min(
+            min(abs(point.x), abs(outputSize.width - point.x)),
+            min(abs(point.y), abs(outputSize.height - point.y))
+        )
+        return distance <= 3.0
+    }
+
+    private static func isNearSelectionHandle(_ point: AUPoint, outputSize: AUSize) -> Bool {
+        let corners = [
+            AUPoint(x: 0.0, y: 0.0),
+            AUPoint(x: outputSize.width, y: 0.0),
+            AUPoint(x: outputSize.width, y: outputSize.height),
+            AUPoint(x: 0.0, y: outputSize.height)
+        ]
+
+        return corners.contains { corner in
+            hypot(point.x - corner.x, point.y - corner.y) <= 16.0
+        }
     }
 
     private static func isInsideSelection(_ point: AUPoint, selectionToRect: simd_float3x3, outputSize: AUSize) -> Bool {

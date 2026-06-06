@@ -316,8 +316,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
     private func selectionOutputToRectMatrix(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {
         guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
-              AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad,
-              state.showCornerAdjuster == 0 else {
+              AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad else {
             return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: outputSize)
         }
 
@@ -329,6 +328,12 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
     }
 
     private func renderMode(from state: AnyUprightParameterState) -> Int32 {
+        if AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
+           AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad,
+           state.showCornerAdjuster != 0 {
+            return Int32(AURM_SourceQuadAdjusterPreview)
+        }
+
         guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
               AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad,
               state.showCornerAdjuster == 0,

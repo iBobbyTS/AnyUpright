@@ -51,11 +51,26 @@ private enum QuadOSCPart: Int {
     case bottomRight = 3
     case bottomLeft = 4
     case quad = 5
+    case topEdge = 6
+    case rightEdge = 7
+    case bottomEdge = 8
+    case leftEdge = 9
 }
 
 private struct QuadOSCDragState {
     var part: QuadOSCPart
     var lastCanvasPoint: AUPoint
+    var eventCoordinateMode: QuadOSCEventCoordinateMode
+}
+
+private enum QuadOSCEventCoordinateMode {
+    case rawCanvas
+    case mappedSurface
+}
+
+private struct QuadOSCEventResolution {
+    var canvasPoint: AUPoint
+    var coordinateMode: QuadOSCEventCoordinateMode
 }
 
 private enum UprightParam: UInt32 {
@@ -647,7 +662,25 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         }
 
         updateLastSurfaceSize(from: destinationImage, fallback: AUSize(width: Double(width), height: Double(height)))
-        overlayRenderer.clear(destinationImage: destinationImage)
+        let size = objectPixelSizeForOSC()
+        let objectPoints = quadObjectPoints(from: state, size: size, mode: mode)
+        let canvasPoints = quadCanvasPoints(from: objectPoints)
+        let points = [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]
+        let handles = [
+            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+        ]
+        overlayRenderer.renderQuad(
+            points: points,
+            handles: handles,
+            activePart: activePart,
+            destinationImage: destinationImage,
+            canvasFrame: objectCanvasFrame(),
+            coordinateSpace: .pixels,
+            style: oscHitLayerStyle()
+        )
     }
 
     @objc(hitTestOSCAtMousePositionX:mousePositionY:activePart:atTime:)
@@ -670,41 +703,56 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
         ]
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
-        let mouse = eventMapper(for: canvasFrame)?.canvasPoint(fromEventPoint: eventPoint) ?? eventPoint
-        let hitRadius = 24.0
-        var matchedPart = QuadOSCPart.none.rawValue
-        for handle in handles {
-            let dx = mouse.x - handle.point.x
-            let dy = mouse.y - handle.point.y
-            let distance = hypot(dx, dy)
-            if distance <= hitRadius {
-                matchedPart = handle.part
-                break
-            }
-        }
-        if matchedPart == QuadOSCPart.none.rawValue,
-           isPoint(mouse, insideQuad: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]) {
-            matchedPart = QuadOSCPart.quad.rawValue
-        }
-        activePart?.pointee = matchedPart
+        let hit = hitTestPart(
+            forEventPoint: eventPoint,
+            handles: handles,
+            quad: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
+            canvasFrame: canvasFrame,
+            preferredMode: nil
+        )
+        let part = hit?.part.rawValue ?? QuadOSCPart.none.rawValue
+        activePart?.pointee = part
     }
 
     @objc(mouseDownAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
         let mode = quadMode(from: state)
+        let size = objectPixelSizeForOSC()
+        let objectPoints = quadObjectPoints(from: state, size: size, mode: mode)
+        let canvasPoints = quadCanvasPoints(from: objectPoints)
+        let canvasFrame = objectCanvasFrame()
+        let handles = [
+            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+        ]
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
-        let mouse = eventMapper(for: objectCanvasFrame())?.canvasPoint(fromEventPoint: eventPoint) ?? eventPoint
+        let resolvedEvent = hitTestPart(
+            forEventPoint: eventPoint,
+            handles: handles,
+            quad: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
+            canvasFrame: canvasFrame,
+            preferredMode: nil
+        )
+        let resolvedCanvasPoint = resolvedEvent?.resolution
+            ?? resolvedCanvasPoint(fromEventPoint: eventPoint, canvasFrame: canvasFrame, preferredMode: nil)
 
+        let resolvedPartRaw = resolveOSCDragPart(
+            hostActivePart: activePart,
+            localHitPart: resolvedEvent?.part.rawValue,
+            nonePart: QuadOSCPart.none.rawValue
+        )
+        let resolvedPart = resolvedPartRaw.flatMap(QuadOSCPart.init(rawValue:))
         guard shouldShowQuadCornerAdjuster(from: state, mode: mode),
-              let part = QuadOSCPart(rawValue: activePart),
-              part != .none else {
+              let resolvedPart else {
             setDragState(nil)
             forceUpdate?.pointee = false
             return
         }
 
-        setDragState(QuadOSCDragState(part: part, lastCanvasPoint: mouse))
+        setDragState(QuadOSCDragState(part: resolvedPart, lastCanvasPoint: resolvedCanvasPoint.canvasPoint, eventCoordinateMode: resolvedCanvasPoint.coordinateMode))
         forceUpdate?.pointee = true
     }
 
@@ -724,7 +772,8 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
         let size = objectPixelSizeForOSC()
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
-        let canvasPoint = eventMapper(for: objectCanvasFrame())?.canvasPoint(fromEventPoint: eventPoint) ?? eventPoint
+        let resolved = resolvedCanvasPoint(fromEventPoint: eventPoint, canvasFrame: objectCanvasFrame(), preferredMode: storedState?.eventCoordinateMode)
+        let canvasPoint = resolved.canvasPoint
         let draggedObjectPoint = objectPoint(fromCanvasPoint: canvasPoint)
         if part == .quad, let previousCanvasPoint = storedState?.lastCanvasPoint {
             let previousObjectPoint = objectPoint(fromCanvasPoint: previousCanvasPoint)
@@ -732,13 +781,41 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 x: (draggedObjectPoint.x - previousObjectPoint.x) * size.width,
                 y: (draggedObjectPoint.y - previousObjectPoint.y) * size.height
             )
-            translateQuad(from: state, pixelDelta: pixelDelta, mode: mode, size: size, settingAPI: settingAPI, time: time)
-            setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint))
+            translateCorners(
+                from: state,
+                pixelDelta: pixelDelta,
+                corners: [.topLeft, .topRight, .bottomRight, .bottomLeft],
+                mode: mode,
+                size: size,
+                settingAPI: settingAPI,
+                time: time
+            )
+            setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? .rawCanvas))
             forceUpdate?.pointee = true
             return
         }
 
-        setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint))
+        if let edgeCorners = corners(forEdgePart: part), let previousCanvasPoint = storedState?.lastCanvasPoint {
+            let previousObjectPoint = objectPoint(fromCanvasPoint: previousCanvasPoint)
+            let pixelDelta = AUPoint(
+                x: (draggedObjectPoint.x - previousObjectPoint.x) * size.width,
+                y: (draggedObjectPoint.y - previousObjectPoint.y) * size.height
+            )
+            translateCorners(
+                from: state,
+                pixelDelta: pixelDelta,
+                corners: edgeCorners,
+                mode: mode,
+                size: size,
+                settingAPI: settingAPI,
+                time: time
+            )
+            setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? .rawCanvas))
+            forceUpdate?.pointee = true
+            return
+        }
+
+        setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? .rawCanvas))
         setCorner(draggedObjectPoint, part: part, mode: mode, offsets: quadCornerOffsets(from: state), size: size, settingAPI: settingAPI, time: time)
         forceUpdate?.pointee = true
     }
@@ -872,6 +949,96 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         return AUCanvasSurfaceMapper(canvasFrame: canvasFrame, surfaceSize: surfaceSize)
     }
 
+    private func hitTestPart(
+        forEventPoint eventPoint: AUPoint,
+        handles: [AUOSCHandle],
+        quad: [AUPoint],
+        canvasFrame: [AUPoint],
+        preferredMode: QuadOSCEventCoordinateMode?
+    ) -> (part: QuadOSCPart, resolution: QuadOSCEventResolution)? {
+        let resolutions = eventResolutions(fromEventPoint: eventPoint, canvasFrame: canvasFrame, preferredMode: preferredMode)
+        let hitRadius = 24.0
+        var closestHandleHit: (part: QuadOSCPart, resolution: QuadOSCEventResolution, distance: Double)?
+
+        for resolution in resolutions {
+            for handle in handles {
+                let dx = resolution.canvasPoint.x - handle.point.x
+                let dy = resolution.canvasPoint.y - handle.point.y
+                let distance = hypot(dx, dy)
+                if distance <= hitRadius,
+                   let part = QuadOSCPart(rawValue: handle.part) {
+                    if closestHandleHit == nil || distance < closestHandleHit!.distance {
+                        closestHandleHit = (part, resolution, distance)
+                    }
+                }
+            }
+        }
+
+        if let closestHandleHit {
+            return (closestHandleHit.part, closestHandleHit.resolution)
+        }
+
+        let edges: [(QuadOSCPart, AUPoint, AUPoint)] = [
+            (.topEdge, quad[0], quad[1]),
+            (.rightEdge, quad[1], quad[2]),
+            (.bottomEdge, quad[3], quad[2]),
+            (.leftEdge, quad[0], quad[3])
+        ]
+        let edgeHitRadius = 14.0
+        var closestEdgeHit: (part: QuadOSCPart, resolution: QuadOSCEventResolution, distance: Double)?
+        for resolution in resolutions {
+            for edge in edges {
+                let distance = distance(from: resolution.canvasPoint, toSegmentStart: edge.1, end: edge.2)
+                if distance <= edgeHitRadius {
+                    if closestEdgeHit == nil || distance < closestEdgeHit!.distance {
+                        closestEdgeHit = (edge.0, resolution, distance)
+                    }
+                }
+            }
+        }
+
+        if let closestEdgeHit {
+            return (closestEdgeHit.part, closestEdgeHit.resolution)
+        }
+
+        for resolution in resolutions where isPoint(resolution.canvasPoint, insideQuad: quad) {
+            return (.quad, resolution)
+        }
+
+        return nil
+    }
+
+    private func eventResolutions(
+        fromEventPoint eventPoint: AUPoint,
+        canvasFrame: [AUPoint],
+        preferredMode: QuadOSCEventCoordinateMode?
+    ) -> [QuadOSCEventResolution] {
+        let raw = QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvas)
+        guard let mapper = eventMapper(for: canvasFrame) else {
+            return [raw]
+        }
+
+        let mapped = QuadOSCEventResolution(canvasPoint: mapper.canvasPoint(fromEventPoint: eventPoint), coordinateMode: .mappedSurface)
+        let candidates = isPoint(eventPoint, insideAxisAlignedFrame: canvasFrame) ? [raw, mapped] : [mapped]
+        switch preferredMode {
+        case .rawCanvas:
+            return candidates.contains { $0.coordinateMode == .rawCanvas } ? candidates : [raw, mapped]
+        case .mappedSurface:
+            return candidates.sorted { first, _ in first.coordinateMode == .mappedSurface }
+        case .none:
+            return candidates
+        }
+    }
+
+    private func resolvedCanvasPoint(
+        fromEventPoint eventPoint: AUPoint,
+        canvasFrame: [AUPoint],
+        preferredMode: QuadOSCEventCoordinateMode?
+    ) -> QuadOSCEventResolution {
+        eventResolutions(fromEventPoint: eventPoint, canvasFrame: canvasFrame, preferredMode: preferredMode).first
+            ?? QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvas)
+    }
+
     private func validDragPart(from rawValue: Int) -> QuadOSCPart? {
         guard let part = QuadOSCPart(rawValue: rawValue), part != .none else {
             return nil
@@ -879,19 +1046,35 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         return part
     }
 
-    private func setCorner(_ point: AUPoint, part: QuadOSCPart, mode: AUQuadTransformMode, offsets: AUCornerOffsets, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
-        let ids: (corner: AUQuadCorner, percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam)
-
+    private func corners(forEdgePart part: QuadOSCPart) -> [AUQuadCorner]? {
         switch part {
-        case .topLeft:
-            ids = (.topLeft, .topLeftPercentX, .topLeftPercentY, .topLeftPixelX, .topLeftPixelY)
-        case .topRight:
-            ids = (.topRight, .topRightPercentX, .topRightPercentY, .topRightPixelX, .topRightPixelY)
-        case .bottomRight:
-            ids = (.bottomRight, .bottomRightPercentX, .bottomRightPercentY, .bottomRightPixelX, .bottomRightPixelY)
-        case .bottomLeft:
-            ids = (.bottomLeft, .bottomLeftPercentX, .bottomLeftPercentY, .bottomLeftPixelX, .bottomLeftPixelY)
-        case .none, .quad:
+        case .topEdge:
+            return [.topLeft, .topRight]
+        case .rightEdge:
+            return [.topRight, .bottomRight]
+        case .bottomEdge:
+            return [.bottomLeft, .bottomRight]
+        case .leftEdge:
+            return [.topLeft, .bottomLeft]
+        default:
+            return nil
+        }
+    }
+
+    private func oscHitLayerStyle() -> AUOSCOverlayStyle {
+        var style = AUOSCOverlayStyle()
+        style.lineColor = SIMD4<Float>(1.0, 1.0, 1.0, 0.18)
+        style.shadowColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.0)
+        style.handleColor = SIMD4<Float>(0.0, 0.55, 1.0, 0.18)
+        style.activeHandleColor = SIMD4<Float>(1.0, 0.85, 0.25, 0.30)
+        style.dimOutsideColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.0)
+        style.lineThickness = 2.0
+        style.handleRadius = 14.0
+        return style
+    }
+
+    private func setCorner(_ point: AUPoint, part: QuadOSCPart, mode: AUQuadTransformMode, offsets: AUCornerOffsets, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+        guard let ids = parameterIDs(forCornerPart: part) else {
             return
         }
 
@@ -915,7 +1098,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         }
     }
 
-    private func translateQuad(from state: AnyUprightParameterState, pixelDelta: AUPoint, mode: AUQuadTransformMode, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    private func translateCorners(from state: AnyUprightParameterState, pixelDelta: AUPoint, corners: [AUQuadCorner], mode: AUQuadTransformMode, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         let offsets = quadCornerOffsets(from: state)
 
         if mode == .sourceQuad {
@@ -923,33 +1106,90 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 x: pixelDelta.x / max(size.width, 1.0),
                 y: pixelDelta.y / max(size.height, 1.0)
             )
-            settingAPI.setFloatValue(offsets.topLeftPercent.x + percentDelta.x, toParameter: QuadParam.topLeftPercentX.rawValue, at: time)
-            settingAPI.setFloatValue(offsets.topLeftPercent.y + percentDelta.y, toParameter: QuadParam.topLeftPercentY.rawValue, at: time)
-            settingAPI.setFloatValue(offsets.topRightPercent.x + percentDelta.x, toParameter: QuadParam.topRightPercentX.rawValue, at: time)
-            settingAPI.setFloatValue(offsets.topRightPercent.y + percentDelta.y, toParameter: QuadParam.topRightPercentY.rawValue, at: time)
-            settingAPI.setFloatValue(offsets.bottomRightPercent.x + percentDelta.x, toParameter: QuadParam.bottomRightPercentX.rawValue, at: time)
-            settingAPI.setFloatValue(offsets.bottomRightPercent.y + percentDelta.y, toParameter: QuadParam.bottomRightPercentY.rawValue, at: time)
-            settingAPI.setFloatValue(offsets.bottomLeftPercent.x + percentDelta.x, toParameter: QuadParam.bottomLeftPercentX.rawValue, at: time)
-            settingAPI.setFloatValue(offsets.bottomLeftPercent.y + percentDelta.y, toParameter: QuadParam.bottomLeftPercentY.rawValue, at: time)
-            settingAPI.setFloatValue(0.0, toParameter: QuadParam.topLeftPixelX.rawValue, at: time)
-            settingAPI.setFloatValue(0.0, toParameter: QuadParam.topLeftPixelY.rawValue, at: time)
-            settingAPI.setFloatValue(0.0, toParameter: QuadParam.topRightPixelX.rawValue, at: time)
-            settingAPI.setFloatValue(0.0, toParameter: QuadParam.topRightPixelY.rawValue, at: time)
-            settingAPI.setFloatValue(0.0, toParameter: QuadParam.bottomRightPixelX.rawValue, at: time)
-            settingAPI.setFloatValue(0.0, toParameter: QuadParam.bottomRightPixelY.rawValue, at: time)
-            settingAPI.setFloatValue(0.0, toParameter: QuadParam.bottomLeftPixelX.rawValue, at: time)
-            settingAPI.setFloatValue(0.0, toParameter: QuadParam.bottomLeftPixelY.rawValue, at: time)
+            for corner in corners {
+                let ids = parameterIDs(for: corner)
+                let percent = percentOffset(for: corner, in: offsets)
+                settingAPI.setFloatValue(percent.x + percentDelta.x, toParameter: ids.percentX.rawValue, at: time)
+                settingAPI.setFloatValue(percent.y + percentDelta.y, toParameter: ids.percentY.rawValue, at: time)
+                settingAPI.setFloatValue(0.0, toParameter: ids.pixelX.rawValue, at: time)
+                settingAPI.setFloatValue(0.0, toParameter: ids.pixelY.rawValue, at: time)
+            }
             return
         }
 
-        settingAPI.setFloatValue(offsets.topLeftPixels.x + pixelDelta.x, toParameter: QuadParam.topLeftPixelX.rawValue, at: time)
-        settingAPI.setFloatValue(offsets.topLeftPixels.y + pixelDelta.y, toParameter: QuadParam.topLeftPixelY.rawValue, at: time)
-        settingAPI.setFloatValue(offsets.topRightPixels.x + pixelDelta.x, toParameter: QuadParam.topRightPixelX.rawValue, at: time)
-        settingAPI.setFloatValue(offsets.topRightPixels.y + pixelDelta.y, toParameter: QuadParam.topRightPixelY.rawValue, at: time)
-        settingAPI.setFloatValue(offsets.bottomRightPixels.x + pixelDelta.x, toParameter: QuadParam.bottomRightPixelX.rawValue, at: time)
-        settingAPI.setFloatValue(offsets.bottomRightPixels.y + pixelDelta.y, toParameter: QuadParam.bottomRightPixelY.rawValue, at: time)
-        settingAPI.setFloatValue(offsets.bottomLeftPixels.x + pixelDelta.x, toParameter: QuadParam.bottomLeftPixelX.rawValue, at: time)
-        settingAPI.setFloatValue(offsets.bottomLeftPixels.y + pixelDelta.y, toParameter: QuadParam.bottomLeftPixelY.rawValue, at: time)
+        for corner in corners {
+            let ids = parameterIDs(for: corner)
+            let pixels = pixelOffset(for: corner, in: offsets)
+            settingAPI.setFloatValue(pixels.x + pixelDelta.x, toParameter: ids.pixelX.rawValue, at: time)
+            settingAPI.setFloatValue(pixels.y + pixelDelta.y, toParameter: ids.pixelY.rawValue, at: time)
+        }
+    }
+
+    private func parameterIDs(forCornerPart part: QuadOSCPart) -> (corner: AUQuadCorner, percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam)? {
+        switch part {
+        case .topLeft:
+            return (.topLeft, .topLeftPercentX, .topLeftPercentY, .topLeftPixelX, .topLeftPixelY)
+        case .topRight:
+            return (.topRight, .topRightPercentX, .topRightPercentY, .topRightPixelX, .topRightPixelY)
+        case .bottomRight:
+            return (.bottomRight, .bottomRightPercentX, .bottomRightPercentY, .bottomRightPixelX, .bottomRightPixelY)
+        case .bottomLeft:
+            return (.bottomLeft, .bottomLeftPercentX, .bottomLeftPercentY, .bottomLeftPixelX, .bottomLeftPixelY)
+        default:
+            return nil
+        }
+    }
+
+    private func parameterIDs(for corner: AUQuadCorner) -> (percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam) {
+        switch corner {
+        case .topLeft:
+            return (.topLeftPercentX, .topLeftPercentY, .topLeftPixelX, .topLeftPixelY)
+        case .topRight:
+            return (.topRightPercentX, .topRightPercentY, .topRightPixelX, .topRightPixelY)
+        case .bottomRight:
+            return (.bottomRightPercentX, .bottomRightPercentY, .bottomRightPixelX, .bottomRightPixelY)
+        case .bottomLeft:
+            return (.bottomLeftPercentX, .bottomLeftPercentY, .bottomLeftPixelX, .bottomLeftPixelY)
+        }
+    }
+
+    private func percentOffset(for corner: AUQuadCorner, in offsets: AUCornerOffsets) -> AUPoint {
+        switch corner {
+        case .topLeft:
+            return offsets.topLeftPercent
+        case .topRight:
+            return offsets.topRightPercent
+        case .bottomRight:
+            return offsets.bottomRightPercent
+        case .bottomLeft:
+            return offsets.bottomLeftPercent
+        }
+    }
+
+    private func pixelOffset(for corner: AUQuadCorner, in offsets: AUCornerOffsets) -> AUPoint {
+        switch corner {
+        case .topLeft:
+            return offsets.topLeftPixels
+        case .topRight:
+            return offsets.topRightPixels
+        case .bottomRight:
+            return offsets.bottomRightPixels
+        case .bottomLeft:
+            return offsets.bottomLeftPixels
+        }
+    }
+
+    private func distance(from point: AUPoint, toSegmentStart start: AUPoint, end: AUPoint) -> Double {
+        let vx = end.x - start.x
+        let vy = end.y - start.y
+        let lengthSquared = vx * vx + vy * vy
+        guard lengthSquared > 0.0 else {
+            return hypot(point.x - start.x, point.y - start.y)
+        }
+
+        let t = max(0.0, min(1.0, ((point.x - start.x) * vx + (point.y - start.y) * vy) / lengthSquared))
+        let closest = AUPoint(x: start.x + t * vx, y: start.y + t * vy)
+        return hypot(point.x - closest.x, point.y - closest.y)
     }
 
     private func isPoint(_ point: AUPoint, insideQuad quad: [AUPoint]) -> Bool {
@@ -970,6 +1210,23 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             }
         }
         return true
+    }
+
+    private func isPoint(_ point: AUPoint, insideAxisAlignedFrame frame: [AUPoint]) -> Bool {
+        guard frame.count >= 2 else {
+            return false
+        }
+
+        let xs = frame.map(\.x)
+        let ys = frame.map(\.y)
+        guard let minX = xs.min(),
+              let maxX = xs.max(),
+              let minY = ys.min(),
+              let maxY = ys.max() else {
+            return false
+        }
+
+        return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY
     }
 }
 

@@ -30,6 +30,9 @@ struct AnyUprightGeometryTests {
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
         try testQuadSourceAdjusterPreviewAndApplyUseSameSelection()
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
+        try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
+        try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
+        try testOSCDragPartFallsBackToLocalHitWhenHostPartIsNone()
         try testQuadSourceModeShowsAdjusterBeforeApplyingWarp()
         try testQuadSourceMirrorModesSampleWithinSelectedQuad()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
@@ -281,6 +284,79 @@ struct AnyUprightGeometryTests {
         try assertApprox(bottomEventPoint.y, 759.6, "bottom-left handle event y")
         try assertTrue(eventPoint.y < bottomEventPoint.y, "surface-local mouse events should put visual top above visual bottom")
         try assertEqual(roundTrippedCanvas, canvasTopLeftHandle, "event point should map back to canvas point")
+    }
+
+    static func testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct() throws {
+        let canvasFrame = [
+            AUPoint(x: 531.1, y: 791.2),
+            AUPoint(x: 1811.1, y: 791.2),
+            AUPoint(x: 1811.1, y: 71.2),
+            AUPoint(x: 531.1, y: 71.2)
+        ]
+        let mapper = try unwrap(
+            AUCanvasSurfaceMapper(canvasFrame: canvasFrame, surfaceSize: AUSize(width: 1670.0, height: 844.0)),
+            "canvas mapper"
+        )
+
+        let finalCutCanvasEvent = AUPoint(x: 1811.1, y: 791.2)
+        let motionSurfaceEvent = mapper.eventPoint(fromCanvasPoint: finalCutCanvasEvent)
+
+        try assertEqual(finalCutCanvasEvent, AUPoint(x: 1811.1, y: 791.2), "raw FCP-style canvas event")
+        try assertEqual(mapper.canvasPoint(fromEventPoint: motionSurfaceEvent), finalCutCanvasEvent, "mapped Motion-style event")
+        try assertTrue(motionSurfaceEvent.x < finalCutCanvasEvent.x, "surface-local event should not be mistaken for raw canvas x")
+        try assertTrue(motionSurfaceEvent.y < finalCutCanvasEvent.y, "surface-local event should not be mistaken for raw canvas y")
+    }
+
+    static func testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame() throws {
+        let canvasFrame = [
+            AUPoint(x: 531.1, y: 791.2),
+            AUPoint(x: 1811.1, y: 791.2),
+            AUPoint(x: 1811.1, y: 71.2),
+            AUPoint(x: 531.1, y: 71.2)
+        ]
+        let mapper = try unwrap(
+            AUCanvasSurfaceMapper(canvasFrame: canvasFrame, surfaceSize: AUSize(width: 1670.0, height: 844.0)),
+            "canvas mapper"
+        )
+
+        let draggedOutsideCanvas = AUPoint(x: 1850.0, y: 830.0)
+        let incorrectlyMapped = mapper.canvasPoint(fromEventPoint: draggedOutsideCanvas)
+
+        try assertTrue(draggedOutsideCanvas.x > mapper.maxX, "raw FCP-style canvas drag can leave the object frame")
+        try assertTrue(draggedOutsideCanvas.y > mapper.maxY, "raw FCP-style canvas drag can leave the object frame")
+        try assertTrue(
+            abs(incorrectlyMapped.x - draggedOutsideCanvas.x) > 50.0,
+            "treating an outside raw canvas event as a surface-local event would jump the drag horizontally"
+        )
+        try assertTrue(
+            abs(incorrectlyMapped.y - draggedOutsideCanvas.y) > 100.0,
+            "treating an outside raw canvas event as a surface-local event would jump the drag vertically"
+        )
+    }
+
+    static func testOSCDragPartFallsBackToLocalHitWhenHostPartIsNone() throws {
+        let none = 0
+        let hostHandle = 1
+        let localQuad = 5
+
+        try assertEqual(
+            unwrap(resolveOSCDragPart(hostActivePart: hostHandle, localHitPart: localQuad, nonePart: none), "host drag part"),
+            hostHandle,
+            "host active part should win when it is nonzero"
+        )
+        try assertEqual(
+            unwrap(resolveOSCDragPart(hostActivePart: none, localHitPart: localQuad, nonePart: none), "local drag part"),
+            localQuad,
+            "local quad hit should start a drag when Final Cut passes no active part"
+        )
+        try assertNil(
+            resolveOSCDragPart(hostActivePart: none, localHitPart: none, nonePart: none),
+            "no host part and no local hit should not start a drag"
+        )
+        try assertNil(
+            resolveOSCDragPart(hostActivePart: none, localHitPart: nil, nonePart: none),
+            "nil local hit should not start a drag"
+        )
     }
 
     static func testQuadSourceModeShowsAdjusterBeforeApplyingWarp() throws {
@@ -781,6 +857,12 @@ struct AnyUprightGeometryTests {
     static func assertEqual(_ actual: Int, _ expected: Int, _ label: String) throws {
         guard actual == expected else {
             throw TestFailure.failed("\(label): expected \(expected), got \(actual)")
+        }
+    }
+
+    static func assertNil<T>(_ actual: T?, _ label: String) throws {
+        if let actual {
+            throw TestFailure.failed("\(label): expected nil, got \(actual)")
         }
     }
 }

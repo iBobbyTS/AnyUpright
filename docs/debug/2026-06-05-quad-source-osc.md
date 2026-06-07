@@ -321,3 +321,32 @@ Current status: the Source Quad OSC overlay is no longer just a static visual ov
   - `git diff --check`
   - `xcodebuild -project AnyUpright.xcodeproj -scheme "Wrapper Application" -configuration Debug -derivedDataPath /Users/ibobby/Library/Developer/Xcode/DerivedData/AnyUpright-fmxlkbxylbewbfgffirfqheenyke build`
 - Motion validation: `Quad.moef` showed the Source Quad dimming, outline, and blue handles with `Show Corner Adjuster = on` and Motion's host `Publish OSC = off`. This confirms the visible edit layer no longer depends on the host OSC overlay surface.
+
+## 2026-06-07 FCP Drag Follow-Up
+
+- User report: Final Cut still showed the Source Quad handles but the points could not be dragged.
+- Open-source comparison: `overpolish/keyframeless` remains the closest public FxPlug reference for real Final Cut drag behavior. Its OSC classes register through a separate `FxOnScreenControl` plist entry with `supportedPlugins`, draw real host OSC controls, treat incoming mouse positions as canvas coordinates, and write parameters from `mouseDragged...` with `forceUpdate = YES`.
+- Root-cause hypothesis from the comparison: AnyUpright had moved all visible Source Quad handles into the filter output and cleared the Quad OSC surface. That satisfied the product requirement that the overlay follow the video image, but it also removed the visible host OSC geometry that Final Cut may require for reliable hit testing. Additionally, the Motion-specific surface-local event mapper was applied whenever an OSC surface size existed; Final Cut may deliver raw canvas coordinates instead, matching Keyframeless and Apple examples.
+- Code change: Quad Source now restores a low-alpha host OSC hit layer while keeping the primary visible edit overlay in the filter output. The host OSC layer is only for interaction and should visually sit under the output-rendered handles.
+- Code change: Quad OSC hit testing now considers both raw canvas coordinates and Motion-style surface-local coordinates. `mouseDown` stores the coordinate mode for that drag, and `mouseDragged` uses the stored mode so the drag path cannot jump between coordinate systems.
+- Code change: `mouseDown` now uses the host-provided nonzero `activePart` when available, otherwise falls back to the plug-in's duplicate hit-test result. This avoids rejecting a valid Final Cut drag if its `activePart` dispatch is zero or differs slightly from the plug-in's local hit-test calculation.
+- Regression coverage: `testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct` documents that Final Cut-style raw canvas events and Motion-style surface-local events are distinct and should both remain supported. `testOSCDragPartFallsBackToLocalHitWhenHostPartIsNone` covers the Final Cut risk case where the host passes no active part but the plug-in locally hit-tests the quad body.
+- Validation completed in code:
+  - `xcrun swiftc -module-cache-path /tmp/AnyUprightModuleCache AnyUpright/Plugin/AnyUprightGeometry.swift AnyUpright/Plugin/AnyUprightLineDetection.swift AnyUpright/Plugin/AnyUprightUprightCandidates.swift AnyUprightTests/AnyUprightGeometryTests.swift -o /tmp/AnyUprightGeometryTests`
+  - `/tmp/AnyUprightGeometryTests`
+  - `SDK=$(xcrun --sdk macosx --show-sdk-path) && xcrun swiftc -module-cache-path /tmp/AnyUprightModuleCache -typecheck AnyUpright/Plugin/*.swift -sdk "$SDK" -F /Library/Developer/SDKs/FxPlug.sdk/Library/Frameworks -F /Library/Developer/Frameworks -I AnyUpright/Plugin -import-objc-header "AnyUpright/Plugin/XPC Service-Bridging-Header.h"`
+  - `/tmp/AnyUprightValidateManifest .`
+  - `/tmp/AnyUprightAuditFeatureSurface .`
+  - `xcodebuild -project AnyUpright.xcodeproj -scheme "Wrapper Application" -configuration Debug -derivedDataPath /Users/ibobby/Library/Developer/Xcode/DerivedData/AnyUpright-fmxlkbxylbewbfgffirfqheenyke build`
+- Final Cut validation status: Final Cut was already open with an existing `Quad` effect instance. The viewer showed `Mode = Source Quad`, `Show Corner Adjuster = on`, and four output-rendered handles. Computer Use could read the visible window but direct click/drag actions against `com.apple.FinalCutApp` returned `noWindowsAvailable`; `screencapture` also failed in this sandbox with `could not create image from display`. A temporary `/tmp/AnyUprightQuadOSC.log` diagnostic build produced no log for the already-open Final Cut instance, which means that instance had not called the newly built OSC code. Re-test after restarting Final Cut or adding a fresh Quad effect instance from the newly registered wrapper.
+
+## 2026-06-07 Template Publish OSC Finding
+
+- Apple Motion template documentation says that, for an FxPlug filter with onscreen controls, Final Cut users can use the filter's onscreen controls only if Motion's Filters inspector has `Publish OSC` enabled. The Publishing pane does not show this setting.
+- Local template comparison found a concrete mismatch:
+  - `~/Movies/Motion Templates.localized/Effects.localized/AnyUpright/Quad/Quad.moef` contains only published targets for `Mode` (`198`) and `Show Corner Adjuster` (`199`).
+  - The same file does not contain the current `Stretch Mode` parameter (`197`) and does not contain the built-in FxPlug `Publish OSC` parameter (`10005`).
+  - Local Color Finale `.moef` templates contain `Input Points` (`10003`) followed by `Publish OSC` (`10005`) with `value="1"`.
+- Updated hypothesis: the Final Cut effect template can render AnyUpright's filter output overlay, but cannot dispatch mouse drags to `AnyUprightQuadManualOSCPlugIn` until the template includes/enables `Publish OSC`. This is a template publication issue, not a homography issue.
+- Code-side guard added during this pass: Final Cut-style raw canvas events and Motion-style surface-local events are both supported, and a drag keeps its chosen coordinate mode. In particular, raw canvas drags can move outside the object frame and must not switch to surface-local mapping mid-drag.
+- Repo-local condensed notes for this pass live at `.agent-work/debug/2026-06-07-fcp-source-quad-drag.md`.

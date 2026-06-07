@@ -140,6 +140,18 @@ struct AUCanvasSurfaceMapper {
     }
 }
 
+func resolveOSCDragPart(hostActivePart: Int, localHitPart: Int?, nonePart: Int = 0) -> Int? {
+    if hostActivePart != nonePart {
+        return hostActivePart
+    }
+
+    guard let localHitPart, localHitPart != nonePart else {
+        return nil
+    }
+
+    return localHitPart
+}
+
 enum AnyUprightGeometry {
     private static let sourceQuadInset = 0.10
 

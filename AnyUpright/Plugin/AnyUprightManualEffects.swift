@@ -754,14 +754,21 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
         let size = objectPixelSizeForOSC()
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
-        let resolved = resolvedCanvasPoint(fromEventPoint: eventPoint, canvasFrame: objectCanvasFrame(), preferredMode: storedState?.eventCoordinateMode)
+        let resolved = resolvedCanvasPoint(
+            fromEventPoint: eventPoint,
+            canvasFrame: objectCanvasFrame(),
+            preferredMode: storedState?.eventCoordinateMode
+        )
         let canvasPoint = resolved.canvasPoint
-        let draggedObjectPoint = objectPoint(fromCanvasPoint: canvasPoint)
-        if part == .quad, let previousCanvasPoint = storedState?.lastCanvasPoint {
+        let rawDraggedObjectPoint = objectPoint(fromCanvasPoint: canvasPoint)
+        let draggedObjectPoint = sourceQuadDragPoint(from: rawDraggedObjectPoint, mode: mode, coordinateMode: resolved.coordinateMode)
+        let dragPart = sourceQuadDragPart(from: part, mode: mode, coordinateMode: resolved.coordinateMode)
+        if dragPart == .quad, let previousCanvasPoint = storedState?.lastCanvasPoint {
             let previousObjectPoint = objectPoint(fromCanvasPoint: previousCanvasPoint)
+            let previousDragPoint = sourceQuadDragPoint(from: previousObjectPoint, mode: mode, coordinateMode: resolved.coordinateMode)
             let pixelDelta = AUPoint(
-                x: (draggedObjectPoint.x - previousObjectPoint.x) * size.width,
-                y: (draggedObjectPoint.y - previousObjectPoint.y) * size.height
+                x: (draggedObjectPoint.x - previousDragPoint.x) * size.width,
+                y: (draggedObjectPoint.y - previousDragPoint.y) * size.height
             )
             translateCorners(
                 from: state,
@@ -777,11 +784,12 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             return
         }
 
-        if let edgeCorners = corners(forEdgePart: part), let previousCanvasPoint = storedState?.lastCanvasPoint {
+        if let edgeCorners = corners(forEdgePart: dragPart), let previousCanvasPoint = storedState?.lastCanvasPoint {
             let previousObjectPoint = objectPoint(fromCanvasPoint: previousCanvasPoint)
+            let previousDragPoint = sourceQuadDragPoint(from: previousObjectPoint, mode: mode, coordinateMode: resolved.coordinateMode)
             let pixelDelta = AUPoint(
-                x: (draggedObjectPoint.x - previousObjectPoint.x) * size.width,
-                y: (draggedObjectPoint.y - previousObjectPoint.y) * size.height
+                x: (draggedObjectPoint.x - previousDragPoint.x) * size.width,
+                y: (draggedObjectPoint.y - previousDragPoint.y) * size.height
             )
             translateCorners(
                 from: state,
@@ -798,7 +806,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         }
 
         setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? .rawCanvas))
-        setCorner(draggedObjectPoint, part: part, mode: mode, offsets: quadCornerOffsets(from: state), size: size, settingAPI: settingAPI, time: time)
+        setCorner(draggedObjectPoint, part: dragPart, mode: mode, offsets: quadCornerOffsets(from: state), size: size, settingAPI: settingAPI, time: time)
         forceUpdate?.pointee = true
     }
 
@@ -1040,6 +1048,39 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             return [.topLeft, .bottomLeft]
         default:
             return nil
+        }
+    }
+
+    private func sourceQuadDragPoint(from point: AUPoint, mode: AUQuadTransformMode, coordinateMode: QuadOSCEventCoordinateMode) -> AUPoint {
+        guard mode == .sourceQuad,
+              coordinateMode == .rawCanvas else {
+            return point
+        }
+
+        return AnyUprightGeometry.verticallyFlippedObjectPoint(point)
+    }
+
+    private func sourceQuadDragPart(from part: QuadOSCPart, mode: AUQuadTransformMode, coordinateMode: QuadOSCEventCoordinateMode) -> QuadOSCPart {
+        guard mode == .sourceQuad,
+              coordinateMode == .rawCanvas else {
+            return part
+        }
+
+        switch part {
+        case .topLeft:
+            return .bottomLeft
+        case .topRight:
+            return .bottomRight
+        case .bottomRight:
+            return .topRight
+        case .bottomLeft:
+            return .topLeft
+        case .topEdge:
+            return .bottomEdge
+        case .bottomEdge:
+            return .topEdge
+        default:
+            return part
         }
     }
 

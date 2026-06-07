@@ -356,3 +356,17 @@ Current status: the Source Quad OSC overlay is no longer just a static visual ov
 - User validation after deleting and re-adding the Final Cut effect: Source Quad dragging and final transform are nearly correct. The remaining UX issue is visual duplication: Final Cut shows the image-space source quad and a second host OSC quad, and dragging the outside host handles controls the inner image-space quad.
 - Cleanup: Quad OSC `drawOSC` now updates the host surface-size cache and clears the OSC drawable surface. It keeps `hitTestOSC`, `mouseDown`, and `mouseDragged` active, so the host interaction path remains available while the only visible handles are the image-space handles rendered by the filter output.
 - Risk to watch: if Final Cut requires visible OSC pixels for hit dispatch rather than only an active OSC object plus hit-test return values, this could reduce drag reliability. Re-test by deleting/re-adding the effect after rebuilding.
+
+## 2026-06-07 Canvas Y Direction Retest
+
+- Failed attempt: changing `AUCanvasSurfaceMapper` to use the same Y direction for canvas and surface-local event coordinates did not fix Final Cut dragging. User validation showed clicking the visible top-left handle still changed the bottom-left handle, and dragging downward moved the handle upward.
+- Conclusion: Final Cut's OSC mouse positions for this effect behave like top-origin surface-local coordinates. The mapper must flip Y when converting between surface-local events and canvas/object coordinates.
+- Current behavior to preserve: `eventPoint(fromCanvasPoint:)` maps the visual top-left handle to a smaller event Y than the bottom-left handle, and `canvasPoint(fromEventPoint:)` maps that top-origin event back to the canvas top handle.
+
+## 2026-06-07 Source Quad Raw Canvas Writeback
+
+- User validation after the retest still showed the visible top-left Source Quad handle writing the bottom-left corner, and downward drags moving the stored handle upward.
+- Failed follow-up attempt: adding a new y-flipped-canvas event candidate and making Source Quad hit-test prefer it broke Final Cut dragging; clicks no longer started a drag. Do not change the `hitTestOSC` candidate order just to repair Source Quad Y semantics.
+- Root-cause refinement: the existing hit-test path is needed for host dispatch, but raw canvas Source Quad drags use the opposite Y semantic when writing hidden source-corner parameters.
+- Fix direction: keep the original raw/mapped hit-test candidate order, then in Source Quad writeback only, flip object Y for raw-canvas drags and remap top/bottom corner or edge parts before calling `setCorner`/`translateCorners`.
+- Scope: this changes Source Quad parameter writeback only. Output Corners keeps the existing coordinate behavior.

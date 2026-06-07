@@ -28,6 +28,7 @@ struct AnyUprightGeometryTests {
         try testQuadSourceDefaultsToCentralEightyPercent()
         try testQuadSourceObjectDragPreservesCentralBase()
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
+        try testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting()
         try testQuadSourceAdjusterPreviewAndApplyUseSameSelection()
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
         try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
@@ -217,6 +218,24 @@ struct AnyUprightGeometryTests {
         try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "source object-space drag percent offset")
         try assertEqual(updatedObjectPixels.topLeft, draggedPixel, "source object-space drag target")
         try assertEqual(updatedSourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "source quad should sample the Y-flipped image point matching the visible handle")
+    }
+
+    static func testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        var offsets = AUCornerOffsets()
+        let rawCanvasTopLeftObjectPoint = AUPoint(x: 0.225, y: 0.25)
+        let correctedObjectPoint = AnyUprightGeometry.verticallyFlippedObjectPoint(rawCanvasTopLeftObjectPoint)
+        let percent = AnyUprightGeometry.sourceCornerPercentOffset(
+            forObjectPoint: correctedObjectPoint,
+            corner: .topLeft
+        )
+
+        offsets.topLeftPercent = percent
+        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+
+        try assertEqual(correctedObjectPoint, AUPoint(x: 0.225, y: 0.75), "raw canvas source drag should flip object Y")
+        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "flipped raw canvas source percent")
+        try assertEqual(sourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "flipped raw canvas drag should update the visible top-left source point")
     }
 
     static func testQuadSourceAdjusterPreviewAndApplyUseSameSelection() throws {

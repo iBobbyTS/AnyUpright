@@ -662,25 +662,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         }
 
         updateLastSurfaceSize(from: destinationImage, fallback: AUSize(width: Double(width), height: Double(height)))
-        let size = objectPixelSizeForOSC()
-        let objectPoints = quadObjectPoints(from: state, size: size, mode: mode)
-        let canvasPoints = quadCanvasPoints(from: objectPoints)
-        let points = [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]
-        let handles = [
-            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
-            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
-        ]
-        overlayRenderer.renderQuad(
-            points: points,
-            handles: handles,
-            activePart: activePart,
-            destinationImage: destinationImage,
-            canvasFrame: objectCanvasFrame(),
-            coordinateSpace: .pixels,
-            style: oscHitLayerStyle()
-        )
+        overlayRenderer.clear(destinationImage: destinationImage)
     }
 
     @objc(hitTestOSCAtMousePositionX:mousePositionY:activePart:atTime:)
@@ -1059,18 +1041,6 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         default:
             return nil
         }
-    }
-
-    private func oscHitLayerStyle() -> AUOSCOverlayStyle {
-        var style = AUOSCOverlayStyle()
-        style.lineColor = SIMD4<Float>(1.0, 1.0, 1.0, 0.18)
-        style.shadowColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.0)
-        style.handleColor = SIMD4<Float>(0.0, 0.55, 1.0, 0.18)
-        style.activeHandleColor = SIMD4<Float>(1.0, 0.85, 0.25, 0.30)
-        style.dimOutsideColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.0)
-        style.lineThickness = 2.0
-        style.handleRadius = 14.0
-        return style
     }
 
     private func setCorner(_ point: AUPoint, part: QuadOSCPart, mode: AUQuadTransformMode, offsets: AUCornerOffsets, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {

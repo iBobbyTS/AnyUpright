@@ -350,3 +350,9 @@ Current status: the Source Quad OSC overlay is no longer just a static visual ov
 - Updated hypothesis: the Final Cut effect template can render AnyUpright's filter output overlay, but cannot dispatch mouse drags to `AnyUprightQuadManualOSCPlugIn` until the template includes/enables `Publish OSC`. This is a template publication issue, not a homography issue.
 - Code-side guard added during this pass: Final Cut-style raw canvas events and Motion-style surface-local events are both supported, and a drag keeps its chosen coordinate mode. In particular, raw canvas drags can move outside the object frame and must not switch to surface-local mapping mid-drag.
 - Repo-local condensed notes for this pass live at `.agent-work/debug/2026-06-07-fcp-source-quad-drag.md`.
+
+## 2026-06-07 Single Visible Source Quad Handles
+
+- User validation after deleting and re-adding the Final Cut effect: Source Quad dragging and final transform are nearly correct. The remaining UX issue is visual duplication: Final Cut shows the image-space source quad and a second host OSC quad, and dragging the outside host handles controls the inner image-space quad.
+- Cleanup: Quad OSC `drawOSC` now updates the host surface-size cache and clears the OSC drawable surface. It keeps `hitTestOSC`, `mouseDown`, and `mouseDragged` active, so the host interaction path remains available while the only visible handles are the image-space handles rendered by the filter output.
+- Risk to watch: if Final Cut requires visible OSC pixels for hit dispatch rather than only an active OSC object plus hit-test return values, this could reduce drag reliability. Re-test by deleting/re-adding the effect after rebuilding.

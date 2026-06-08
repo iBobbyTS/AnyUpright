@@ -277,6 +277,8 @@ func resolveOSCDisplayPart(hoverPart: Int, dragPart: Int?, nonePart: Int = 0) ->
 }
 
 enum AnyUprightGeometry {
+    private static let sourceQuadInset = 0.10
+
     static func outputCoordinateBounds(for tileBounds: AUPixelBounds, imageBounds: AUPixelBounds) -> AUOutputCoordinateBounds {
         AUOutputCoordinateBounds(
             left: Double(tileBounds.left - imageBounds.left),
@@ -305,7 +307,12 @@ enum AnyUprightGeometry {
     }
 
     static func sourceQuadDefault(_ size: AUSize) -> AUQuad {
-        AUQuad.fullFrame(size)
+        AUQuad(
+            topLeft: AUPoint(x: size.width * sourceQuadInset, y: size.height * sourceQuadInset),
+            topRight: AUPoint(x: size.width * (1.0 - sourceQuadInset), y: size.height * sourceQuadInset),
+            bottomRight: AUPoint(x: size.width * (1.0 - sourceQuadInset), y: size.height * (1.0 - sourceQuadInset)),
+            bottomLeft: AUPoint(x: size.width * sourceQuadInset, y: size.height * (1.0 - sourceQuadInset))
+        )
     }
 
     static func sourceQuad(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
@@ -826,7 +833,12 @@ enum AnyUprightGeometry {
     }
 
     private static func sourceQuadObjectBase() -> AUQuad {
-        fullFrameObjectBase()
+        AUQuad(
+            topLeft: AUPoint(x: sourceQuadInset, y: 1.0 - sourceQuadInset),
+            topRight: AUPoint(x: 1.0 - sourceQuadInset, y: 1.0 - sourceQuadInset),
+            bottomRight: AUPoint(x: 1.0 - sourceQuadInset, y: sourceQuadInset),
+            bottomLeft: AUPoint(x: sourceQuadInset, y: sourceQuadInset)
+        )
     }
 
     private static func objectBasePoint(for corner: AUQuadCorner, in base: AUQuad) -> AUPoint {

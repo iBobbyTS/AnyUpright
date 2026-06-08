@@ -25,8 +25,9 @@ struct AnyUprightGeometryTests {
         try testQuadObjectPointsKeepCanvasCornerDefinitions()
         try testQuadObjectDragPreservesPercentAndWritesPixelOffsets()
         try testQuadOutputCornersKeepTheirNamedPositions()
-        try testQuadSourceDefaultsToFullFrame()
-        try testQuadSourceObjectDragPreservesFullFrameBase()
+        try testQuadSourceDefaultsToCentralEightyPercent()
+        try testQuadSourceObjectDragPreservesCentralBase()
+        try testQuadSourceFullFrameSelectionHasNoDYDrift()
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
         try testQuadSourceOSCPixelDragDoesNotFlipYAgain()
         try testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting()
@@ -155,7 +156,7 @@ struct AnyUprightGeometryTests {
         try assertMaps(matrix, outputQuad.bottomLeft, to: AUPoint(x: 0.0, y: size.height))
     }
 
-    static func testQuadSourceDefaultsToFullFrame() throws {
+    static func testQuadSourceDefaultsToCentralEightyPercent() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         let offsets = AUCornerOffsets()
         let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
@@ -168,23 +169,23 @@ struct AnyUprightGeometryTests {
             sourceSize: size
         )
 
-        try assertEqual(sourceQuad.topLeft, AUPoint(x: 0.0, y: 0.0), "source default top-left")
-        try assertEqual(sourceQuad.topRight, AUPoint(x: 200.0, y: 0.0), "source default top-right")
-        try assertEqual(sourceQuad.bottomRight, AUPoint(x: 200.0, y: 100.0), "source default bottom-right")
-        try assertEqual(sourceQuad.bottomLeft, AUPoint(x: 0.0, y: 100.0), "source default bottom-left")
+        try assertEqual(sourceQuad.topLeft, AUPoint(x: 20.0, y: 10.0), "source default top-left")
+        try assertEqual(sourceQuad.topRight, AUPoint(x: 180.0, y: 10.0), "source default top-right")
+        try assertEqual(sourceQuad.bottomRight, AUPoint(x: 180.0, y: 90.0), "source default bottom-right")
+        try assertEqual(sourceQuad.bottomLeft, AUPoint(x: 20.0, y: 90.0), "source default bottom-left")
 
-        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.0, y: 1.0), "source default object top-left")
-        try assertEqual(objectPoints.topRight, AUPoint(x: 1.0, y: 1.0), "source default object top-right")
-        try assertEqual(objectPoints.bottomRight, AUPoint(x: 1.0, y: 0.0), "source default object bottom-right")
-        try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.0, y: 0.0), "source default object bottom-left")
+        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.10, y: 0.90), "source default object top-left")
+        try assertEqual(objectPoints.topRight, AUPoint(x: 0.90, y: 0.90), "source default object top-right")
+        try assertEqual(objectPoints.bottomRight, AUPoint(x: 0.90, y: 0.10), "source default object bottom-right")
+        try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.10, y: 0.10), "source default object bottom-left")
 
-        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: AUPoint(x: 0.0, y: 0.0))
-        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: AUPoint(x: size.width, y: 0.0))
-        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: AUPoint(x: size.width, y: size.height))
-        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: AUPoint(x: 0.0, y: size.height))
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: sourceQuad.topLeft)
+        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: sourceQuad.topRight)
+        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: sourceQuad.bottomRight)
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: sourceQuad.bottomLeft)
     }
 
-    static func testQuadSourceObjectDragPreservesFullFrameBase() throws {
+    static func testQuadSourceObjectDragPreservesCentralBase() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
 
@@ -197,9 +198,44 @@ struct AnyUprightGeometryTests {
         let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
         let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
 
-        try assertEqual(percent, AUPoint(x: 0.20, y: -0.20), "source dragged top-left percent offset")
+        try assertEqual(percent, AUPoint(x: 0.10, y: -0.10), "source dragged top-left percent offset")
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "source dragged top-left object point")
         try assertEqual(sourceQuad.topLeft, AUPoint(x: 40.0, y: 20.0), "source dragged top-left source point")
+    }
+
+    static func testQuadSourceFullFrameSelectionHasNoDYDrift() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let offsets = fullFrameSourceOffsets()
+        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+        let outputHandles = AnyUprightGeometry.sourceQuadOutputHandles(
+            from: offsets,
+            outputSize: size,
+            sourceSize: size
+        )
+        let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
+            from: offsets,
+            mode: .sourceQuad,
+            showCornerAdjuster: false,
+            outputSize: size,
+            sourceSize: size
+        )
+
+        try assertEqual(sourceQuad.topLeft, AUPoint(x: 0.0, y: 0.0), "full-frame top-left")
+        try assertEqual(sourceQuad.topRight, AUPoint(x: size.width, y: 0.0), "full-frame top-right")
+        try assertEqual(sourceQuad.bottomRight, AUPoint(x: size.width, y: size.height), "full-frame bottom-right")
+        try assertEqual(sourceQuad.bottomLeft, AUPoint(x: 0.0, y: size.height), "full-frame bottom-left")
+
+        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.0, y: 1.0), "full-frame object top-left")
+        try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.0, y: 0.0), "full-frame object bottom-left")
+        try assertEqual(outputHandles.topLeft, AUPoint(x: 0.0, y: 0.0), "full-frame output handle top-left")
+        try assertEqual(outputHandles.bottomLeft, AUPoint(x: 0.0, y: size.height), "full-frame output handle bottom-left")
+
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: AUPoint(x: 0.0, y: 0.0))
+        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: AUPoint(x: size.width, y: 0.0))
+        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: AUPoint(x: size.width, y: size.height))
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: AUPoint(x: 0.0, y: size.height))
+        try assertMaps(appliedMatrix, AUPoint(x: size.width / 2.0, y: size.height / 2.0), to: AUPoint(x: size.width / 2.0, y: size.height / 2.0))
     }
 
     static func testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents() throws {
@@ -208,10 +244,10 @@ struct AnyUprightGeometryTests {
         let defaultObjectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
         let defaultPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: defaultObjectPoints, size: size)
 
-        try assertEqual(defaultPixels.topLeft, AUPoint(x: 0.0, y: 100.0), "source object top-left pixel")
-        try assertEqual(defaultPixels.topRight, AUPoint(x: 200.0, y: 100.0), "source object top-right pixel")
-        try assertEqual(defaultPixels.bottomRight, AUPoint(x: 200.0, y: 0.0), "source object bottom-right pixel")
-        try assertEqual(defaultPixels.bottomLeft, AUPoint(x: 0.0, y: 0.0), "source object bottom-left pixel")
+        try assertEqual(defaultPixels.topLeft, AUPoint(x: 20.0, y: 90.0), "source object top-left pixel")
+        try assertEqual(defaultPixels.topRight, AUPoint(x: 180.0, y: 90.0), "source object top-right pixel")
+        try assertEqual(defaultPixels.bottomRight, AUPoint(x: 180.0, y: 10.0), "source object bottom-right pixel")
+        try assertEqual(defaultPixels.bottomLeft, AUPoint(x: 20.0, y: 10.0), "source object bottom-left pixel")
 
         let draggedPixel = AUPoint(x: 45.0, y: 75.0)
         let draggedNormalized = AnyUprightGeometry.normalizedObjectPoint(fromObjectPixelPoint: draggedPixel, size: size)
@@ -226,7 +262,7 @@ struct AnyUprightGeometryTests {
             size: size
         )
         let updatedSourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
-        try assertEqual(percent, AUPoint(x: 0.225, y: -0.25), "source object-space drag percent offset")
+        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "source object-space drag percent offset")
         try assertEqual(updatedObjectPixels.topLeft, draggedPixel, "source object-space drag target")
         try assertEqual(updatedSourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "source quad should sample the Y-flipped image point matching the visible handle")
     }
@@ -248,7 +284,7 @@ struct AnyUprightGeometryTests {
         let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
 
         try assertEqual(objectPoint, AUPoint(x: 0.225, y: 0.75), "osc pixel drag object point")
-        try assertEqual(percent, AUPoint(x: 0.225, y: -0.25), "osc pixel drag percent")
+        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "osc pixel drag percent")
         try assertEqual(sourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "osc pixel drag should not flip Y a second time")
     }
 
@@ -266,14 +302,14 @@ struct AnyUprightGeometryTests {
         let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
 
         try assertEqual(correctedObjectPoint, AUPoint(x: 0.225, y: 0.75), "raw canvas source drag should flip object Y")
-        try assertEqual(percent, AUPoint(x: 0.225, y: -0.25), "flipped raw canvas source percent")
+        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "flipped raw canvas source percent")
         try assertEqual(sourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "flipped raw canvas drag should update the visible top-left source point")
     }
 
     static func testQuadSourceRawCanvasHitPointsFollowVisibleSourceQuad() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
-        offsets.topLeftPercent = AUPoint(x: 0.225, y: -0.25)
+        offsets.topLeftPercent = AUPoint(x: 0.125, y: -0.15)
 
         let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
         let staleObjectPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: objectPoints, size: size)
@@ -296,9 +332,9 @@ struct AnyUprightGeometryTests {
         )
         let oscQuad = AnyUprightGeometry.verticallyFlippedPixelQuad(sourceQuad, size: size)
 
-        try assertEqual(sourceQuad.topLeft, AUPoint(x: 0.0, y: 0.0), "source top-left")
-        try assertEqual(oscQuad.topLeft, AUPoint(x: 0.0, y: 100.0), "osc top-left")
-        try assertEqual(oscQuad.bottomLeft, AUPoint(x: 0.0, y: 0.0), "osc bottom-left")
+        try assertEqual(sourceQuad.topLeft, AUPoint(x: 20.0, y: 10.0), "source top-left")
+        try assertEqual(oscQuad.topLeft, AUPoint(x: 20.0, y: 90.0), "osc top-left")
+        try assertEqual(oscQuad.bottomLeft, AUPoint(x: 20.0, y: 10.0), "osc bottom-left")
     }
 
     static func testDistanceToQuadEdgeUsesOutputPixelSegments() throws {
@@ -1021,6 +1057,15 @@ struct AnyUprightGeometryTests {
         guard actual == expected else {
             throw TestFailure.failed("\(label): expected \(expected), got \(actual)")
         }
+    }
+
+    static func fullFrameSourceOffsets() -> AUCornerOffsets {
+        AUCornerOffsets(
+            topLeftPercent: AUPoint(x: -0.10, y: 0.10),
+            topRightPercent: AUPoint(x: 0.10, y: 0.10),
+            bottomRightPercent: AUPoint(x: 0.10, y: -0.10),
+            bottomLeftPercent: AUPoint(x: -0.10, y: -0.10)
+        )
     }
 
     static func line(angleDegrees: Double, length: Double) -> AULineSegment {

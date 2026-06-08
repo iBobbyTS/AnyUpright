@@ -39,6 +39,23 @@ struct AULineSegment: Equatable {
     var length: Double {
         hypot(end.x - start.x, end.y - start.y)
     }
+
+    func distance(to point: AUPoint) -> Double {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let lengthSquared = dx * dx + dy * dy
+        guard lengthSquared > 0.000001 else {
+            return hypot(point.x - start.x, point.y - start.y)
+        }
+
+        let projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared
+        let clampedProjection = min(1.0, max(0.0, projection))
+        let closest = AUPoint(
+            x: start.x + dx * clampedProjection,
+            y: start.y + dy * clampedProjection
+        )
+        return hypot(point.x - closest.x, point.y - closest.y)
+    }
 }
 
 enum AUReferenceOrientation {
@@ -236,6 +253,17 @@ enum AnyUprightGeometry {
             bottomRight: verticallyFlippedPixelPoint(quad.bottomRight, size: size),
             bottomLeft: verticallyFlippedPixelPoint(quad.bottomLeft, size: size)
         )
+    }
+
+    static func distanceToQuadEdge(from point: AUPoint, quad: AUQuad) -> Double {
+        [
+            AULineSegment(start: quad.topLeft, end: quad.topRight),
+            AULineSegment(start: quad.topRight, end: quad.bottomRight),
+            AULineSegment(start: quad.bottomRight, end: quad.bottomLeft),
+            AULineSegment(start: quad.bottomLeft, end: quad.topLeft)
+        ].reduce(Double.greatestFiniteMagnitude) { partial, segment in
+            min(partial, segment.distance(to: point))
+        }
     }
 
     private static func quadObjectPoints(from offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUQuad {

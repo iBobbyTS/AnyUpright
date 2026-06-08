@@ -30,6 +30,7 @@ struct AnyUprightGeometryTests {
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
         try testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting()
         try testQuadSourceRawCanvasHitPointsFollowVisibleSourceQuad()
+        try testDistanceToQuadEdgeUsesOutputPixelSegments()
         try testQuadSourceAdjusterPreviewAndApplyUseSameSelection()
         try testQuadSourceOutputHandlesStayInImageSpace()
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
@@ -269,6 +270,19 @@ struct AnyUprightGeometryTests {
         try assertEqual(sourceQuad.topLeft, AUPoint(x: 20.0, y: 10.0), "source top-left")
         try assertEqual(oscQuad.topLeft, AUPoint(x: 20.0, y: 90.0), "osc top-left")
         try assertEqual(oscQuad.bottomLeft, AUPoint(x: 20.0, y: 10.0), "osc bottom-left")
+    }
+
+    static func testDistanceToQuadEdgeUsesOutputPixelSegments() throws {
+        let quad = AUQuad(
+            topLeft: AUPoint(x: 20.0, y: 10.0),
+            topRight: AUPoint(x: 180.0, y: 10.0),
+            bottomRight: AUPoint(x: 150.0, y: 90.0),
+            bottomLeft: AUPoint(x: 20.0, y: 90.0)
+        )
+
+        try assertApprox(AnyUprightGeometry.distanceToQuadEdge(from: AUPoint(x: 100.0, y: 13.0), quad: quad), 3.0, "top edge distance")
+        try assertApprox(AnyUprightGeometry.distanceToQuadEdge(from: AUPoint(x: 150.0, y: 14.0), quad: quad), 4.0, "top edge distance near slanted side")
+        try assertApprox(AnyUprightGeometry.distanceToQuadEdge(from: AUPoint(x: 165.0, y: 50.0), quad: quad), 0.0, "slanted edge distance")
     }
 
     static func testQuadSourceAdjusterPreviewAndApplyUseSameSelection() throws {

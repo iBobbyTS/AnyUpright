@@ -22,16 +22,28 @@ typedef struct
     float4 color;
 } OverlayRasterizerData;
 
-static float coverageInside(float signedOutsideDistance)
-{
-    float aa = max(fwidth(signedOutsideDistance), 0.75);
-    return 1.0 - smoothstep(-aa, aa, signedOutsideDistance);
-}
-
 static float coverageWithinRadius(float distance, float radius)
 {
     float aa = max(fwidth(distance), 0.75);
     return 1.0 - smoothstep(radius - aa, radius + aa, distance);
+}
+
+static float coverageBoundary(float distance)
+{
+    float aa = max(fwidth(distance), 0.75);
+    return 1.0 - smoothstep(0.0, aa, distance);
+}
+
+static float distanceToSegment(float2 point, float2 start, float2 end)
+{
+    float2 delta = end - start;
+    float lengthSquared = dot(delta, delta);
+    if (lengthSquared <= 0.000001) {
+        return length(point - start);
+    }
+
+    float projection = clamp(dot(point - start, delta) / lengthSquared, 0.0, 1.0);
+    return length(point - (start + delta * projection));
 }
 
 vertex RasterizerData anyUprightWarpVertex(uint vertexID [[vertex_id]],
@@ -77,20 +89,6 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
             return color;
         }
 
-        float2 rectPoint = selectionHomogeneous.xy / selectionHomogeneous.z;
-        float2 outputSize = warpState->outputSize;
-        float borderDistance = min(
-            min(abs(rectPoint.x), abs(outputSize.x - rectPoint.x)),
-            min(abs(rectPoint.y), abs(outputSize.y - rectPoint.y))
-        );
-        float outsideDistance = max(
-            max(-rectPoint.x, rectPoint.x - outputSize.x),
-            max(-rectPoint.y, rectPoint.y - outputSize.y)
-        );
-        float insideSelection = coverageInside(outsideDistance);
-
-        color.rgb *= mix(0.70, 1.0, insideSelection);
-
         float2 handleCenters[4] = {
             warpState->sourceQuadTopLeft,
             warpState->sourceQuadTopRight,
@@ -98,14 +96,35 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
             warpState->sourceQuadBottomLeft
         };
 
+        float edgeDistance = min(
+            min(
+                distanceToSegment(in.outputCoordinate, handleCenters[0], handleCenters[1]),
+                distanceToSegment(in.outputCoordinate, handleCenters[1], handleCenters[2])
+            ),
+            min(
+                distanceToSegment(in.outputCoordinate, handleCenters[2], handleCenters[3]),
+                distanceToSegment(in.outputCoordinate, handleCenters[3], handleCenters[0])
+            )
+        );
+        float2 rectPoint = selectionHomogeneous.xy / selectionHomogeneous.z;
+        float2 outputSize = warpState->outputSize;
+        float outsideDistance = max(
+            max(-rectPoint.x, rectPoint.x - outputSize.x),
+            max(-rectPoint.y, rectPoint.y - outputSize.y)
+        );
+        float insideSelection = outsideDistance <= 0.0 ? 1.0 : 0.0;
+        float boundaryCoverage = coverageBoundary(edgeDistance);
+        float dimAmount = (1.0 - insideSelection) * (1.0 - boundaryCoverage);
+
+        color.rgb *= mix(1.0, 0.70, dimAmount);
+
         float handleDistance = 1000000.0;
         for (int i = 0; i < 4; ++i) {
             handleDistance = min(handleDistance, length(in.outputCoordinate - handleCenters[i]));
         }
 
-        float edgeCoverage = coverageWithinRadius(max(outsideDistance, 0.0), 4.0);
-        float edgeShadow = edgeCoverage * coverageWithinRadius(borderDistance, 5.0);
-        float edgeLine = edgeCoverage * coverageWithinRadius(borderDistance, 3.0);
+        float edgeShadow = coverageWithinRadius(edgeDistance, 5.0);
+        float edgeLine = coverageWithinRadius(edgeDistance, 3.0);
         float handleShadow = coverageWithinRadius(handleDistance, 22.0);
         float handleFill = coverageWithinRadius(handleDistance, 16.0);
 

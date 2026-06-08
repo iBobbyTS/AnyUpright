@@ -251,13 +251,14 @@ struct RenderWarpPreviews {
                     rectPoint.y >= 0.0 &&
                     rectPoint.y <= outputSize.height
 
-                if !inside {
-                    color = dimmed(color, factor: 0.70)
-                }
-                let edgeShadowCoverage = selectionBorderCoverage(rectPoint, outputSize: outputSize, radius: 5.0)
-                let edgeLineCoverage = selectionBorderCoverage(rectPoint, outputSize: outputSize, radius: 3.0)
+                let edgeShadowCoverage = selectionBorderCoverage(outputPoint: outputPoint, handles: sourceQuadHandles, radius: 5.0)
+                let edgeLineCoverage = selectionBorderCoverage(outputPoint: outputPoint, handles: sourceQuadHandles, radius: 3.0)
+                let dimBoundaryCoverage = selectionBorderCoverage(outputPoint: outputPoint, handles: sourceQuadHandles, radius: 1.0)
                 let handleShadowCoverage = selectionHandleCoverage(outputPoint, handles: sourceQuadHandles, radius: 22.0)
                 let handleFillCoverage = selectionHandleCoverage(outputPoint, handles: sourceQuadHandles, radius: 16.0)
+                if !inside {
+                    color = dimmed(color, factor: 1.0 - 0.30 * (1.0 - dimBoundaryCoverage))
+                }
                 color = mix(color, (0, 0, 0, 255), edgeShadowCoverage * 0.70)
                 color = mix(color, (255, 255, 255, 255), edgeLineCoverage)
                 color = mix(color, (0, 0, 0, 255), handleShadowCoverage * 0.70)
@@ -322,18 +323,9 @@ struct RenderWarpPreviews {
         return (channel(a.0, b.0), channel(a.1, b.1), channel(a.2, b.2), a.3)
     }
 
-    private static func selectionBorderCoverage(_ point: AUPoint, outputSize: AUSize, radius: Double) -> Double {
-        let outsideDistance = max(
-            max(-point.x, point.x - outputSize.width),
-            max(-point.y, point.y - outputSize.height)
-        )
-        let edgeCoverage = coverage(distance: max(outsideDistance, 0.0), radius: 4.0)
-
-        let distance = min(
-            min(abs(point.x), abs(outputSize.width - point.x)),
-            min(abs(point.y), abs(outputSize.height - point.y))
-        )
-        return edgeCoverage * coverage(distance: distance, radius: radius)
+    private static func selectionBorderCoverage(outputPoint: AUPoint, handles: AUQuad, radius: Double) -> Double {
+        let distance = AnyUprightGeometry.distanceToQuadEdge(from: outputPoint, quad: handles)
+        return coverage(distance: distance, radius: radius)
     }
 
     private static func selectionHandleCoverage(_ point: AUPoint, handles: AUQuad, radius: Double) -> Double {

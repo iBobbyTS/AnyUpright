@@ -39,6 +39,7 @@ struct AnyUprightGeometryTests {
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
         try testAspectFitPixelSurfaceMapperKeepsHitTestingInsideVideoFrame()
         try testOSCDragPartFallsBackToLocalHitWhenHostPartIsNone()
+        try testOSCDisplayPartKeepsDragHighlightedWhenHoverStops()
         try testQuadSourceModeShowsAdjusterBeforeApplyingWarp()
         try testQuadSourceMirrorModesSampleWithinSelectedQuad()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
@@ -495,6 +496,33 @@ struct AnyUprightGeometryTests {
         try assertNil(
             resolveOSCDragPart(hostActivePart: none, localHitPart: nil, nonePart: none),
             "nil local hit should not start a drag"
+        )
+    }
+
+    static func testOSCDisplayPartKeepsDragHighlightedWhenHoverStops() throws {
+        let none = 0
+        let hoverHandle = 1
+        let dragEdge = 6
+
+        try assertEqual(
+            resolveOSCDisplayPart(hoverPart: hoverHandle, dragPart: nil, nonePart: none),
+            hoverHandle,
+            "hover part should display when not dragging"
+        )
+        try assertEqual(
+            resolveOSCDisplayPart(hoverPart: none, dragPart: dragEdge, nonePart: none),
+            dragEdge,
+            "drag part should stay highlighted even when hover events stop during drag"
+        )
+        try assertEqual(
+            resolveOSCDisplayPart(hoverPart: hoverHandle, dragPart: dragEdge, nonePart: none),
+            dragEdge,
+            "active drag part should override stale hover part"
+        )
+        try assertEqual(
+            resolveOSCDisplayPart(hoverPart: none, dragPart: none, nonePart: none),
+            none,
+            "no hover and no drag should not display a highlight"
         )
     }
 

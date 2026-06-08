@@ -241,6 +241,14 @@ func resolveOSCDragPart(hostActivePart: Int, localHitPart: Int?, nonePart: Int =
     return localHitPart
 }
 
+func resolveOSCDisplayPart(hoverPart: Int, dragPart: Int?, nonePart: Int = 0) -> Int {
+    if let dragPart, dragPart != nonePart {
+        return dragPart
+    }
+
+    return hoverPart
+}
+
 enum AnyUprightGeometry {
     private static let sourceQuadInset = 0.10
 

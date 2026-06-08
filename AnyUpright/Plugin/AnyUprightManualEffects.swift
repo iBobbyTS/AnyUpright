@@ -682,8 +682,8 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         }
 
         updateLastSurfaceSize(from: destinationImage, fallback: AUSize(width: Double(width), height: Double(height)))
-        let hoverPart = currentHoverPart()
-        guard hoverPart != .none else {
+        let displayPart = currentDisplayPart()
+        guard displayPart != .none else {
             overlayRenderer.clear(destinationImage: destinationImage)
             return
         }
@@ -700,9 +700,9 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let quad = [hoverPoints.topLeft, hoverPoints.topRight, hoverPoints.bottomRight, hoverPoints.bottomLeft]
 
         overlayRenderer.renderStyledSegments(
-            highlightedSegments(for: hoverPart, quad: quad),
-            handles: highlightedHandles(for: hoverPart, handles: handles),
-            activePart: hoverPart.rawValue,
+            highlightedSegments(for: displayPart, quad: quad),
+            handles: highlightedHandles(for: displayPart, handles: handles),
+            activePart: displayPart.rawValue,
             destinationImage: destinationImage,
             destinationSize: outputSize,
             coordinateSpace: .pixels,
@@ -1010,6 +1010,16 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let part = hoverPart
         hoverStateLock.unlock()
         return part
+    }
+
+    private func currentDisplayPart() -> QuadOSCPart {
+        let hoverPart = currentHoverPart()
+        let rawDisplayPart = resolveOSCDisplayPart(
+            hoverPart: hoverPart.rawValue,
+            dragPart: currentDragState()?.part.rawValue,
+            nonePart: QuadOSCPart.none.rawValue
+        )
+        return QuadOSCPart(rawValue: rawDisplayPart) ?? .none
     }
 
     private func updateLastSurfaceSize(from image: FxImageTile, fallback: AUSize) {

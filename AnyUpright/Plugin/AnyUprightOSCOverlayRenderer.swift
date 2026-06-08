@@ -7,6 +7,11 @@ import Foundation
 import IOSurface
 import Metal
 
+enum AUOSCOverlayHandleShape {
+    case square
+    case circle
+}
+
 struct AUOSCOverlayStyle {
     var lineColor = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
     var shadowColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.75)
@@ -15,6 +20,7 @@ struct AUOSCOverlayStyle {
     var activeHandleColor = SIMD4<Float>(1.0, 0.85, 0.25, 1.0)
     var lineThickness: Double = 3.0
     var handleRadius: Double = 15.0
+    var handleShape: AUOSCOverlayHandleShape = .square
 }
 
 struct AUOSCHandle {
@@ -259,8 +265,8 @@ final class AnyUprightOSCOverlayRenderer {
         }
         for handle in handles {
             let color = handle.part == activePart ? handleStyle.activeHandleColor : handleStyle.handleColor
-            appendSquare(center: handle.point, radius: handleStyle.handleRadius + 2.0, color: handleStyle.shadowColor, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
-            appendSquare(center: handle.point, radius: handleStyle.handleRadius, color: color, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
+            appendHandle(center: handle.point, radius: handleStyle.handleRadius + 2.0, color: handleStyle.shadowColor, shape: handleStyle.handleShape, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
+            appendHandle(center: handle.point, radius: handleStyle.handleRadius, color: color, shape: handleStyle.handleShape, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
         }
 
         guard !vertices.isEmpty else {
@@ -413,6 +419,70 @@ final class AnyUprightOSCOverlayRenderer {
         )
     }
 
+    private func appendHandle(
+        center: AUPoint,
+        radius: Double,
+        color: SIMD4<Float>,
+        shape: AUOSCOverlayHandleShape,
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        coordinateSize: AUSize,
+        pixelFrame: AUOSCOverlayPixelFrame,
+        width: Double,
+        height: Double,
+        to vertices: inout [AnyUprightOverlayVertex2D]
+    ) {
+        switch shape {
+        case .square:
+            appendSquare(
+                center: center,
+                radius: radius,
+                color: color,
+                coordinateSpace: coordinateSpace,
+                coordinateSize: coordinateSize,
+                pixelFrame: pixelFrame,
+                width: width,
+                height: height,
+                to: &vertices
+            )
+        case .circle:
+            appendCircle(
+                center: center,
+                radius: radius,
+                color: color,
+                coordinateSpace: coordinateSpace,
+                coordinateSize: coordinateSize,
+                pixelFrame: pixelFrame,
+                width: width,
+                height: height,
+                to: &vertices
+            )
+        }
+    }
+
+    private func appendCircle(
+        center: AUPoint,
+        radius: Double,
+        color: SIMD4<Float>,
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        coordinateSize: AUSize,
+        pixelFrame: AUOSCOverlayPixelFrame,
+        width: Double,
+        height: Double,
+        to vertices: inout [AnyUprightOverlayVertex2D]
+    ) {
+        let centerPixel = localPixel(from: center, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
+        let segmentCount = 48
+
+        for index in 0..<segmentCount {
+            let angle0 = Double(index) / Double(segmentCount) * Double.pi * 2.0
+            let angle1 = Double(index + 1) / Double(segmentCount) * Double.pi * 2.0
+            let p0 = centerPixel
+            let p1 = centerPixel + SIMD2<Double>(cos(angle0) * radius, sin(angle0) * radius)
+            let p2 = centerPixel + SIMD2<Double>(cos(angle1) * radius, sin(angle1) * radius)
+            appendTriangle(p0: p0, p1: p1, p2: p2, color: color, width: width, height: height, to: &vertices)
+        }
+    }
+
     private func appendCoordinateQuad(
         _ points: [AUPoint],
         color: SIMD4<Float>,
@@ -527,6 +597,27 @@ final class AnyUprightOSCOverlayRenderer {
         to vertices: inout [AnyUprightOverlayVertex2D]
     ) {
         let converted = [p0, p1, p2, p0, p2, p3].map { point in
+            AnyUprightOverlayVertex2D(
+                position: SIMD2<Float>(
+                    Float(point.x - width / 2.0),
+                    Float(point.y - height / 2.0)
+                ),
+                color: color
+            )
+        }
+        vertices.append(contentsOf: converted)
+    }
+
+    private func appendTriangle(
+        p0: SIMD2<Double>,
+        p1: SIMD2<Double>,
+        p2: SIMD2<Double>,
+        color: SIMD4<Float>,
+        width: Double,
+        height: Double,
+        to vertices: inout [AnyUprightOverlayVertex2D]
+    ) {
+        let converted = [p0, p1, p2].map { point in
             AnyUprightOverlayVertex2D(
                 position: SIMD2<Float>(
                     Float(point.x - width / 2.0),

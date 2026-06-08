@@ -640,8 +640,10 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     private let overlayRenderer = AnyUprightOSCOverlayRenderer()
     private let dragStateLock = NSLock()
     private let surfaceSizeLock = NSLock()
+    private let hoverStateLock = NSLock()
     private var dragState: QuadOSCDragState?
     private var lastSurfaceSize = AUSize(width: 1.0, height: 1.0)
+    private var hoverPart: QuadOSCPart = .none
 
     required init?(apiManager: PROAPIAccessing) {
         super.init(apiManager: apiManager)
@@ -662,7 +664,33 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         }
 
         updateLastSurfaceSize(from: destinationImage, fallback: AUSize(width: Double(width), height: Double(height)))
-        overlayRenderer.clear(destinationImage: destinationImage)
+        let hoverPart = currentHoverPart()
+        guard hoverPart != .none else {
+            overlayRenderer.clear(destinationImage: destinationImage)
+            return
+        }
+
+        let size = objectPixelSizeForOSC()
+        let objectPoints = quadObjectPoints(from: state, size: size, mode: mode)
+        let canvasPoints = rawHitTestCanvasPoints(from: objectPoints, mode: mode)
+        let handles = [
+            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+        ]
+        let quad = [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]
+
+        overlayRenderer.renderStyledSegments(
+            highlightedSegments(for: hoverPart, quad: quad),
+            handles: highlightedHandles(for: hoverPart, handles: handles),
+            activePart: hoverPart.rawValue,
+            destinationImage: destinationImage,
+            destinationSize: AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height))),
+            canvasFrame: objectCanvasFrame(),
+            coordinateSpace: .pixels,
+            handleStyle: hoverOverlayStyle()
+        )
     }
 
     @objc(hitTestOSCAtMousePositionX:mousePositionY:activePart:atTime:)
@@ -707,6 +735,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
     @objc(mouseDownAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
+        setHoverPart(.none, forceUpdate: nil)
         let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
         let mode = quadMode(from: state)
         let size = objectPixelSizeForOSC()
@@ -830,28 +859,32 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     @objc(mouseUpAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseUp(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         setDragState(nil)
+        let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
+        updateHoverPart(forEventPoint: eventPoint, at: time, forceUpdate: forceUpdate)
         forceUpdate?.pointee = true
     }
 
     @objc(mouseEnteredAtPositionX:positionY:modifiers:forceUpdate:atTime:)
     func mouseEntered(atPositionX mousePositionX: Double, positionY mousePositionY: Double, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
-        forceUpdate?.pointee = false
+        let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
+        updateHoverPart(forEventPoint: eventPoint, at: time, forceUpdate: forceUpdate)
     }
 
     @objc(mouseMovedAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseMoved(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
-        if validDragPart(from: activePart) != nil {
+        let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
+        let hoverPart = updateHoverPart(forEventPoint: eventPoint, at: time, forceUpdate: forceUpdate)
+        if hoverPart != .none || validDragPart(from: activePart) != nil {
             setCursor(NSCursor.pointingHand)
         } else {
             setCursor(NSCursor.arrow)
         }
-        forceUpdate?.pointee = false
     }
 
     @objc(mouseExitedAtPositionX:positionY:modifiers:forceUpdate:atTime:)
     func mouseExited(atPositionX mousePositionX: Double, positionY mousePositionY: Double, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         setCursor(NSCursor.arrow)
-        forceUpdate?.pointee = false
+        setHoverPart(.none, forceUpdate: forceUpdate)
     }
 
     @objc(keyDownAtPositionX:positionY:keyPressed:modifiers:forceUpdate:didHandle:atTime:)
@@ -940,6 +973,13 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         return state
     }
 
+    private func currentHoverPart() -> QuadOSCPart {
+        hoverStateLock.lock()
+        let part = hoverPart
+        hoverStateLock.unlock()
+        return part
+    }
+
     private func updateLastSurfaceSize(from image: FxImageTile, fallback: AUSize) {
         let width = Double(image.ioSurface.map { IOSurfaceGetWidth($0) } ?? Int(max(1.0, fallback.width)))
         let height = Double(image.ioSurface.map { IOSurfaceGetHeight($0) } ?? Int(max(1.0, fallback.height)))
@@ -954,6 +994,102 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let size = lastSurfaceSize
         surfaceSizeLock.unlock()
         return size
+    }
+
+    @discardableResult
+    private func updateHoverPart(forEventPoint eventPoint: AUPoint, at time: CMTime, forceUpdate: UnsafeMutablePointer<ObjCBool>?) -> QuadOSCPart {
+        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
+        let mode = quadMode(from: state)
+        guard shouldShowQuadCornerAdjuster(from: state, mode: mode) else {
+            setHoverPart(.none, forceUpdate: forceUpdate)
+            return .none
+        }
+
+        let size = objectPixelSizeForOSC()
+        let objectPoints = quadObjectPoints(from: state, size: size, mode: mode)
+        let canvasPoints = quadCanvasPoints(from: objectPoints)
+        let rawCanvasPoints = rawHitTestCanvasPoints(from: objectPoints, mode: mode)
+        let handles = [
+            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+        ]
+        let rawHandles = [
+            AUOSCHandle(point: rawCanvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: rawCanvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
+            AUOSCHandle(point: rawCanvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: rawCanvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+        ]
+        let hit = hitTestPart(
+            forEventPoint: eventPoint,
+            handles: handles,
+            quad: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
+            rawCanvasHandles: rawHandles,
+            rawCanvasQuad: [rawCanvasPoints.topLeft, rawCanvasPoints.topRight, rawCanvasPoints.bottomRight, rawCanvasPoints.bottomLeft],
+            canvasFrame: objectCanvasFrame(),
+            preferredMode: currentDragState()?.eventCoordinateMode
+        )
+        let part = hit?.part ?? .none
+        setHoverPart(part, forceUpdate: forceUpdate)
+        return part
+    }
+
+    private func setHoverPart(_ part: QuadOSCPart, forceUpdate: UnsafeMutablePointer<ObjCBool>?) {
+        hoverStateLock.lock()
+        let changed = hoverPart != part
+        hoverPart = part
+        hoverStateLock.unlock()
+        forceUpdate?.pointee = ObjCBool(changed)
+    }
+
+    private func hoverOverlayStyle() -> AUOSCOverlayStyle {
+        var style = AUOSCOverlayStyle()
+        style.lineColor = SIMD4<Float>(1.0, 0.85, 0.0, 1.0)
+        style.shadowColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.72)
+        style.handleColor = SIMD4<Float>(1.0, 0.85, 0.0, 1.0)
+        style.activeHandleColor = SIMD4<Float>(1.0, 0.85, 0.0, 1.0)
+        style.lineThickness = 4.0
+        style.handleRadius = 15.0
+        style.handleShape = .circle
+        return style
+    }
+
+    private func highlightedHandles(for part: QuadOSCPart, handles: [AUOSCHandle]) -> [AUOSCHandle] {
+        switch part {
+        case .topLeft, .topRight, .bottomRight, .bottomLeft:
+            return handles.filter { $0.part == part.rawValue }
+        default:
+            return []
+        }
+    }
+
+    private func highlightedSegments(for part: QuadOSCPart, quad: [AUPoint]) -> [AUOSCStyledSegment] {
+        guard quad.count == 4 else {
+            return []
+        }
+
+        var style = hoverOverlayStyle()
+        style.handleRadius = 0.0
+        let top = AUOSCStyledSegment(start: quad[0], end: quad[1], style: style)
+        let right = AUOSCStyledSegment(start: quad[1], end: quad[2], style: style)
+        let bottom = AUOSCStyledSegment(start: quad[3], end: quad[2], style: style)
+        let left = AUOSCStyledSegment(start: quad[0], end: quad[3], style: style)
+
+        switch part {
+        case .quad:
+            return [top, right, bottom, left]
+        case .topEdge:
+            return [top]
+        case .rightEdge:
+            return [right]
+        case .bottomEdge:
+            return [bottom]
+        case .leftEdge:
+            return [left]
+        default:
+            return []
+        }
     }
 
     private func eventMapper(for canvasFrame: [AUPoint]) -> AUCanvasSurfaceMapper? {

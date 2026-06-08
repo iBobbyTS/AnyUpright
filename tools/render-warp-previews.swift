@@ -254,12 +254,14 @@ struct RenderWarpPreviews {
                 if !inside {
                     color = dimmed(color, factor: 0.70)
                 }
-                if isNearSelectionBorder(rectPoint, outputSize: outputSize) {
-                    color = (255, 255, 255, 255)
-                }
-                if isNearSelectionHandle(outputPoint, handles: sourceQuadHandles) {
-                    color = (0, 140, 255, 255)
-                }
+                let edgeShadowCoverage = selectionBorderCoverage(rectPoint, outputSize: outputSize, radius: 5.0)
+                let edgeLineCoverage = selectionBorderCoverage(rectPoint, outputSize: outputSize, radius: 3.0)
+                let handleShadowCoverage = selectionHandleCoverage(outputPoint, handles: sourceQuadHandles, radius: 22.0)
+                let handleFillCoverage = selectionHandleCoverage(outputPoint, handles: sourceQuadHandles, radius: 16.0)
+                color = mix(color, (0, 0, 0, 255), edgeShadowCoverage * 0.70)
+                color = mix(color, (255, 255, 255, 255), edgeLineCoverage)
+                color = mix(color, (0, 0, 0, 255), handleShadowCoverage * 0.70)
+                color = mix(color, (0, 140, 255, 255), handleFillCoverage)
 
                 let index = (y * outputWidth + x) * 4
                 rgba[index] = color.0
@@ -312,23 +314,29 @@ struct RenderWarpPreviews {
         )
     }
 
-    private static func isNearSelectionBorder(_ point: AUPoint, outputSize: AUSize) -> Bool {
+    private static func mix(_ a: (UInt8, UInt8, UInt8, UInt8), _ b: (UInt8, UInt8, UInt8, UInt8), _ t: Double) -> (UInt8, UInt8, UInt8, UInt8) {
+        let amount = min(1.0, max(0.0, t))
+        func channel(_ lhs: UInt8, _ rhs: UInt8) -> UInt8 {
+            UInt8(min(255.0, max(0.0, Double(lhs) * (1.0 - amount) + Double(rhs) * amount)))
+        }
+        return (channel(a.0, b.0), channel(a.1, b.1), channel(a.2, b.2), a.3)
+    }
+
+    private static func selectionBorderCoverage(_ point: AUPoint, outputSize: AUSize, radius: Double) -> Double {
         let outsideDistance = max(
             max(-point.x, point.x - outputSize.width),
             max(-point.y, point.y - outputSize.height)
         )
-        guard outsideDistance <= 4.0 else {
-            return false
-        }
+        let edgeCoverage = coverage(distance: max(outsideDistance, 0.0), radius: 4.0)
 
         let distance = min(
             min(abs(point.x), abs(outputSize.width - point.x)),
             min(abs(point.y), abs(outputSize.height - point.y))
         )
-        return distance <= 3.0
+        return edgeCoverage * coverage(distance: distance, radius: radius)
     }
 
-    private static func isNearSelectionHandle(_ point: AUPoint, handles: AUQuad) -> Bool {
+    private static func selectionHandleCoverage(_ point: AUPoint, handles: AUQuad, radius: Double) -> Double {
         let corners = [
             handles.topLeft,
             handles.topRight,
@@ -336,9 +344,21 @@ struct RenderWarpPreviews {
             handles.bottomLeft
         ]
 
-        return corners.contains { corner in
-            hypot(point.x - corner.x, point.y - corner.y) <= 16.0
+        let distance = corners.reduce(Double.greatestFiniteMagnitude) { partial, corner in
+            min(partial, hypot(point.x - corner.x, point.y - corner.y))
         }
+        return coverage(distance: distance, radius: radius)
+    }
+
+    private static func coverage(distance: Double, radius: Double) -> Double {
+        let edge = radius - distance
+        if edge <= -1.0 {
+            return 0.0
+        }
+        if edge >= 1.0 {
+            return 1.0
+        }
+        return (edge + 1.0) / 2.0
     }
 
     private static func isInsideSelection(_ point: AUPoint, selectionToRect: simd_float3x3, outputSize: AUSize) -> Bool {

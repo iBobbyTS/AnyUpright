@@ -22,6 +22,18 @@ typedef struct
     float4 color;
 } OverlayRasterizerData;
 
+static float coverageInside(float signedOutsideDistance)
+{
+    float aa = max(fwidth(signedOutsideDistance), 0.75);
+    return 1.0 - smoothstep(-aa, aa, signedOutsideDistance);
+}
+
+static float coverageWithinRadius(float distance, float radius)
+{
+    float aa = max(fwidth(distance), 0.75);
+    return 1.0 - smoothstep(radius - aa, radius + aa, distance);
+}
+
 vertex RasterizerData anyUprightWarpVertex(uint vertexID [[vertex_id]],
                                            constant AnyUprightVertex2D *vertexArray [[buffer(AUVII_Vertices)]],
                                            constant vector_uint2 *viewportSizePointer [[buffer(AUVII_ViewportSize)]])
@@ -75,12 +87,9 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
             max(-rectPoint.x, rectPoint.x - outputSize.x),
             max(-rectPoint.y, rectPoint.y - outputSize.y)
         );
-        bool insideSelection = outsideDistance <= 0.0;
-        bool nearSelection = outsideDistance <= 4.0;
+        float insideSelection = coverageInside(outsideDistance);
 
-        if (!insideSelection) {
-            color.rgb *= 0.70;
-        }
+        color.rgb *= mix(0.70, 1.0, insideSelection);
 
         float2 handleCenters[4] = {
             warpState->sourceQuadTopLeft,
@@ -89,26 +98,21 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
             warpState->sourceQuadBottomLeft
         };
 
-        bool handleShadow = false;
-        bool handleFill = false;
+        float handleDistance = 1000000.0;
         for (int i = 0; i < 4; ++i) {
-            float handleDistance = length(in.outputCoordinate - handleCenters[i]);
-            handleShadow = handleShadow || handleDistance <= 22.0;
-            handleFill = handleFill || handleDistance <= 16.0;
+            handleDistance = min(handleDistance, length(in.outputCoordinate - handleCenters[i]));
         }
 
-        if (handleShadow) {
-            color.rgb = mix(color.rgb, float3(0.0, 0.0, 0.0), 0.70);
-        }
-        if (nearSelection && borderDistance <= 5.0) {
-            color.rgb = mix(color.rgb, float3(0.0, 0.0, 0.0), 0.70);
-        }
-        if (nearSelection && borderDistance <= 3.0) {
-            color.rgb = float3(1.0, 1.0, 1.0);
-        }
-        if (handleFill) {
-            color.rgb = float3(0.0, 0.55, 1.0);
-        }
+        float edgeCoverage = coverageWithinRadius(max(outsideDistance, 0.0), 4.0);
+        float edgeShadow = edgeCoverage * coverageWithinRadius(borderDistance, 5.0);
+        float edgeLine = edgeCoverage * coverageWithinRadius(borderDistance, 3.0);
+        float handleShadow = coverageWithinRadius(handleDistance, 22.0);
+        float handleFill = coverageWithinRadius(handleDistance, 16.0);
+
+        color.rgb = mix(color.rgb, float3(0.0, 0.0, 0.0), edgeShadow * 0.70);
+        color.rgb = mix(color.rgb, float3(1.0, 1.0, 1.0), edgeLine);
+        color.rgb = mix(color.rgb, float3(0.0, 0.0, 0.0), handleShadow * 0.70);
+        color.rgb = mix(color.rgb, float3(0.0, 0.55, 1.0), handleFill);
 
         return color;
     }

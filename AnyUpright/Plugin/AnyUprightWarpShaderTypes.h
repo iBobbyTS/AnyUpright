@@ -42,6 +42,10 @@ typedef struct AnyUprightWarpState {
     matrix_float3x3 selectionOutputToRect;
     vector_float2 outputSize;
     vector_float2 inputSize;
+    vector_float2 imageCoordinateMin;
+    vector_float2 imageCoordinateMax;
+    vector_float2 inputImageOriginInTexture;
+    vector_float2 inputTextureSize;
     vector_float2 sourceQuadTopLeft;
     vector_float2 sourceQuadTopRight;
     vector_float2 sourceQuadBottomRight;

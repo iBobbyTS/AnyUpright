@@ -16,6 +16,33 @@ struct AUSize: Equatable {
     var height: Double
 }
 
+struct AUPixelBounds: Equatable {
+    var left: Int32
+    var bottom: Int32
+    var right: Int32
+    var top: Int32
+
+    var width: Double {
+        Double(right - left)
+    }
+
+    var height: Double {
+        Double(top - bottom)
+    }
+}
+
+struct AUOutputCoordinateBounds: Equatable {
+    var left: Double
+    var right: Double
+    var top: Double
+    var bottom: Double
+}
+
+struct AUTextureCoordinateMapping: Equatable {
+    var imageOriginInTexture: AUPoint
+    var textureSize: AUSize
+}
+
 struct AUQuad: Equatable {
     var topLeft: AUPoint
     var topRight: AUPoint
@@ -251,6 +278,29 @@ func resolveOSCDisplayPart(hoverPart: Int, dragPart: Int?, nonePart: Int = 0) ->
 
 enum AnyUprightGeometry {
     private static let sourceQuadInset = 0.10
+
+    static func outputCoordinateBounds(for tileBounds: AUPixelBounds, imageBounds: AUPixelBounds) -> AUOutputCoordinateBounds {
+        AUOutputCoordinateBounds(
+            left: Double(tileBounds.left - imageBounds.left),
+            right: Double(tileBounds.right - imageBounds.left),
+            top: Double(imageBounds.top - tileBounds.top),
+            bottom: Double(imageBounds.top - tileBounds.bottom)
+        )
+    }
+
+    static func textureCoordinateMapping(for imageBounds: AUPixelBounds, tileBounds: AUPixelBounds, textureSize: AUSize) -> AUTextureCoordinateMapping {
+        AUTextureCoordinateMapping(
+            imageOriginInTexture: AUPoint(
+                x: Double(imageBounds.left - tileBounds.left),
+                y: Double(tileBounds.top - imageBounds.top)
+            ),
+            textureSize: textureSize
+        )
+    }
+
+    static func sourceTileBounds(for imageBounds: AUPixelBounds, destinationTileBounds: AUPixelBounds, usesIdentityPreview: Bool) -> AUPixelBounds {
+        usesIdentityPreview ? destinationTileBounds : imageBounds
+    }
 
     static func quad(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
         quad(from: offsets, base: AUQuad.fullFrame(size), size: size)

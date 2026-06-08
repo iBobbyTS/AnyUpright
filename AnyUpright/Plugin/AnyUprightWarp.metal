@@ -46,6 +46,17 @@ static float distanceToSegment(float2 point, float2 start, float2 end)
     return length(point - (start + delta * projection));
 }
 
+static float2 clampedImageCoordinate(float2 outputCoordinate, constant AnyUprightWarpState *warpState)
+{
+    return clamp(outputCoordinate, warpState->imageCoordinateMin, warpState->imageCoordinateMax);
+}
+
+static float2 inputTextureUV(float2 sourcePixel, constant AnyUprightWarpState *warpState)
+{
+    float2 texturePixel = sourcePixel + warpState->inputImageOriginInTexture;
+    return texturePixel / warpState->inputTextureSize;
+}
+
 vertex RasterizerData anyUprightWarpVertex(uint vertexID [[vertex_id]],
                                            constant AnyUprightVertex2D *vertexArray [[buffer(AUVII_Vertices)]],
                                            constant vector_uint2 *viewportSizePointer [[buffer(AUVII_ViewportSize)]])
@@ -68,22 +79,23 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
 {
     constexpr sampler textureSampler(mag_filter::linear,
                                      min_filter::linear,
-                                     address::clamp_to_zero);
+                                     address::clamp_to_edge);
 
     if (warpState->renderMode == AURM_SourceQuadAdjusterPreview) {
-        float3 sourceHomogeneous = warpState->fallbackOutputToSource * float3(in.outputCoordinate, 1.0);
+        float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
+        float3 sourceHomogeneous = warpState->fallbackOutputToSource * float3(outputCoordinate, 1.0);
         if (fabs(sourceHomogeneous.z) < 0.000001) {
             return float4(0.0, 0.0, 0.0, 1.0);
         }
 
         float2 sourcePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
-        float2 sourceUV = sourcePixel / warpState->inputSize;
+        float2 sourceUV = inputTextureUV(sourcePixel, warpState);
         if (sourceUV.x < 0.0 || sourceUV.x > 1.0 || sourceUV.y < 0.0 || sourceUV.y > 1.0) {
             return float4(0.0, 0.0, 0.0, 1.0);
         }
 
         float4 color = float4(colorTexture.sample(textureSampler, sourceUV));
-        float3 selectionHomogeneous = warpState->selectionOutputToRect * float3(in.outputCoordinate, 1.0);
+        float3 selectionHomogeneous = warpState->selectionOutputToRect * float3(outputCoordinate, 1.0);
         if (fabs(selectionHomogeneous.z) < 0.000001) {
             color.rgb *= 0.70;
             return color;
@@ -98,12 +110,12 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
 
         float edgeDistance = min(
             min(
-                distanceToSegment(in.outputCoordinate, handleCenters[0], handleCenters[1]),
-                distanceToSegment(in.outputCoordinate, handleCenters[1], handleCenters[2])
+                distanceToSegment(outputCoordinate, handleCenters[0], handleCenters[1]),
+                distanceToSegment(outputCoordinate, handleCenters[1], handleCenters[2])
             ),
             min(
-                distanceToSegment(in.outputCoordinate, handleCenters[2], handleCenters[3]),
-                distanceToSegment(in.outputCoordinate, handleCenters[3], handleCenters[0])
+                distanceToSegment(outputCoordinate, handleCenters[2], handleCenters[3]),
+                distanceToSegment(outputCoordinate, handleCenters[3], handleCenters[0])
             )
         );
         float2 rectPoint = selectionHomogeneous.xy / selectionHomogeneous.z;
@@ -120,7 +132,7 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
 
         float handleDistance = 1000000.0;
         for (int i = 0; i < 4; ++i) {
-            handleDistance = min(handleDistance, length(in.outputCoordinate - handleCenters[i]));
+            handleDistance = min(handleDistance, length(outputCoordinate - handleCenters[i]));
         }
 
         float edgeShadow = coverageWithinRadius(edgeDistance, 5.0);
@@ -137,15 +149,16 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
     }
 
     if (warpState->renderMode == AURM_WarpSelectionOverOriginal) {
-        float3 selectionHomogeneous = warpState->selectionOutputToRect * float3(in.outputCoordinate, 1.0);
+        float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
+        float3 selectionHomogeneous = warpState->selectionOutputToRect * float3(outputCoordinate, 1.0);
         if (fabs(selectionHomogeneous.z) >= 0.000001) {
             float2 selectionRect = selectionHomogeneous.xy / selectionHomogeneous.z;
             if (selectionRect.x >= 0.0 && selectionRect.x <= warpState->outputSize.x &&
                 selectionRect.y >= 0.0 && selectionRect.y <= warpState->outputSize.y) {
-                float3 mirroredSourceHomogeneous = warpState->outputToSource * float3(in.outputCoordinate, 1.0);
+                float3 mirroredSourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
                 if (fabs(mirroredSourceHomogeneous.z) >= 0.000001) {
                     float2 mirroredSourcePixel = mirroredSourceHomogeneous.xy / mirroredSourceHomogeneous.z;
-                    float2 mirroredSourceUV = mirroredSourcePixel / warpState->inputSize;
+                    float2 mirroredSourceUV = inputTextureUV(mirroredSourcePixel, warpState);
                     if (mirroredSourceUV.x >= 0.0 && mirroredSourceUV.x <= 1.0 &&
                         mirroredSourceUV.y >= 0.0 && mirroredSourceUV.y <= 1.0) {
                         return float4(colorTexture.sample(textureSampler, mirroredSourceUV));
@@ -155,15 +168,16 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
         }
     }
 
+    float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
     float3 sourceHomogeneous = (warpState->renderMode == AURM_WarpSelectionOverOriginal
                                 ? warpState->fallbackOutputToSource
-                                : warpState->outputToSource) * float3(in.outputCoordinate, 1.0);
+                                : warpState->outputToSource) * float3(outputCoordinate, 1.0);
     if (fabs(sourceHomogeneous.z) < 0.000001) {
         return float4(0.0, 0.0, 0.0, 1.0);
     }
 
     float2 sourcePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
-    float2 sourceUV = sourcePixel / warpState->inputSize;
+    float2 sourceUV = inputTextureUV(sourcePixel, warpState);
 
     if (sourceUV.x < 0.0 || sourceUV.x > 1.0 || sourceUV.y < 0.0 || sourceUV.y > 1.0) {
         return float4(0.0, 0.0, 0.0, 1.0);

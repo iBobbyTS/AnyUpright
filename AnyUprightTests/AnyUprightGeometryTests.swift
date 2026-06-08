@@ -40,6 +40,9 @@ struct AnyUprightGeometryTests {
         try testAspectFitPixelSurfaceMapperKeepsHitTestingInsideVideoFrame()
         try testOSCDragPartFallsBackToLocalHitWhenHostPartIsNone()
         try testOSCDisplayPartKeepsDragHighlightedWhenHoverStops()
+        try testOutputCoordinatesKeepHostTilePaddingImageRelative()
+        try testInputTextureCoordinatesRespectHostTilePadding()
+        try testSourceQuadEditPreviewRequestsDestinationTile()
         try testQuadSourceModeShowsAdjusterBeforeApplyingWarp()
         try testQuadSourceMirrorModesSampleWithinSelectedQuad()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
@@ -526,6 +529,54 @@ struct AnyUprightGeometryTests {
         )
     }
 
+    static func testOutputCoordinatesKeepHostTilePaddingImageRelative() throws {
+        let bounds = AnyUprightGeometry.outputCoordinateBounds(
+            for: AUPixelBounds(left: -1321, bottom: -481, right: 2521, top: 1681),
+            imageBounds: AUPixelBounds(left: -1320, bottom: -480, right: 2520, top: 1680)
+        )
+
+        try assertApprox(bounds.left, -1.0, "padded tile output left")
+        try assertApprox(bounds.right, 3841.0, "padded tile output right")
+        try assertApprox(bounds.top, -1.0, "padded tile output top")
+        try assertApprox(bounds.bottom, 2161.0, "padded tile output bottom")
+    }
+
+    static func testInputTextureCoordinatesRespectHostTilePadding() throws {
+        let mapping = AnyUprightGeometry.textureCoordinateMapping(
+            for: AUPixelBounds(left: -1320, bottom: -480, right: 2520, top: 1680),
+            tileBounds: AUPixelBounds(left: -1321, bottom: -481, right: 2521, top: 1681),
+            textureSize: AUSize(width: 3842.0, height: 2162.0)
+        )
+
+        try assertEqual(mapping.imageOriginInTexture, AUPoint(x: 1.0, y: 1.0), "source image origin inside padded input texture")
+        try assertApprox(mapping.textureSize.width, 3842.0, "padded input texture width")
+        try assertApprox(mapping.textureSize.height, 2162.0, "padded input texture height")
+    }
+
+    static func testSourceQuadEditPreviewRequestsDestinationTile() throws {
+        let imageBounds = AUPixelBounds(left: -1320, bottom: -480, right: 2520, top: 1680)
+        let paddedDestinationTile = AUPixelBounds(left: -1321, bottom: -481, right: 2521, top: 1681)
+
+        try assertEqual(
+            AnyUprightGeometry.sourceTileBounds(
+                for: imageBounds,
+                destinationTileBounds: paddedDestinationTile,
+                usesIdentityPreview: true
+            ),
+            paddedDestinationTile,
+            "identity source preview should request the same padded tile as the destination"
+        )
+        try assertEqual(
+            AnyUprightGeometry.sourceTileBounds(
+                for: imageBounds,
+                destinationTileBounds: paddedDestinationTile,
+                usesIdentityPreview: false
+            ),
+            imageBounds,
+            "warp modes still need the full source image"
+        )
+    }
+
     static func testQuadSourceModeShowsAdjusterBeforeApplyingWarp() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
@@ -962,6 +1013,12 @@ struct AnyUprightGeometryTests {
     static func assertEqual(_ actual: AUPoint, _ expected: AUPoint, _ label: String) throws {
         try assertApprox(actual.x, expected.x, "\(label) x")
         try assertApprox(actual.y, expected.y, "\(label) y")
+    }
+
+    static func assertEqual(_ actual: AUPixelBounds, _ expected: AUPixelBounds, _ label: String) throws {
+        guard actual == expected else {
+            throw TestFailure.failed("\(label): expected \(expected), got \(actual)")
+        }
     }
 
     static func line(angleDegrees: Double, length: Double) -> AULineSegment {

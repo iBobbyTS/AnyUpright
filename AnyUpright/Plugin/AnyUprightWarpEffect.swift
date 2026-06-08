@@ -96,7 +96,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
     func properties(_ properties: AutoreleasingUnsafeMutablePointer<NSDictionary>?) throws {
         let swiftProps = [
             kFxPropertyKey_MayRemapTime: NSNumber(booleanLiteral: false),
-            kFxPropertyKey_NeedsFullBuffer: NSNumber(booleanLiteral: true),
+            kFxPropertyKey_NeedsFullBuffer: NSNumber(booleanLiteral: false),
             kFxPropertyKey_PixelTransformSupport: NSNumber(value: kFxPixelTransform_ScaleTranslate),
             kFxPropertyKey_VariesWhenParamsAreStatic: NSNumber(booleanLiteral: false),
             kFxPropertyKey_ChangesOutputSize: NSNumber(booleanLiteral: false)
@@ -114,7 +114,19 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
     }
 
     func sourceTileRect(_ sourceTileRect: UnsafeMutablePointer<FxRect>, sourceImageIndex: UInt, sourceImages: [FxImageTile], destinationTileRect: FxRect, destinationImage: FxImageTile, pluginState: Data?, at renderTime: CMTime) throws {
-        sourceTileRect.pointee = sourceImages[Int(sourceImageIndex)].imagePixelBounds
+        let parameterState = state(from: pluginState)
+        let usesIdentityPreview = renderMode(from: parameterState) == Int32(AURM_SourceQuadAdjusterPreview)
+        let bounds = AnyUprightGeometry.sourceTileBounds(
+            for: pixelBounds(from: sourceImages[Int(sourceImageIndex)].imagePixelBounds),
+            destinationTileBounds: pixelBounds(from: destinationTileRect),
+            usesIdentityPreview: usesIdentityPreview
+        )
+        sourceTileRect.pointee = FxRect(
+            left: bounds.left,
+            bottom: bounds.bottom,
+            right: bounds.right,
+            top: bounds.top
+        )
     }
 
     func renderDestinationImage(_ destinationImage: FxImageTile, sourceImages: [FxImageTile], pluginState: Data?, at renderTime: CMTime) throws {
@@ -156,10 +168,14 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         let tileWidth = tileBounds.right - tileBounds.left
         let tileHeight = tileBounds.top - tileBounds.bottom
 
-        let outputLeft = Float(tileBounds.left - imageBounds.left)
-        let outputRight = Float(tileBounds.right - imageBounds.left)
-        let outputTop = Float(imageBounds.top - tileBounds.top)
-        let outputBottom = Float(imageBounds.top - tileBounds.bottom)
+        let outputBounds = AnyUprightGeometry.outputCoordinateBounds(
+            for: pixelBounds(from: tileBounds),
+            imageBounds: pixelBounds(from: imageBounds)
+        )
+        let outputLeft = Float(outputBounds.left)
+        let outputRight = Float(outputBounds.right)
+        let outputTop = Float(outputBounds.top)
+        let outputBottom = Float(outputBounds.bottom)
 
         var vertices = [
             AnyUprightVertex2D(position: vector_float2(Float(tileWidth) / 2.0, Float(-tileHeight) / 2.0), outputCoordinate: vector_float2(outputRight, outputBottom)),
@@ -169,7 +185,12 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         ]
 
         var viewportSize = simd_uint2(UInt32(tileWidth), UInt32(tileHeight))
-        var warpState = shaderState(from: parameterState, sourceImage: sourceImage, destinationImage: destinationImage)
+        var warpState = shaderState(
+            from: parameterState,
+            sourceImage: sourceImage,
+            sourceTexture: inputTexture,
+            destinationImage: destinationImage
+        )
 
         let viewport = MTLViewport(originX: 0, originY: 0, width: Double(tileWidth), height: Double(tileHeight), znear: -1.0, zfar: 1.0)
         commandEncoder.setViewport(viewport)
@@ -244,9 +265,19 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         }
     }
 
-    private func shaderState(from parameterState: AnyUprightParameterState, sourceImage: FxImageTile, destinationImage: FxImageTile) -> AnyUprightWarpState {
+    private func shaderState(
+        from parameterState: AnyUprightParameterState,
+        sourceImage: FxImageTile,
+        sourceTexture: MTLTexture,
+        destinationImage: FxImageTile
+    ) -> AnyUprightWarpState {
         let destinationSize = size(from: destinationImage.imagePixelBounds)
         let sourceSize = size(from: sourceImage.imagePixelBounds)
+        let inputTextureMapping = AnyUprightGeometry.textureCoordinateMapping(
+            for: pixelBounds(from: sourceImage.imagePixelBounds),
+            tileBounds: pixelBounds(from: sourceImage.tilePixelBounds),
+            textureSize: AUSize(width: Double(sourceTexture.width), height: Double(sourceTexture.height))
+        )
         let matrix = outputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let fallback = fallbackOutputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let selectionToRect = selectionOutputToRectMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
@@ -259,6 +290,10 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             selectionOutputToRect: selectionToRect,
             outputSize: vector_float2(Float(destinationSize.width), Float(destinationSize.height)),
             inputSize: vector_float2(Float(sourceSize.width), Float(sourceSize.height)),
+            imageCoordinateMin: vector_float2(0.0, 0.0),
+            imageCoordinateMax: vector_float2(Float(max(0.0, destinationSize.width)), Float(max(0.0, destinationSize.height))),
+            inputImageOriginInTexture: vector_float2(Float(inputTextureMapping.imageOriginInTexture.x), Float(inputTextureMapping.imageOriginInTexture.y)),
+            inputTextureSize: vector_float2(Float(max(1.0, inputTextureMapping.textureSize.width)), Float(max(1.0, inputTextureMapping.textureSize.height))),
             sourceQuadTopLeft: vector_float2(Float(sourceHandles.topLeft.x), Float(sourceHandles.topLeft.y)),
             sourceQuadTopRight: vector_float2(Float(sourceHandles.topRight.x), Float(sourceHandles.topRight.y)),
             sourceQuadBottomRight: vector_float2(Float(sourceHandles.bottomRight.x), Float(sourceHandles.bottomRight.y)),
@@ -378,5 +413,9 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
     private func size(from rect: FxRect) -> AUSize {
         AUSize(width: Double(rect.right - rect.left), height: Double(rect.top - rect.bottom))
+    }
+
+    private func pixelBounds(from rect: FxRect) -> AUPixelBounds {
+        AUPixelBounds(left: rect.left, bottom: rect.bottom, right: rect.right, top: rect.top)
     }
 }

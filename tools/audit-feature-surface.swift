@@ -78,7 +78,7 @@ struct AuditFeatureSurface {
     private static func auditQuad(_ effects: String, geometry: String, overlay: String, metal: String) throws {
         try require(effects, "Output Corners", "Quad exposes realtime output-corner mode")
         try require(effects, "Source Quad", "Quad exposes Lens-style source-quad mode")
-        try require(effects, "Show Corner Adjuster", "Quad can show source-quad handles without applying the warp")
+        try require(effects, "Edit Mode", "Quad exposes edit mode for source-quad handles without applying the warp")
         try require(effects, "Stretch Mode", "Quad exposes Reverse Corner Pin-style source stretch mode")
         try require(effects, "Mirror Horizontal", "Quad can mirror the pinned source area horizontally")
         try require(effects, "Mirror Vertical", "Quad can mirror the pinned source area vertically")

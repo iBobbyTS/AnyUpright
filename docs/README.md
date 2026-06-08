@@ -52,7 +52,7 @@ Current implementation:
 - `AnyUpright Quad Manual` is registered as a separate FxPlug filter.
 - `Mode` selects `Output Corners` or `Source Quad`.
 - `Stretch Mode` is shown only in `Source Quad` mode. `Stretch to Frame` maps the selected quadrilateral to the full output frame. `Mirror Horizontal` and `Mirror Vertical` mirror only the selected source quadrilateral and composite it back over the original frame, matching the Reverse Corner Pin use case of fixing backwards text after a shot flop.
-- `Show Corner Adjuster` is shown only in `Source Quad` mode. It is enabled by default: when enabled, the current source quadrilateral is drawn into the filter output, handle drags only move the stored quadrilateral, and the image is not warped. Disable it to hide the adjuster and map the selected source quadrilateral to the full output frame.
+- `Edit Mode` is shown only in `Source Quad` mode. It is enabled by default: when enabled, the current source quadrilateral is drawn into the filter output, handle drags only move the stored quadrilateral, and the image is not warped. Disable it to hide the adjuster and map the selected source quadrilateral to the full output frame.
 - In `Source Quad` mode, the default source quadrilateral is the central 80% of the frame. The edit preview dims the outside area to 70% brightness, leaves the selected quadrilateral at original brightness, connects the four handles with a visible quadrilateral outline, and draws the handles as fixed-size circular markers in output image space so they do not stretch with the quadrilateral.
 - In `Output Corners` mode, each visible output corner exposes `X %`, `Y %`, `X px`, and `Y px` offsets in the inspector.
 - In `Source Quad` mode, the corner coordinate groups are hidden from the inspector; users position the source quadrilateral with onscreen handles.
@@ -210,11 +210,11 @@ Quad:
 - Apply `AnyUpright Quad Manual` to `quad-phone-screen.png`.
 - The Source Quad edit overlay should be visible even when Motion's `Publish OSC` checkbox is off, because it is rendered by the filter output. Enable `Publish OSC` only when testing mouse-driven handle dragging in Motion.
 - In `Output Corners` mode, drag the four onscreen handles; the image should warp in realtime.
-- In `Output Corners` mode, `Show Corner Adjuster` should be hidden and the four corner coordinate groups should be visible.
-- In `Source Quad` mode with `Show Corner Adjuster` on, the four handles should start at the central 80% of the frame, the outside area should be dimmed to 70% brightness, and dragging the handles around the phone-screen quadrilateral should not warp the image while editing.
+- In `Output Corners` mode, `Edit Mode` should be hidden and the four corner coordinate groups should be visible.
+- In `Source Quad` mode with `Edit Mode` on, the four handles should start at the central 80% of the frame, the outside area should be dimmed to 70% brightness, and dragging the handles around the phone-screen quadrilateral should not warp the image while editing.
 - In `Source Quad` mode, the four corner coordinate groups should be hidden because positioning happens through onscreen handles.
-- Turn `Show Corner Adjuster` off; the selected screen quadrilateral should map to the full output frame and the handles should be hidden.
-- With `Show Corner Adjuster` off and `Stretch Mode = Mirror Horizontal` or `Mirror Vertical`, only the selected quadrilateral should be mirrored over the original image; outside the quadrilateral should remain unchanged.
+- Turn `Edit Mode` off; the selected screen quadrilateral should map to the full output frame and the handles should be hidden.
+- With `Edit Mode` off and `Stretch Mode = Mirror Horizontal` or `Mirror Vertical`, only the selected quadrilateral should be mirrored over the original image; outside the quadrilateral should remain unchanged.
 
 Upright:
 
@@ -238,4 +238,4 @@ Upright:
 
 This repository currently ships the three effects as FxPlug filters registered by the wrapper app. Motion or Final Cut template files are not tracked yet. If a template-based distribution is required later, run the wrapper app once so macOS registers the plug-in, apply each FxPlug filter in Motion, publish the intended parameters, and save three separate Final Cut Effect templates.
 
-For Final Cut templates that need onscreen dragging, the Motion template must include the host `Publish OSC` setting for the FxPlug filter. In the local `.moef` XML this appears as the built-in filter parameter `id="10005"` with `name="Publish OSC"` and `value="1"`. Publishing only the user-facing `Mode` / `Show Corner Adjuster` parameters is not enough: Final Cut can still render the filter output overlay, but it may not instantiate or dispatch mouse events to the `FxOnScreenControl`.
+For Final Cut templates that need onscreen dragging, the Motion template must include the host `Publish OSC` setting for the FxPlug filter. In the local `.moef` XML this appears as the built-in filter parameter `id="10005"` with `name="Publish OSC"` and `value="1"`. Publishing only the user-facing `Mode` / `Edit Mode` parameters is not enough: Final Cut can still render the filter output overlay, but it may not instantiate or dispatch mouse events to the `FxOnScreenControl`.

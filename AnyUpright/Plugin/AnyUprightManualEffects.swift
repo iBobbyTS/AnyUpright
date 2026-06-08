@@ -534,7 +534,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect {
             parameterFlags: showCornerAdjusterHiddenFlags()
         )
         paramAPI.addToggleButton(
-            withName: "Show Corner Adjuster",
+            withName: "Edit Mode",
             parameterID: QuadParam.showCornerAdjuster.rawValue,
             defaultValue: true,
             parameterFlags: showCornerAdjusterHiddenFlags()

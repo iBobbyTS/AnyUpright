@@ -370,3 +370,12 @@ Current status: the Source Quad OSC overlay is no longer just a static visual ov
 - Root-cause refinement: the existing hit-test path is needed for host dispatch, but raw canvas Source Quad drags use the opposite Y semantic when writing hidden source-corner parameters.
 - Fix direction: keep the original raw/mapped hit-test candidate order, then in Source Quad writeback only, flip object Y for raw-canvas drags and remap top/bottom corner or edge parts before calling `setCorner`/`translateCorners`.
 - Scope: this changes Source Quad parameter writeback only. Output Corners keeps the existing coordinate behavior.
+
+## 2026-06-07 Source Quad Hit-Test Follow-Up
+
+- User report after `e2c7d46`: after dragging a Source Quad point once, the visible point moved, but a second drag had to start from the point's original location. Dragging the point's new visible location did nothing.
+- Root cause: Source Quad edit visuals are rendered in the filter output as top-origin source-image coordinates, while the raw-canvas OSC hit-test was still comparing against the unflipped y-up object points. Parameter writeback moved the visible source quad, but the raw-canvas clickable handles stayed tied to the old invisible object-space positions.
+- Fix: for `Source Quad` raw-canvas hit testing only, compare mouse events against vertically flipped object points so the hit handles follow the visible source quad. Keep mapped-surface hit testing on the existing object/canvas points, because that path is still needed for Motion-style surface-local events.
+- Important constraint from the previous failed attempt: do not globally change event candidate order or introduce a separate y-flipped event candidate. The fix is local to the geometry used for raw-canvas handle/edge/body comparisons.
+- Corner labels are not remapped in this pass. `topLeft` remains `topLeft`; only the raw-canvas object Y used for hit geometry and writeback is flipped. This avoids the earlier top/bottom mismatch where the visible top-left interaction controlled bottom-left storage.
+- Regression coverage: `testQuadSourceRawCanvasHitPointsFollowVisibleSourceQuad` documents that unflipped object-space hit pixels would remain at the stale invisible top-left, while the flipped raw-canvas hit pixels match the moved visible Source Quad handle.

@@ -29,6 +29,7 @@ struct AnyUprightGeometryTests {
         try testQuadSourceObjectDragPreservesCentralBase()
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
         try testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting()
+        try testQuadSourceRawCanvasHitPointsFollowVisibleSourceQuad()
         try testQuadSourceAdjusterPreviewAndApplyUseSameSelection()
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
         try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
@@ -236,6 +237,23 @@ struct AnyUprightGeometryTests {
         try assertEqual(correctedObjectPoint, AUPoint(x: 0.225, y: 0.75), "raw canvas source drag should flip object Y")
         try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "flipped raw canvas source percent")
         try assertEqual(sourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "flipped raw canvas drag should update the visible top-left source point")
+    }
+
+    static func testQuadSourceRawCanvasHitPointsFollowVisibleSourceQuad() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPercent = AUPoint(x: 0.125, y: -0.15)
+
+        let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+        let staleObjectPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: objectPoints, size: size)
+        let rawHitObjectPoints = AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints)
+        let rawHitPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: rawHitObjectPoints, size: size)
+        let visibleSourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+
+        try assertEqual(visibleSourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "visible moved source top-left")
+        try assertEqual(staleObjectPixels.topLeft, AUPoint(x: 45.0, y: 75.0), "unflipped object-space hit point would stay at the stale invisible top-left")
+        try assertEqual(rawHitPixels.topLeft, visibleSourceQuad.topLeft, "raw canvas hit point should follow moved visible top-left")
+        try assertEqual(rawHitPixels.bottomLeft, visibleSourceQuad.bottomLeft, "raw canvas hit point should keep bottom-left aligned")
     }
 
     static func testQuadSourceAdjusterPreviewAndApplyUseSameSelection() throws {

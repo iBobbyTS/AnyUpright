@@ -216,6 +216,15 @@ enum AnyUprightGeometry {
         AUPoint(x: point.x, y: 1.0 - point.y)
     }
 
+    static func verticallyFlippedObjectQuad(_ quad: AUQuad) -> AUQuad {
+        AUQuad(
+            topLeft: verticallyFlippedObjectPoint(quad.topLeft),
+            topRight: verticallyFlippedObjectPoint(quad.topRight),
+            bottomRight: verticallyFlippedObjectPoint(quad.bottomRight),
+            bottomLeft: verticallyFlippedObjectPoint(quad.bottomLeft)
+        )
+    }
+
     private static func quadObjectPoints(from offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUQuad {
         AUQuad(
             topLeft: objectPoint(for: .topLeft, offsets: offsets, base: base, size: size),

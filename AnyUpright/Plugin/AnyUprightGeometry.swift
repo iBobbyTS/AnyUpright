@@ -157,6 +157,78 @@ struct AUCanvasSurfaceMapper {
     }
 }
 
+struct AUAspectFitPixelSurfaceMapper {
+    var coordinateFrame: AUCoordinateFrame
+    var surfaceSize: AUSize
+
+    init?(coordinateSize: AUSize, surfaceSize: AUSize) {
+        let coordinateFrame = AUCoordinateFrame(minX: 0.0, minY: 0.0, maxX: coordinateSize.width, maxY: coordinateSize.height)
+        self.init(coordinateFrame: coordinateFrame, surfaceSize: surfaceSize)
+    }
+
+    init?(coordinateFrame: AUCoordinateFrame, surfaceSize: AUSize) {
+        guard coordinateFrame.width > 1.0,
+              coordinateFrame.height > 1.0,
+              surfaceSize.width > 1.0,
+              surfaceSize.height > 1.0 else {
+            return nil
+        }
+
+        self.coordinateFrame = coordinateFrame.aspectFitted(toSurfaceSize: surfaceSize)
+        self.surfaceSize = AUSize(width: max(1.0, surfaceSize.width), height: max(1.0, surfaceSize.height))
+    }
+
+    func eventPoint(fromCoordinatePoint point: AUPoint) -> AUPoint {
+        AUPoint(
+            x: (point.x - coordinateFrame.minX) / coordinateFrame.width * surfaceSize.width,
+            y: (1.0 - (point.y - coordinateFrame.minY) / coordinateFrame.height) * surfaceSize.height
+        )
+    }
+
+    func coordinatePoint(fromEventPoint point: AUPoint) -> AUPoint {
+        AUPoint(
+            x: coordinateFrame.minX + point.x / surfaceSize.width * coordinateFrame.width,
+            y: coordinateFrame.maxY - point.y / surfaceSize.height * coordinateFrame.height
+        )
+    }
+}
+
+struct AUCoordinateFrame: Equatable {
+    var minX: Double
+    var minY: Double
+    var maxX: Double
+    var maxY: Double
+
+    var width: Double {
+        max(1.0, maxX - minX)
+    }
+
+    var height: Double {
+        max(1.0, maxY - minY)
+    }
+
+    func aspectFitted(toSurfaceSize surfaceSize: AUSize) -> AUCoordinateFrame {
+        let surfaceWidth = max(1.0, surfaceSize.width)
+        let surfaceHeight = max(1.0, surfaceSize.height)
+        let scale = min(surfaceWidth / width, surfaceHeight / height)
+        guard scale.isFinite, scale > 0.0 else {
+            return self
+        }
+
+        let horizontalInset = max(0.0, (surfaceWidth - width * scale) / 2.0)
+        let verticalInset = max(0.0, (surfaceHeight - height * scale) / 2.0)
+        let fittedMinX = minX - horizontalInset / scale
+        let fittedMinY = minY - verticalInset / scale
+
+        return AUCoordinateFrame(
+            minX: fittedMinX,
+            minY: fittedMinY,
+            maxX: fittedMinX + surfaceWidth / scale,
+            maxY: fittedMinY + surfaceHeight / scale
+        )
+    }
+}
+
 func resolveOSCDragPart(hostActivePart: Int, localHitPart: Int?, nonePart: Int = 0) -> Int? {
     if hostActivePart != nonePart {
         return hostActivePart
@@ -226,6 +298,13 @@ enum AnyUprightGeometry {
         AUPoint(
             x: point.x / max(size.width, 1.0),
             y: point.y / max(size.height, 1.0)
+        )
+    }
+
+    static func normalizedSourceObjectPoint(fromOSCPixelPoint point: AUPoint, outputSize: AUSize) -> AUPoint {
+        AUPoint(
+            x: point.x / max(outputSize.width, 1.0),
+            y: point.y / max(outputSize.height, 1.0)
         )
     }
 

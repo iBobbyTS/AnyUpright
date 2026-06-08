@@ -28,6 +28,7 @@ struct AnyUprightGeometryTests {
         try testQuadSourceDefaultsToCentralEightyPercent()
         try testQuadSourceObjectDragPreservesCentralBase()
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
+        try testQuadSourceOSCPixelDragDoesNotFlipYAgain()
         try testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting()
         try testQuadSourceRawCanvasHitPointsFollowVisibleSourceQuad()
         try testDistanceToQuadEdgeUsesOutputPixelSegments()
@@ -36,6 +37,7 @@ struct AnyUprightGeometryTests {
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
         try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
+        try testAspectFitPixelSurfaceMapperKeepsHitTestingInsideVideoFrame()
         try testOSCDragPartFallsBackToLocalHitWhenHostPartIsNone()
         try testQuadSourceModeShowsAdjusterBeforeApplyingWarp()
         try testQuadSourceMirrorModesSampleWithinSelectedQuad()
@@ -221,6 +223,27 @@ struct AnyUprightGeometryTests {
         try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "source object-space drag percent offset")
         try assertEqual(updatedObjectPixels.topLeft, draggedPixel, "source object-space drag target")
         try assertEqual(updatedSourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "source quad should sample the Y-flipped image point matching the visible handle")
+    }
+
+    static func testQuadSourceOSCPixelDragDoesNotFlipYAgain() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        var offsets = AUCornerOffsets()
+        let visualTopLeftOSCPixel = AUPoint(x: 45.0, y: 75.0)
+        let objectPoint = AnyUprightGeometry.normalizedSourceObjectPoint(
+            fromOSCPixelPoint: visualTopLeftOSCPixel,
+            outputSize: size
+        )
+        let percent = AnyUprightGeometry.sourceCornerPercentOffset(
+            forObjectPoint: objectPoint,
+            corner: .topLeft
+        )
+
+        offsets.topLeftPercent = percent
+        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+
+        try assertEqual(objectPoint, AUPoint(x: 0.225, y: 0.75), "osc pixel drag object point")
+        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "osc pixel drag percent")
+        try assertEqual(sourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "osc pixel drag should not flip Y a second time")
     }
 
     static func testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting() throws {
@@ -425,6 +448,29 @@ struct AnyUprightGeometryTests {
             abs(incorrectlyMapped.y - draggedOutsideCanvas.y) > 100.0,
             "treating an outside raw canvas event as a surface-local event would jump the drag vertically"
         )
+    }
+
+    static func testAspectFitPixelSurfaceMapperKeepsHitTestingInsideVideoFrame() throws {
+        let mapper = try unwrap(
+            AUAspectFitPixelSurfaceMapper(
+                coordinateSize: AUSize(width: 3840.0, height: 2160.0),
+                surfaceSize: AUSize(width: 2000.0, height: 900.0)
+            ),
+            "aspect-fit pixel mapper"
+        )
+
+        let videoRightEdgeEvent = mapper.eventPoint(fromCoordinatePoint: AUPoint(x: 3840.0, y: 1080.0))
+        let outsideLetterboxEvent = AUPoint(x: videoRightEdgeEvent.x + 30.0, y: videoRightEdgeEvent.y)
+        let outsideOutputPoint = mapper.coordinatePoint(fromEventPoint: outsideLetterboxEvent)
+        let roundTrippedTopLeft = mapper.coordinatePoint(
+            fromEventPoint: mapper.eventPoint(fromCoordinatePoint: AUPoint(x: 384.0, y: 1944.0))
+        )
+
+        try assertApprox(mapper.coordinateFrame.minX, -480.0, "wide surface fitted min x")
+        try assertApprox(mapper.coordinateFrame.maxX, 4320.0, "wide surface fitted max x")
+        try assertApprox(videoRightEdgeEvent.x, 1800.0, "video right edge event x")
+        try assertTrue(outsideOutputPoint.x > 3840.0, "right-side letterbox event should map outside output pixels")
+        try assertEqual(roundTrippedTopLeft, AUPoint(x: 384.0, y: 1944.0), "aspect-fit mapper should round-trip OSC pixel coordinates")
     }
 
     static func testOSCDragPartFallsBackToLocalHitWhenHostPartIsNone() throws {

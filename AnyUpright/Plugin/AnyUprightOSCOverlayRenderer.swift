@@ -47,6 +47,24 @@ private struct AUOSCOverlayPixelFrame {
     var height: Double {
         max(1.0, maxY - minY)
     }
+
+    var coordinateFrame: AUCoordinateFrame {
+        AUCoordinateFrame(minX: minX, minY: minY, maxX: maxX, maxY: maxY)
+    }
+
+    init(_ coordinateFrame: AUCoordinateFrame) {
+        self.minX = coordinateFrame.minX
+        self.minY = coordinateFrame.minY
+        self.maxX = coordinateFrame.maxX
+        self.maxY = coordinateFrame.maxY
+    }
+
+    init(minX: Double, minY: Double, maxX: Double, maxY: Double) {
+        self.minX = minX
+        self.minY = minY
+        self.maxX = maxX
+        self.maxY = maxY
+    }
 }
 
 enum AUOSCOverlayCoordinateSpace {
@@ -596,21 +614,8 @@ final class AnyUprightOSCOverlayRenderer {
         textureWidth: Double,
         textureHeight: Double
     ) -> AUOSCOverlayPixelFrame {
-        let scale = min(textureWidth / frame.width, textureHeight / frame.height)
-        guard scale.isFinite, scale > 0.0 else {
-            return frame
-        }
-
-        let horizontalInset = max(0.0, (textureWidth - frame.width * scale) / 2.0)
-        let verticalInset = max(0.0, (textureHeight - frame.height * scale) / 2.0)
-        let fittedMinX = frame.minX - horizontalInset / scale
-        let fittedMinY = frame.minY - verticalInset / scale
-
-        return AUOSCOverlayPixelFrame(
-            minX: fittedMinX,
-            minY: fittedMinY,
-            maxX: fittedMinX + textureWidth / scale,
-            maxY: fittedMinY + textureHeight / scale
+        AUOSCOverlayPixelFrame(
+            frame.coordinateFrame.aspectFitted(toSurfaceSize: AUSize(width: textureWidth, height: textureHeight))
         )
     }
 

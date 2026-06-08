@@ -115,6 +115,7 @@ struct RenderWarpPreviews {
             image,
             outputSize: size,
             selectionToRect: selectionToRect,
+            sourceQuadHandles: sourceQuad,
             outputToSource: previewMatrix,
             url: outputDirectory.appendingPathComponent("quad-source-adjuster-preview.png")
         )
@@ -231,6 +232,7 @@ struct RenderWarpPreviews {
         _ image: RGBAImage,
         outputSize: AUSize,
         selectionToRect: simd_float3x3,
+        sourceQuadHandles: AUQuad,
         outputToSource: simd_float3x3,
         url: URL
     ) throws {
@@ -255,7 +257,7 @@ struct RenderWarpPreviews {
                 if isNearSelectionBorder(rectPoint, outputSize: outputSize) {
                     color = (255, 255, 255, 255)
                 }
-                if isNearSelectionHandle(rectPoint, outputSize: outputSize) {
+                if isNearSelectionHandle(outputPoint, handles: sourceQuadHandles) {
                     color = (0, 140, 255, 255)
                 }
 
@@ -326,12 +328,12 @@ struct RenderWarpPreviews {
         return distance <= 3.0
     }
 
-    private static func isNearSelectionHandle(_ point: AUPoint, outputSize: AUSize) -> Bool {
+    private static func isNearSelectionHandle(_ point: AUPoint, handles: AUQuad) -> Bool {
         let corners = [
-            AUPoint(x: 0.0, y: 0.0),
-            AUPoint(x: outputSize.width, y: 0.0),
-            AUPoint(x: outputSize.width, y: outputSize.height),
-            AUPoint(x: 0.0, y: outputSize.height)
+            handles.topLeft,
+            handles.topRight,
+            handles.bottomRight,
+            handles.bottomLeft
         ]
 
         return corners.contains { corner in

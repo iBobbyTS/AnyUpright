@@ -31,6 +31,7 @@ struct AnyUprightGeometryTests {
         try testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting()
         try testQuadSourceRawCanvasHitPointsFollowVisibleSourceQuad()
         try testQuadSourceAdjusterPreviewAndApplyUseSameSelection()
+        try testQuadSourceOutputHandlesStayInImageSpace()
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
         try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
@@ -295,6 +296,33 @@ struct AnyUprightGeometryTests {
         try assertMaps(appliedMatrix, AUPoint(x: outputSize.width, y: 0.0), to: selectedSourceQuad.topRight)
         try assertMaps(appliedMatrix, AUPoint(x: outputSize.width, y: outputSize.height), to: selectedSourceQuad.bottomRight)
         try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: outputSize.height), to: selectedSourceQuad.bottomLeft)
+    }
+
+    static func testQuadSourceOutputHandlesStayInImageSpace() throws {
+        let outputSize = AUSize(width: 300.0, height: 150.0)
+        let sourceSize = AUSize(width: 600.0, height: 300.0)
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPixels = AUPoint(x: 40.0, y: -30.0)
+        offsets.topRightPixels = AUPoint(x: -90.0, y: 20.0)
+        offsets.bottomRightPixels = AUPoint(x: -120.0, y: -45.0)
+        offsets.bottomLeftPixels = AUPoint(x: 25.0, y: 60.0)
+
+        let handles = AnyUprightGeometry.sourceQuadOutputHandles(
+            from: offsets,
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+        let selectionToRect = AnyUprightGeometry.quadSelectionToOutputRectMatrix(
+            from: offsets,
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+
+        try assertMaps(selectionToRect, handles.topLeft, to: AUPoint(x: 0.0, y: 0.0))
+        try assertMaps(selectionToRect, handles.topRight, to: AUPoint(x: outputSize.width, y: 0.0))
+        try assertMaps(selectionToRect, handles.bottomRight, to: AUPoint(x: outputSize.width, y: outputSize.height))
+        try assertMaps(selectionToRect, handles.bottomLeft, to: AUPoint(x: 0.0, y: outputSize.height))
+        try assertTrue(handles.topLeft != AUPoint(x: 0.0, y: 0.0), "fixed-size handles should be centered in output image space, not rect space")
     }
 
     static func testCanvasSurfaceMapperConvertsFxPlugOSCEvents() throws {

@@ -466,14 +466,22 @@ enum AnyUprightGeometry {
         outputSize: AUSize,
         sourceSize: AUSize
     ) -> simd_float3x3 {
+        let outputQuad = sourceQuadOutputHandles(from: offsets, outputSize: outputSize, sourceSize: sourceSize)
+        return homography(from: outputQuad, to: AUQuad.fullFrame(outputSize))
+    }
+
+    static func sourceQuadOutputHandles(
+        from offsets: AUCornerOffsets,
+        outputSize: AUSize,
+        sourceSize: AUSize
+    ) -> AUQuad {
         let selectedSourceQuad = sourceQuad(from: offsets, size: sourceSize)
-        let outputQuad = AUQuad(
+        return AUQuad(
             topLeft: scalePoint(selectedSourceQuad.topLeft, from: sourceSize, to: outputSize),
             topRight: scalePoint(selectedSourceQuad.topRight, from: sourceSize, to: outputSize),
             bottomRight: scalePoint(selectedSourceQuad.bottomRight, from: sourceSize, to: outputSize),
             bottomLeft: scalePoint(selectedSourceQuad.bottomLeft, from: sourceSize, to: outputSize)
         )
-        return homography(from: outputQuad, to: AUQuad.fullFrame(outputSize))
     }
 
     static func identityOutputToSourceMatrix(outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {

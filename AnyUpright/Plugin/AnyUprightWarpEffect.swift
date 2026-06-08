@@ -250,6 +250,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         let matrix = outputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let fallback = fallbackOutputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let selectionToRect = selectionOutputToRectMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
+        let sourceHandles = sourceQuadOutputHandles(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let renderMode = renderMode(from: parameterState)
 
         return AnyUprightWarpState(
@@ -258,6 +259,10 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             selectionOutputToRect: selectionToRect,
             outputSize: vector_float2(Float(destinationSize.width), Float(destinationSize.height)),
             inputSize: vector_float2(Float(sourceSize.width), Float(sourceSize.height)),
+            sourceQuadTopLeft: vector_float2(Float(sourceHandles.topLeft.x), Float(sourceHandles.topLeft.y)),
+            sourceQuadTopRight: vector_float2(Float(sourceHandles.topRight.x), Float(sourceHandles.topRight.y)),
+            sourceQuadBottomRight: vector_float2(Float(sourceHandles.bottomRight.x), Float(sourceHandles.bottomRight.y)),
+            sourceQuadBottomLeft: vector_float2(Float(sourceHandles.bottomLeft.x), Float(sourceHandles.bottomLeft.y)),
             renderMode: renderMode,
             reserved0: 0,
             reserved1: 0,
@@ -321,6 +326,19 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         }
 
         return AnyUprightGeometry.quadSelectionToOutputRectMatrix(
+            from: cornerOffsets(from: state),
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+    }
+
+    private func sourceQuadOutputHandles(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> AUQuad {
+        guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
+              AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad else {
+            return AUQuad.fullFrame(outputSize)
+        }
+
+        return AnyUprightGeometry.sourceQuadOutputHandles(
             from: cornerOffsets(from: state),
             outputSize: outputSize,
             sourceSize: sourceSize

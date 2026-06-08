@@ -82,18 +82,17 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
             color.rgb *= 0.70;
         }
 
-        float2 corners[4] = {
-            float2(0.0, 0.0),
-            float2(outputSize.x, 0.0),
-            float2(outputSize.x, outputSize.y),
-            float2(0.0, outputSize.y)
+        float2 handleCenters[4] = {
+            warpState->sourceQuadTopLeft,
+            warpState->sourceQuadTopRight,
+            warpState->sourceQuadBottomRight,
+            warpState->sourceQuadBottomLeft
         };
 
         bool handleShadow = false;
         bool handleFill = false;
         for (int i = 0; i < 4; ++i) {
-            float2 delta = rectPoint - corners[i];
-            float handleDistance = length(delta / max(outputSize, float2(1.0, 1.0)) * warpState->inputSize);
+            float handleDistance = length(in.outputCoordinate - handleCenters[i]);
             handleShadow = handleShadow || handleDistance <= 22.0;
             handleFill = handleFill || handleDistance <= 16.0;
         }

@@ -42,6 +42,10 @@ typedef struct AnyUprightWarpState {
     matrix_float3x3 selectionOutputToRect;
     vector_float2 outputSize;
     vector_float2 inputSize;
+    vector_float2 sourceQuadTopLeft;
+    vector_float2 sourceQuadTopRight;
+    vector_float2 sourceQuadBottomRight;
+    vector_float2 sourceQuadBottomLeft;
     int renderMode;
     int reserved0;
     int reserved1;

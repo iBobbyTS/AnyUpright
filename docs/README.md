@@ -50,7 +50,7 @@ Provides manual four-point perspective transforms.
 Current implementation:
 
 - `AnyUpright Quad Manual` is registered as a separate FxPlug filter.
-- `Mode` selects `Output Corners` or `Source Quad`.
+- `Mode` selects `Output Corners` or `Source Quad`; new Quad instances default to `Source Quad`.
 - `Edit Mode` is shown only in `Source Quad` mode. It is enabled by default: when enabled, the current source quadrilateral is drawn into the filter output, handle drags only move the stored quadrilateral, and the image is not warped. Disable it to hide the adjuster and stretch the selected source quadrilateral to the full output frame.
 - In `Source Quad` mode, the default source quadrilateral is the central 80% of the frame. The 100% full-frame selection is still covered as an identity/no-offset geometry case for validation. The edit preview dims the outside area to 70% brightness, leaves the selected quadrilateral at original brightness, connects the four handles with a visible quadrilateral outline, and draws the handles as fixed-size circular markers in output image space so they do not stretch with the quadrilateral.
 - In `Output Corners` mode, each visible output corner exposes `X %`, `Y %`, `X px`, and `Y px` offsets in the inspector.

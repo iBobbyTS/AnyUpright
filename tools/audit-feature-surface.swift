@@ -78,6 +78,7 @@ struct AuditFeatureSurface {
     private static func auditQuad(_ effects: String, geometry: String, overlay: String, metal: String) throws {
         try require(effects, "Output Corners", "Quad exposes realtime output-corner mode")
         try require(effects, "Source Quad", "Quad exposes Lens-style source-quad mode")
+        try require(effects, "defaultValue: UInt32(AUQuadTransformMode.sourceQuad.rawValue)", "Quad defaults new instances to Source Quad")
         try require(effects, "Edit Mode", "Quad exposes edit mode for source-quad handles without applying the warp")
         try require(effects, "class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect", "Quad filter owns render parameters")
         try require(effects, "class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Quad exposes onscreen controls as a separate FxPlug class")

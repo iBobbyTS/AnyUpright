@@ -16,7 +16,7 @@ enum AnyUprightEffectKind: Int32 {
 struct AnyUprightParameterState {
     var effectKind: Int32 = 0
     var fillFrame: Int32 = 0
-    var quadMode: Int32 = AUQuadTransformMode.outputCorners.rawValue
+    var quadMode: Int32 = AUQuadTransformMode.sourceQuad.rawValue
     var showCornerAdjuster: Int32 = 1
     var rotationRadians: Float = 0.0
     var verticalPerspective: Float = 0.0

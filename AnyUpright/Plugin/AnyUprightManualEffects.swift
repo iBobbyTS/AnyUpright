@@ -468,7 +468,7 @@ private func quadParameterState(at time: CMTime, paramAPI: FxParameterRetrievalA
         return result
     }
 
-    var mode = Int32(AUQuadTransformMode.outputCorners.rawValue)
+    var mode = Int32(AUQuadTransformMode.sourceQuad.rawValue)
     var showCornerAdjuster = ObjCBool(true)
 
     paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
@@ -500,7 +500,7 @@ private func quadParameterState(at time: CMTime, paramAPI: FxParameterRetrievalA
 }
 
 private func quadMode(from state: AnyUprightParameterState) -> AUQuadTransformMode {
-    AUQuadTransformMode(rawValue: state.quadMode) ?? .outputCorners
+    AUQuadTransformMode(rawValue: state.quadMode) ?? .sourceQuad
 }
 
 private func shouldShowQuadCornerAdjuster(from state: AnyUprightParameterState, mode: AUQuadTransformMode) -> Bool {
@@ -535,7 +535,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect {
         paramAPI.addPopupMenu(
             withName: "Mode",
             parameterID: QuadParam.mode.rawValue,
-            defaultValue: UInt32(AUQuadTransformMode.outputCorners.rawValue),
+            defaultValue: UInt32(AUQuadTransformMode.sourceQuad.rawValue),
             menuEntries: ["Output Corners", "Source Quad"],
             parameterFlags: defaultFlags()
         )
@@ -611,7 +611,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect {
     }
 
     private func syncQuadInspectorVisibility(at time: CMTime) {
-        var mode = Int32(AUQuadTransformMode.outputCorners.rawValue)
+        var mode = Int32(AUQuadTransformMode.sourceQuad.rawValue)
         if let paramAPI = parameterRetrievalAPI() {
             paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
         }
@@ -620,7 +620,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect {
             return
         }
 
-        let selectedMode = AUQuadTransformMode(rawValue: mode) ?? .outputCorners
+        let selectedMode = AUQuadTransformMode(rawValue: mode) ?? .sourceQuad
         let isSourceQuad = selectedMode == .sourceQuad
 
         _ = settingAPI.setParameterFlags(isSourceQuad ? defaultFlags() : showCornerAdjusterHiddenFlags(), toParameter: QuadParam.showCornerAdjuster.rawValue)

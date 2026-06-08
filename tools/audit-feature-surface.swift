@@ -79,17 +79,13 @@ struct AuditFeatureSurface {
         try require(effects, "Output Corners", "Quad exposes realtime output-corner mode")
         try require(effects, "Source Quad", "Quad exposes Lens-style source-quad mode")
         try require(effects, "Edit Mode", "Quad exposes edit mode for source-quad handles without applying the warp")
-        try require(effects, "Stretch Mode", "Quad exposes Reverse Corner Pin-style source stretch mode")
-        try require(effects, "Mirror Horizontal", "Quad can mirror the pinned source area horizontally")
-        try require(effects, "Mirror Vertical", "Quad can mirror the pinned source area vertically")
         try require(effects, "class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect", "Quad filter owns render parameters")
         try require(effects, "class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Quad exposes onscreen controls as a separate FxPlug class")
         try require(effects, "hiddenCollapsedFlags", "Source Quad hides the offset controls while keeping them as persistent state")
         try require(effects, "sourceCornerPercentOffset", "Source Quad OSC writes hidden source-corner percent offsets")
         try require(effects, "overlayRenderer.clear", "Quad OSC clears its host overlay surface while the effect render output owns the visible Source Quad adjuster")
         try require(geometry, "quadOutputToSourceMatrix", "Quad render matrix is centralized in geometry")
-        try require(geometry, "AUSourceQuadStretchMode", "Source Quad stretch modes are testable geometry state")
-        try require(geometry, "quadSelectionToOutputRectMatrix", "Source Quad mirror modes identify the selected output area")
+        try require(geometry, "quadSelectionToOutputRectMatrix", "Source Quad edit preview identifies the selected source area")
         try require(geometry, "sourceQuadDefault", "Source Quad defines its default source quadrilateral")
         try require(geometry, "sourceQuadInset = 0.10", "Source Quad defaults to the central 80 percent of the source frame")
         try require(geometry, "sourceQuadObjectPoints", "Source Quad converts persistent offsets into object-space handles")
@@ -104,8 +100,7 @@ struct AuditFeatureSurface {
         try require(overlay, "MTLCreateSystemDefaultDevice", "OSC renderer can fall back when the destination registry ID is unavailable")
         try require(metal, "AURM_SourceQuadAdjusterPreview", "Source Quad edit overlay is rendered into the effect output")
         try require(metal, "color.rgb *= 0.70", "Source Quad edit preview dims pixels outside the selected quad")
-        try require(metal, "? warpState->fallbackOutputToSource", "Selection mirror fallback only applies outside the selected quad")
-        try require(metal, ": warpState->outputToSource", "Full-frame Quad warps use the primary output-to-source matrix")
+        try require(metal, "warpState->outputToSource * float3(outputCoordinate, 1.0)", "Quad warps use the primary output-to-source matrix")
     }
 
     private static func auditUpright(_ effects: String, geometry: String, warp: String, candidates: String) throws {

@@ -83,7 +83,7 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
 
     if (warpState->renderMode == AURM_SourceQuadAdjusterPreview) {
         float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
-        float3 sourceHomogeneous = warpState->fallbackOutputToSource * float3(outputCoordinate, 1.0);
+        float3 sourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
         if (fabs(sourceHomogeneous.z) < 0.000001) {
             return float4(0.0, 0.0, 0.0, 1.0);
         }
@@ -148,30 +148,8 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
         return color;
     }
 
-    if (warpState->renderMode == AURM_WarpSelectionOverOriginal) {
-        float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
-        float3 selectionHomogeneous = warpState->selectionOutputToRect * float3(outputCoordinate, 1.0);
-        if (fabs(selectionHomogeneous.z) >= 0.000001) {
-            float2 selectionRect = selectionHomogeneous.xy / selectionHomogeneous.z;
-            if (selectionRect.x >= 0.0 && selectionRect.x <= warpState->outputSize.x &&
-                selectionRect.y >= 0.0 && selectionRect.y <= warpState->outputSize.y) {
-                float3 mirroredSourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
-                if (fabs(mirroredSourceHomogeneous.z) >= 0.000001) {
-                    float2 mirroredSourcePixel = mirroredSourceHomogeneous.xy / mirroredSourceHomogeneous.z;
-                    float2 mirroredSourceUV = inputTextureUV(mirroredSourcePixel, warpState);
-                    if (mirroredSourceUV.x >= 0.0 && mirroredSourceUV.x <= 1.0 &&
-                        mirroredSourceUV.y >= 0.0 && mirroredSourceUV.y <= 1.0) {
-                        return float4(colorTexture.sample(textureSampler, mirroredSourceUV));
-                    }
-                }
-            }
-        }
-    }
-
     float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
-    float3 sourceHomogeneous = (warpState->renderMode == AURM_WarpSelectionOverOriginal
-                                ? warpState->fallbackOutputToSource
-                                : warpState->outputToSource) * float3(outputCoordinate, 1.0);
+    float3 sourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
     if (fabs(sourceHomogeneous.z) < 0.000001) {
         return float4(0.0, 0.0, 0.0, 1.0);
     }

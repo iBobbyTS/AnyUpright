@@ -131,27 +131,6 @@ struct RenderWarpPreviews {
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: sourceQuad.bottomRight, label: "source quad bottom-right maps to source")
         try saveWarped(image, outputSize: size, outputToSource: appliedMatrix, url: outputDirectory.appendingPathComponent("quad-source-apply-preview.png"))
 
-        let mirrorMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
-            from: offsets,
-            mode: .sourceQuad,
-            stretchMode: .mirrorHorizontal,
-            showCornerAdjuster: false,
-            outputSize: size,
-            sourceSize: size
-        )
-        let outsidePoint = AUPoint(x: 30.0, y: 30.0)
-        let insidePoint = sourceQuad.topLeft
-        try assertTrue(!isInsideSelection(outsidePoint, selectionToRect: selectionToRect, outputSize: size), "source quad mirror outside probe should be outside")
-        try assertTrue(isInsideSelection(insidePoint, selectionToRect: selectionToRect, outputSize: size), "source quad mirror inside probe should be inside")
-        try assertMaps(mirrorMatrix, sourceQuad.topLeft, to: sourceQuad.topRight, label: "source quad horizontal mirror top-left")
-        try saveSelectionOverOriginal(
-            image,
-            outputSize: size,
-            selectionToRect: selectionToRect,
-            selectionOutputToSource: mirrorMatrix,
-            fallbackOutputToSource: AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: size, sourceSize: size),
-            url: outputDirectory.appendingPathComponent("quad-source-mirror-horizontal-preview.png")
-        )
     }
 
     private static func renderQuadOutputPreview(assetDirectory: URL, outputDirectory: URL) throws {
@@ -264,37 +243,6 @@ struct RenderWarpPreviews {
                 color = mix(color, (0, 0, 0, 255), handleShadowCoverage * 0.70)
                 color = mix(color, (0, 140, 255, 255), handleFillCoverage)
 
-                let index = (y * outputWidth + x) * 4
-                rgba[index] = color.0
-                rgba[index + 1] = color.1
-                rgba[index + 2] = color.2
-                rgba[index + 3] = color.3
-            }
-        }
-
-        try saveRGBA(RGBAImage(width: outputWidth, height: outputHeight, pixels: rgba), url: url)
-    }
-
-    private static func saveSelectionOverOriginal(
-        _ image: RGBAImage,
-        outputSize: AUSize,
-        selectionToRect: simd_float3x3,
-        selectionOutputToSource: simd_float3x3,
-        fallbackOutputToSource: simd_float3x3,
-        url: URL
-    ) throws {
-        let outputWidth = Int(outputSize.width.rounded())
-        let outputHeight = Int(outputSize.height.rounded())
-        var rgba = Array(repeating: UInt8(0), count: outputWidth * outputHeight * 4)
-
-        for y in 0..<outputHeight {
-            for x in 0..<outputWidth {
-                let outputPoint = AUPoint(x: Double(x), y: Double(y))
-                let matrix = isInsideSelection(outputPoint, selectionToRect: selectionToRect, outputSize: outputSize)
-                    ? selectionOutputToSource
-                    : fallbackOutputToSource
-                let source = AnyUprightGeometry.transform(outputPoint, by: matrix)
-                let color = image.sample(x: source.x, y: source.y)
                 let index = (y * outputWidth + x) * 4
                 rgba[index] = color.0
                 rgba[index + 1] = color.1

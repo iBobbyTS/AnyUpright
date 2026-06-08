@@ -16,7 +16,6 @@ private enum HorizonParam: UInt32 {
 }
 
 private enum QuadParam: UInt32 {
-    case sourceQuadStretchMode = 197
     case mode = 198
     case showCornerAdjuster = 199
     case topLeftPercentX = 200
@@ -471,12 +470,9 @@ private func quadParameterState(at time: CMTime, paramAPI: FxParameterRetrievalA
 
     var mode = Int32(AUQuadTransformMode.outputCorners.rawValue)
     var showCornerAdjuster = ObjCBool(true)
-    var stretchMode = Int32(AUSourceQuadStretchMode.stretch.rawValue)
 
-    paramAPI.getIntValue(&stretchMode, fromParameter: QuadParam.sourceQuadStretchMode.rawValue, at: time)
     paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
     paramAPI.getBoolValue(&showCornerAdjuster, fromParameter: QuadParam.showCornerAdjuster.rawValue, at: time)
-    result.sourceQuadStretchMode = stretchMode
     result.quadMode = mode
     result.showCornerAdjuster = showCornerAdjuster.boolValue ? 1 : 0
 
@@ -542,13 +538,6 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect {
             defaultValue: UInt32(AUQuadTransformMode.outputCorners.rawValue),
             menuEntries: ["Output Corners", "Source Quad"],
             parameterFlags: defaultFlags()
-        )
-        paramAPI.addPopupMenu(
-            withName: "Stretch Mode",
-            parameterID: QuadParam.sourceQuadStretchMode.rawValue,
-            defaultValue: UInt32(AUSourceQuadStretchMode.stretch.rawValue),
-            menuEntries: ["Stretch to Frame", "Mirror Horizontal", "Mirror Vertical"],
-            parameterFlags: showCornerAdjusterHiddenFlags()
         )
         paramAPI.addToggleButton(
             withName: "Edit Mode",
@@ -634,7 +623,6 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect {
         let selectedMode = AUQuadTransformMode(rawValue: mode) ?? .outputCorners
         let isSourceQuad = selectedMode == .sourceQuad
 
-        _ = settingAPI.setParameterFlags(isSourceQuad ? defaultFlags() : showCornerAdjusterHiddenFlags(), toParameter: QuadParam.sourceQuadStretchMode.rawValue)
         _ = settingAPI.setParameterFlags(isSourceQuad ? defaultFlags() : showCornerAdjusterHiddenFlags(), toParameter: QuadParam.showCornerAdjuster.rawValue)
 
         let cornerFlags = isSourceQuad ? hiddenCollapsedFlags() : collapsedFlags()

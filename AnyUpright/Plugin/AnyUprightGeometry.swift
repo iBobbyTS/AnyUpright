@@ -95,12 +95,6 @@ enum AUQuadTransformMode: Int32 {
     case sourceQuad = 1
 }
 
-enum AUSourceQuadStretchMode: Int32 {
-    case stretch = 0
-    case mirrorHorizontal = 1
-    case mirrorVertical = 2
-}
-
 enum AUQuadCorner {
     case topLeft
     case topRight
@@ -602,7 +596,6 @@ enum AnyUprightGeometry {
     static func quadOutputToSourceMatrix(
         from offsets: AUCornerOffsets,
         mode: AUQuadTransformMode,
-        stretchMode: AUSourceQuadStretchMode = .stretch,
         showCornerAdjuster: Bool,
         outputSize: AUSize,
         sourceSize: AUSize
@@ -618,24 +611,7 @@ enum AnyUprightGeometry {
             }
 
             let selectedSourceQuad = sourceQuad(from: offsets, size: sourceSize)
-            switch stretchMode {
-            case .stretch:
-                return homography(from: AUQuad.fullFrame(outputSize), to: selectedSourceQuad)
-            case .mirrorHorizontal:
-                return mirroredSelectionOutputToSourceMatrix(
-                    from: offsets,
-                    mirror: horizontalMirrorMatrix(size: outputSize),
-                    outputSize: outputSize,
-                    sourceSize: sourceSize
-                )
-            case .mirrorVertical:
-                return mirroredSelectionOutputToSourceMatrix(
-                    from: offsets,
-                    mirror: verticalMirrorMatrix(size: outputSize),
-                    outputSize: outputSize,
-                    sourceSize: sourceSize
-                )
-            }
+            return homography(from: AUQuad.fullFrame(outputSize), to: selectedSourceQuad)
         }
     }
 
@@ -664,25 +640,6 @@ enum AnyUprightGeometry {
 
     static func identityOutputToSourceMatrix(outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {
         homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
-    }
-
-    private static func mirroredSelectionOutputToSourceMatrix(
-        from offsets: AUCornerOffsets,
-        mirror: simd_float3x3,
-        outputSize: AUSize,
-        sourceSize: AUSize
-    ) -> simd_float3x3 {
-        let selectionToRect = quadSelectionToOutputRectMatrix(from: offsets, outputSize: outputSize, sourceSize: sourceSize)
-        let rectToSource = homography(from: AUQuad.fullFrame(outputSize), to: sourceQuad(from: offsets, size: sourceSize))
-        return multiply(multiply(rectToSource, mirror), selectionToRect)
-    }
-
-    private static func horizontalMirrorMatrix(size: AUSize) -> simd_float3x3 {
-        matrix(-1.0, 0.0, size.width, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
-    }
-
-    private static func verticalMirrorMatrix(size: AUSize) -> simd_float3x3 {
-        matrix(1.0, 0.0, 0.0, 0.0, -1.0, size.height, 0.0, 0.0, 1.0)
     }
 
     private static func scalePoint(_ point: AUPoint, from sourceSize: AUSize, to outputSize: AUSize) -> AUPoint {

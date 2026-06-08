@@ -45,7 +45,6 @@ struct AnyUprightGeometryTests {
         try testInputTextureCoordinatesRespectHostTilePadding()
         try testSourceQuadEditPreviewRequestsDestinationTile()
         try testQuadSourceModeShowsAdjusterBeforeApplyingWarp()
-        try testQuadSourceMirrorModesSampleWithinSelectedQuad()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
         try testUprightVerticalAndHorizontalPerspectiveGenerateCenteredQuads()
         try testUprightPerspectiveKeepsFrameCenterAnchored()
@@ -646,46 +645,6 @@ struct AnyUprightGeometryTests {
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: sourceQuad.topRight)
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: sourceQuad.bottomRight)
         try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: sourceQuad.bottomLeft)
-    }
-
-    static func testQuadSourceMirrorModesSampleWithinSelectedQuad() throws {
-        let size = AUSize(width: 200.0, height: 100.0)
-        let offsets = AUCornerOffsets()
-        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
-        let selectionToRect = AnyUprightGeometry.quadSelectionToOutputRectMatrix(
-            from: offsets,
-            outputSize: size,
-            sourceSize: size
-        )
-        let horizontalMirror = AnyUprightGeometry.quadOutputToSourceMatrix(
-            from: offsets,
-            mode: .sourceQuad,
-            stretchMode: .mirrorHorizontal,
-            showCornerAdjuster: false,
-            outputSize: size,
-            sourceSize: size
-        )
-        let verticalMirror = AnyUprightGeometry.quadOutputToSourceMatrix(
-            from: offsets,
-            mode: .sourceQuad,
-            stretchMode: .mirrorVertical,
-            showCornerAdjuster: false,
-            outputSize: size,
-            sourceSize: size
-        )
-
-        try assertMaps(selectionToRect, sourceQuad.topLeft, to: AUPoint(x: 0.0, y: 0.0))
-        try assertMaps(selectionToRect, sourceQuad.bottomRight, to: AUPoint(x: size.width, y: size.height))
-
-        try assertMaps(horizontalMirror, sourceQuad.topLeft, to: sourceQuad.topRight)
-        try assertMaps(horizontalMirror, sourceQuad.topRight, to: sourceQuad.topLeft)
-        try assertMaps(horizontalMirror, sourceQuad.bottomLeft, to: sourceQuad.bottomRight)
-        try assertMaps(horizontalMirror, sourceQuad.bottomRight, to: sourceQuad.bottomLeft)
-
-        try assertMaps(verticalMirror, sourceQuad.topLeft, to: sourceQuad.bottomLeft)
-        try assertMaps(verticalMirror, sourceQuad.bottomLeft, to: sourceQuad.topLeft)
-        try assertMaps(verticalMirror, sourceQuad.topRight, to: sourceQuad.bottomRight)
-        try assertMaps(verticalMirror, sourceQuad.bottomRight, to: sourceQuad.topRight)
     }
 
     static func testHorizonFillScaleOnlyZoomsWhenNeeded() throws {

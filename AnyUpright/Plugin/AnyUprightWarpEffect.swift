@@ -18,7 +18,6 @@ struct AnyUprightParameterState {
     var fillFrame: Int32 = 0
     var quadMode: Int32 = AUQuadTransformMode.outputCorners.rawValue
     var showCornerAdjuster: Int32 = 1
-    var sourceQuadStretchMode: Int32 = AUSourceQuadStretchMode.stretch.rawValue
     var rotationRadians: Float = 0.0
     var verticalPerspective: Float = 0.0
     var horizontalPerspective: Float = 0.0
@@ -279,14 +278,12 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             textureSize: AUSize(width: Double(sourceTexture.width), height: Double(sourceTexture.height))
         )
         let matrix = outputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
-        let fallback = fallbackOutputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let selectionToRect = selectionOutputToRectMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let sourceHandles = sourceQuadOutputHandles(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let renderMode = renderMode(from: parameterState)
 
         return AnyUprightWarpState(
             outputToSource: matrix,
-            fallbackOutputToSource: fallback,
             selectionOutputToRect: selectionToRect,
             outputSize: vector_float2(Float(destinationSize.width), Float(destinationSize.height)),
             inputSize: vector_float2(Float(sourceSize.width), Float(sourceSize.height)),
@@ -316,11 +313,9 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
         case .quad:
             let mode = AUQuadTransformMode(rawValue: state.quadMode) ?? .outputCorners
-            let stretchMode = AUSourceQuadStretchMode(rawValue: state.sourceQuadStretchMode) ?? .stretch
             return AnyUprightGeometry.quadOutputToSourceMatrix(
                 from: cornerOffsets(from: state),
                 mode: mode,
-                stretchMode: stretchMode,
                 showCornerAdjuster: state.showCornerAdjuster != 0,
                 outputSize: outputSize,
                 sourceSize: sourceSize
@@ -344,14 +339,6 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         case .none:
             return AnyUprightGeometry.homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
         }
-    }
-
-    private func fallbackOutputToSourceMatrix(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {
-        guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad else {
-            return outputToSourceMatrix(from: state, outputSize: outputSize, sourceSize: sourceSize)
-        }
-
-        return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: sourceSize)
     }
 
     private func selectionOutputToRectMatrix(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {
@@ -387,15 +374,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             return Int32(AURM_SourceQuadAdjusterPreview)
         }
 
-        guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
-              AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad,
-              state.showCornerAdjuster == 0,
-              let stretchMode = AUSourceQuadStretchMode(rawValue: state.sourceQuadStretchMode),
-              stretchMode != .stretch else {
-            return Int32(AURM_WarpFullFrame)
-        }
-
-        return Int32(AURM_WarpSelectionOverOriginal)
+        return Int32(AURM_WarpFullFrame)
     }
 
     func cornerOffsets(from state: AnyUprightParameterState) -> AUCornerOffsets {

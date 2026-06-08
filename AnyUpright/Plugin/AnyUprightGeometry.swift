@@ -225,6 +225,19 @@ enum AnyUprightGeometry {
         )
     }
 
+    static func verticallyFlippedPixelPoint(_ point: AUPoint, size: AUSize) -> AUPoint {
+        AUPoint(x: point.x, y: max(size.height, 1.0) - point.y)
+    }
+
+    static func verticallyFlippedPixelQuad(_ quad: AUQuad, size: AUSize) -> AUQuad {
+        AUQuad(
+            topLeft: verticallyFlippedPixelPoint(quad.topLeft, size: size),
+            topRight: verticallyFlippedPixelPoint(quad.topRight, size: size),
+            bottomRight: verticallyFlippedPixelPoint(quad.bottomRight, size: size),
+            bottomLeft: verticallyFlippedPixelPoint(quad.bottomLeft, size: size)
+        )
+    }
+
     private static func quadObjectPoints(from offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUQuad {
         AUQuad(
             topLeft: objectPoint(for: .topLeft, offsets: offsets, base: base, size: size),

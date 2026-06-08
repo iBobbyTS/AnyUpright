@@ -670,24 +670,23 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             return
         }
 
-        let size = objectPixelSizeForOSC()
-        let objectPoints = quadObjectPoints(from: state, size: size, mode: mode)
-        let canvasPoints = rawHitTestCanvasPoints(from: objectPoints, mode: mode)
+        let outputSize = AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
+        let sourceSize = objectPixelSizeForOSC(defaultSize: outputSize)
+        let hoverPoints = sourceQuadHoverOutputPoints(from: state, outputSize: outputSize, sourceSize: sourceSize, mode: mode)
         let handles = [
-            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
-            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+            AUOSCHandle(point: hoverPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: hoverPoints.topRight, part: QuadOSCPart.topRight.rawValue),
+            AUOSCHandle(point: hoverPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: hoverPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
         ]
-        let quad = [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]
+        let quad = [hoverPoints.topLeft, hoverPoints.topRight, hoverPoints.bottomRight, hoverPoints.bottomLeft]
 
         overlayRenderer.renderStyledSegments(
             highlightedSegments(for: hoverPart, quad: quad),
             handles: highlightedHandles(for: hoverPart, handles: handles),
             activePart: hoverPart.rawValue,
             destinationImage: destinationImage,
-            destinationSize: AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height))),
-            canvasFrame: objectCanvasFrame(),
+            destinationSize: outputSize,
             coordinateSpace: .pixels,
             handleStyle: hoverOverlayStyle()
         )
@@ -915,6 +914,19 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         case .sourceQuad:
             return quadCanvasPoints(from: AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints))
         }
+    }
+
+    private func sourceQuadHoverOutputPoints(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize, mode: AUQuadTransformMode) -> AUQuad {
+        guard mode == .sourceQuad else {
+            return AUQuad.fullFrame(outputSize)
+        }
+
+        let outputHandles = AnyUprightGeometry.sourceQuadOutputHandles(
+            from: quadCornerOffsets(from: state),
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+        return AnyUprightGeometry.verticallyFlippedPixelQuad(outputHandles, size: outputSize)
     }
 
     private func objectCanvasFrame() -> [AUPoint] {

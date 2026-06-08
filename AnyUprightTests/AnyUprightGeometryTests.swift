@@ -257,6 +257,20 @@ struct AnyUprightGeometryTests {
         try assertEqual(rawHitPixels.bottomLeft, visibleSourceQuad.bottomLeft, "raw canvas hit point should keep bottom-left aligned")
     }
 
+    static func testPixelQuadFlipMapsOutputHandlesToOSCRenderTargetCoordinates() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let sourceQuad = AnyUprightGeometry.sourceQuadOutputHandles(
+            from: AUCornerOffsets(),
+            outputSize: size,
+            sourceSize: size
+        )
+        let oscQuad = AnyUprightGeometry.verticallyFlippedPixelQuad(sourceQuad, size: size)
+
+        try assertEqual(sourceQuad.topLeft, AUPoint(x: 20.0, y: 10.0), "source top-left")
+        try assertEqual(oscQuad.topLeft, AUPoint(x: 20.0, y: 90.0), "osc top-left")
+        try assertEqual(oscQuad.bottomLeft, AUPoint(x: 20.0, y: 10.0), "osc bottom-left")
+    }
+
     static func testQuadSourceAdjusterPreviewAndApplyUseSameSelection() throws {
         let outputSize = AUSize(width: 300.0, height: 150.0)
         let sourceSize = AUSize(width: 600.0, height: 300.0)

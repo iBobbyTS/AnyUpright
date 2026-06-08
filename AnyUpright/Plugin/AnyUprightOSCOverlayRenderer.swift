@@ -537,12 +537,17 @@ final class AnyUprightOSCOverlayRenderer {
                 return canvasFrame
             }
 
-            return AUOSCOverlayPixelFrame(
-                minX: 0.0,
-                minY: 0.0,
-                maxX: textureWidth,
-                maxY: textureHeight
-            )
+            if let destinationSize, destinationSize.width > 1.0, destinationSize.height > 1.0 {
+                let outputFrame = AUOSCOverlayPixelFrame(minX: 0.0, minY: 0.0, maxX: destinationSize.width, maxY: destinationSize.height)
+                return aspectFittedCoordinateFrame(for: outputFrame, textureWidth: textureWidth, textureHeight: textureHeight)
+            }
+
+            let imageFrame = pixelFrame(for: destinationImage.imagePixelBounds)
+            if imageFrame.width > 1.0, imageFrame.height > 1.0 {
+                return imageFrame
+            }
+
+            return AUOSCOverlayPixelFrame(minX: 0.0, minY: 0.0, maxX: textureWidth, maxY: textureHeight)
         }
 
         let imageFrame = pixelFrame(for: destinationImage.imagePixelBounds)
@@ -583,6 +588,29 @@ final class AnyUprightOSCOverlayRenderer {
             minY: Double(rect.bottom),
             maxX: Double(rect.right),
             maxY: Double(rect.top)
+        )
+    }
+
+    private func aspectFittedCoordinateFrame(
+        for frame: AUOSCOverlayPixelFrame,
+        textureWidth: Double,
+        textureHeight: Double
+    ) -> AUOSCOverlayPixelFrame {
+        let scale = min(textureWidth / frame.width, textureHeight / frame.height)
+        guard scale.isFinite, scale > 0.0 else {
+            return frame
+        }
+
+        let horizontalInset = max(0.0, (textureWidth - frame.width * scale) / 2.0)
+        let verticalInset = max(0.0, (textureHeight - frame.height * scale) / 2.0)
+        let fittedMinX = frame.minX - horizontalInset / scale
+        let fittedMinY = frame.minY - verticalInset / scale
+
+        return AUOSCOverlayPixelFrame(
+            minX: fittedMinX,
+            minY: fittedMinY,
+            maxX: fittedMinX + textureWidth / scale,
+            maxY: fittedMinY + textureHeight / scale
         )
     }
 

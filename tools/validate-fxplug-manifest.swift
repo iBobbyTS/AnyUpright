@@ -51,22 +51,41 @@ struct ValidateFxPlugManifest {
             ),
             ExpectedPlugin(
                 className: "AnyUprightQuadManualPlugIn",
-                displayNameKey: "AnyUpright::Quad Manual Name",
-                descriptionKey: "AnyUpright::Quad Manual Description",
+                displayNameKey: "AnyUpright::Source Quad Name",
+                descriptionKey: "AnyUpright::Source Quad Description",
                 uuid: "9BB4C7D9-9384-4C8F-927D-4F716DA78B14",
                 protocols: ["FxFilter"],
-                localizedDisplayName: "AnyUpright Quad Manual",
-                localizedDescription: "Manual four-corner source and output perspective correction."
+                localizedDisplayName: "AnyUpright Source Quad",
+                localizedDescription: "Select a source quadrilateral and stretch it to the full frame."
+            ),
+            ExpectedPlugin(
+                className: "AnyUprightQuadOutputCornersPlugIn",
+                displayNameKey: "AnyUpright::Outer Corners Name",
+                descriptionKey: "AnyUpright::Outer Corners Description",
+                uuid: "81C621CF-4119-46E9-BC04-47A1539A8B54",
+                protocols: ["FxFilter"],
+                localizedDisplayName: "AnyUpright Outer Corners",
+                localizedDescription: "Drag the outer output corners for manual perspective warping."
             ),
             ExpectedPlugin(
                 className: "AnyUprightQuadManualOSCPlugIn",
-                displayNameKey: "AnyUpright::Quad Manual OSC Name",
-                descriptionKey: "AnyUpright::Quad Manual OSC Description",
+                displayNameKey: "AnyUpright::Source Quad OSC Name",
+                descriptionKey: "AnyUpright::Source Quad OSC Description",
                 uuid: "1E97E435-F4A5-4252-8B14-86F44BAD0BF7",
                 protocols: ["FxOnScreenControl"],
-                localizedDisplayName: "AnyUpright Quad Manual Controls",
-                localizedDescription: "Onscreen corner controls for AnyUpright Quad Manual.",
+                localizedDisplayName: "AnyUpright Source Quad Controls",
+                localizedDescription: "Onscreen source quadrilateral controls for AnyUpright Source Quad.",
                 supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]
+            ),
+            ExpectedPlugin(
+                className: "AnyUprightQuadOutputCornersOSCPlugIn",
+                displayNameKey: "AnyUpright::Outer Corners OSC Name",
+                descriptionKey: "AnyUpright::Outer Corners OSC Description",
+                uuid: "4CA1AA25-31BD-4AB8-BF52-A379917B80E3",
+                protocols: ["FxOnScreenControl"],
+                localizedDisplayName: "AnyUpright Outer Corners Controls",
+                localizedDescription: "Onscreen outer corner controls for AnyUpright Outer Corners.",
+                supportedPlugins: ["81C621CF-4119-46E9-BC04-47A1539A8B54"]
             ),
             ExpectedPlugin(
                 className: "AnyUprightUprightManualPlugIn",

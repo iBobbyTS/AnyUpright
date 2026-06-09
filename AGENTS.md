@@ -14,7 +14,7 @@
 - Wrapper app target: `Wrapper Application`.
 - FxPlug code lives under `AnyUpright/Plugin/`.
 - Wrapper app code lives under `AnyUpright/Wrapper Application/`.
-- Planned product shape: one suite with three separate Final Cut effects, sharing common geometry, detection, and Metal rendering code.
+- Planned product shape: one suite with four separate Final Cut effects, sharing common geometry, detection, and Metal rendering code.
 
 ## Development Rules
 
@@ -22,7 +22,7 @@
 - Keep playback rendering lightweight. Detection and analysis should run on explicit user action or cached frame analysis, not on every rendered frame.
 - Persist user-facing state through FxPlug parameters so renders remain reproducible after Final Cut Pro, Motion, or the plug-in XPC process restarts.
 - Before adding behavior that crosses plugin boundaries, check `docs/README.md` for the intended shared architecture.
-- Keep the three Final Cut effects separate in user-facing workflow; do not collapse them into one effect with a mode selector unless the user explicitly changes that direction.
+- Keep the Final Cut effects separate in user-facing workflow; do not collapse Source Quad and Outer Corners into one effect with a mode selector unless the user explicitly changes that direction.
 
 ## Documentation
 

@@ -462,16 +462,25 @@ private func quadFloatParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ param: Qua
     return Float(value)
 }
 
-private func quadParameterState(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> AnyUprightParameterState {
+private func quadParameterState(
+    at time: CMTime,
+    paramAPI: FxParameterRetrievalAPI_v6?,
+    fixedMode: AUQuadTransformMode? = nil
+) -> AnyUprightParameterState {
     var result = AnyUprightParameterState(effectKind: AnyUprightEffectKind.quad.rawValue)
     guard let paramAPI else {
+        if let fixedMode {
+            result.quadMode = fixedMode.rawValue
+        }
         return result
     }
 
-    var mode = Int32(AUQuadTransformMode.sourceQuad.rawValue)
+    var mode = Int32(fixedMode?.rawValue ?? AUQuadTransformMode.sourceQuad.rawValue)
     var showCornerAdjuster = ObjCBool(true)
 
-    paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
+    if fixedMode == nil {
+        paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
+    }
     paramAPI.getBoolValue(&showCornerAdjuster, fromParameter: QuadParam.showCornerAdjuster.rawValue, at: time)
     result.quadMode = mode
     result.showCornerAdjuster = showCornerAdjuster.boolValue ? 1 : 0
@@ -507,6 +516,15 @@ private func shouldShowQuadCornerAdjuster(from state: AnyUprightParameterState, 
     mode == .sourceQuad && state.showCornerAdjuster != 0
 }
 
+private func shouldEnableQuadOSCControls(from state: AnyUprightParameterState, mode: AUQuadTransformMode) -> Bool {
+    switch mode {
+    case .outputCorners:
+        return true
+    case .sourceQuad:
+        return shouldShowQuadCornerAdjuster(from: state, mode: mode)
+    }
+}
+
 private func quadCornerOffsets(from state: AnyUprightParameterState) -> AUCornerOffsets {
     AUCornerOffsets(
         topLeftPercent: AUPoint(x: Double(state.topLeftPercentX), y: Double(state.topLeftPercentY)),
@@ -529,52 +547,61 @@ private func quadObjectPoints(from state: AnyUprightParameterState, size: AUSize
     }
 }
 
-@objc(AnyUprightQuadManualPlugIn)
-class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect {
+class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
+    var fixedQuadMode: AUQuadTransformMode {
+        fatalError("Subclasses must choose a fixed Quad mode.")
+    }
+
+    var showsSourceEditMode: Bool {
+        fixedQuadMode == .sourceQuad
+    }
+
+    var showsCornerParameters: Bool {
+        fixedQuadMode == .outputCorners
+    }
+
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
-        paramAPI.addPopupMenu(
-            withName: "Mode",
-            parameterID: QuadParam.mode.rawValue,
-            defaultValue: UInt32(AUQuadTransformMode.sourceQuad.rawValue),
-            menuEntries: ["Output Corners", "Source Quad"],
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addToggleButton(
-            withName: "Edit Mode",
-            parameterID: QuadParam.showCornerAdjuster.rawValue,
-            defaultValue: true,
-            parameterFlags: showCornerAdjusterHiddenFlags()
-        )
-        addCornerParameters(paramAPI, title: "Top Left", groupID: QuadGroup.topLeft.rawValue, percentX: .topLeftPercentX, percentY: .topLeftPercentY, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY)
-        addCornerParameters(paramAPI, title: "Top Right", groupID: QuadGroup.topRight.rawValue, percentX: .topRightPercentX, percentY: .topRightPercentY, pixelX: .topRightPixelX, pixelY: .topRightPixelY)
-        addCornerParameters(paramAPI, title: "Bottom Right", groupID: QuadGroup.bottomRight.rawValue, percentX: .bottomRightPercentX, percentY: .bottomRightPercentY, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY)
-        addCornerParameters(paramAPI, title: "Bottom Left", groupID: QuadGroup.bottomLeft.rawValue, percentX: .bottomLeftPercentX, percentY: .bottomLeftPercentY, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY)
+        addFixedModeParameter(paramAPI)
+
+        if showsSourceEditMode {
+            paramAPI.addToggleButton(
+                withName: "Edit Mode",
+                parameterID: QuadParam.showCornerAdjuster.rawValue,
+                defaultValue: true,
+                parameterFlags: defaultFlags()
+            )
+        } else {
+            paramAPI.addToggleButton(
+                withName: "Edit Mode",
+                parameterID: QuadParam.showCornerAdjuster.rawValue,
+                defaultValue: false,
+                parameterFlags: hiddenFlags()
+            )
+        }
+
+        let cornerGroupFlags = showsCornerParameters ? collapsedFlags() : hiddenCollapsedFlags()
+        addCornerParameters(paramAPI, title: "Top Left", groupID: QuadGroup.topLeft.rawValue, percentX: .topLeftPercentX, percentY: .topLeftPercentY, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Top Right", groupID: QuadGroup.topRight.rawValue, percentX: .topRightPercentX, percentY: .topRightPercentY, pixelX: .topRightPixelX, pixelY: .topRightPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Bottom Right", groupID: QuadGroup.bottomRight.rawValue, percentX: .bottomRightPercentX, percentY: .bottomRightPercentY, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Bottom Left", groupID: QuadGroup.bottomLeft.rawValue, percentX: .bottomLeftPercentX, percentY: .bottomLeftPercentY, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
-        quadParameterState(at: renderTime, paramAPI: parameterRetrievalAPI())
+        quadParameterState(at: renderTime, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
     }
 
-    func pluginInstanceAddedToDocument() {
-        syncQuadInspectorVisibility(at: currentParameterTime())
+    private func addFixedModeParameter(_ paramAPI: FxParameterCreationAPI_v5) {
+        paramAPI.addPopupMenu(
+            withName: "Mode",
+            parameterID: QuadParam.mode.rawValue,
+            defaultValue: UInt32(fixedQuadMode.rawValue),
+            menuEntries: ["Output Corners", "Source Quad"],
+            parameterFlags: hiddenFlags()
+        )
     }
 
-    @objc(finishInitialSetup:)
-    func finishInitialSetup(_ error: AutoreleasingUnsafeMutablePointer<NSError?>?) -> Bool {
-        syncQuadInspectorVisibility(at: currentParameterTime())
-        return true
-    }
-
-    func parameterChanged(_ paramID: UInt32, at time: CMTime) throws {
-        guard paramID == QuadParam.mode.rawValue else {
-            return
-        }
-
-        syncQuadInspectorVisibility(at: time)
-    }
-
-    private func addCornerParameters(_ paramAPI: FxParameterCreationAPI_v5, title: String, groupID: UInt32, percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam) {
-        paramAPI.startParameterSubGroup(title, parameterID: groupID, parameterFlags: collapsedFlags())
+    private func addCornerParameters(_ paramAPI: FxParameterCreationAPI_v5, title: String, groupID: UInt32, percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam, groupFlags: FxParameterFlags) {
+        paramAPI.startParameterSubGroup(title, parameterID: groupID, parameterFlags: groupFlags)
         addPercentSlider(paramAPI, name: "\(title) X %", id: percentX.rawValue)
         addPercentSlider(paramAPI, name: "\(title) Y %", id: percentY.rawValue)
         addPixelSlider(paramAPI, name: "\(title) X px", id: pixelX.rawValue)
@@ -610,33 +637,26 @@ class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect {
         )
     }
 
-    private func syncQuadInspectorVisibility(at time: CMTime) {
-        var mode = Int32(AUQuadTransformMode.sourceQuad.rawValue)
-        if let paramAPI = parameterRetrievalAPI() {
-            paramAPI.getIntValue(&mode, fromParameter: QuadParam.mode.rawValue, at: time)
-        }
-
-        guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
-            return
-        }
-
-        let selectedMode = AUQuadTransformMode(rawValue: mode) ?? .sourceQuad
-        let isSourceQuad = selectedMode == .sourceQuad
-
-        _ = settingAPI.setParameterFlags(isSourceQuad ? defaultFlags() : showCornerAdjusterHiddenFlags(), toParameter: QuadParam.showCornerAdjuster.rawValue)
-
-        let cornerFlags = isSourceQuad ? hiddenCollapsedFlags() : collapsedFlags()
-        for group in QuadGroup.allCases {
-            _ = settingAPI.setParameterFlags(cornerFlags, toParameter: group.rawValue)
-        }
-    }
-
-    private func showCornerAdjusterHiddenFlags() -> FxParameterFlags {
+    private func hiddenFlags() -> FxParameterFlags {
         FxParameterFlags(kFxParameterFlag_HIDDEN)
     }
 
     private func hiddenCollapsedFlags() -> FxParameterFlags {
         FxParameterFlags(kFxParameterFlag_HIDDEN | kFxParameterFlag_COLLAPSED)
+    }
+}
+
+@objc(AnyUprightQuadManualPlugIn)
+class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn {
+    override var fixedQuadMode: AUQuadTransformMode {
+        .sourceQuad
+    }
+}
+
+@objc(AnyUprightQuadOutputCornersPlugIn)
+class AnyUprightQuadOutputCornersPlugIn: AnyUprightQuadModePlugIn {
+    override var fixedQuadMode: AUQuadTransformMode {
+        .outputCorners
     }
 }
 
@@ -655,6 +675,10 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         super.init(apiManager: apiManager)
     }
 
+    var fixedQuadMode: AUQuadTransformMode {
+        .sourceQuad
+    }
+
     @objc(drawingCoordinates)
     func drawingCoordinates() -> FxDrawingCoordinates {
         return FxDrawingCoordinates(kFxDrawingCoordinates_CANVAS)
@@ -662,21 +686,26 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
     @objc(drawOSCWithWidth:height:activePart:destinationImage:atTime:)
     func drawOSC(withWidth width: Int, height: Int, activePart: Int, destinationImage: FxImageTile, at time: CMTime) {
-        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
+        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
         let mode = quadMode(from: state)
-        guard shouldShowQuadCornerAdjuster(from: state, mode: mode) else {
+        guard shouldEnableQuadOSCControls(from: state, mode: mode) else {
             overlayRenderer.clear(destinationImage: destinationImage)
             return
         }
 
         updateLastSurfaceSize(from: destinationImage, fallback: AUSize(width: Double(width), height: Double(height)))
+        let outputSize = AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
+        if mode == .outputCorners {
+            renderOutputCornersOSC(from: state, outputSize: outputSize, destinationImage: destinationImage)
+            return
+        }
+
         let displayPart = currentDisplayPart()
         guard displayPart != .none else {
             overlayRenderer.clear(destinationImage: destinationImage)
             return
         }
 
-        let outputSize = AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
         let sourceSize = objectPixelSizeForOSC(defaultSize: outputSize)
         let hoverPoints = sourceQuadHoverOutputPoints(from: state, outputSize: outputSize, sourceSize: sourceSize, mode: mode)
         let handles = [
@@ -700,9 +729,9 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
     @objc(hitTestOSCAtMousePositionX:mousePositionY:activePart:atTime:)
     func hitTestOSC(atMousePositionX mousePositionX: Double, mousePositionY: Double, activePart: UnsafeMutablePointer<Int>?, at time: CMTime) {
-        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
+        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
         let mode = quadMode(from: state)
-        guard shouldShowQuadCornerAdjuster(from: state, mode: mode) else {
+        guard shouldEnableQuadOSCControls(from: state, mode: mode) else {
             activePart?.pointee = QuadOSCPart.none.rawValue
             return
         }
@@ -729,7 +758,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     @objc(mouseDownAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         setHoverPart(.none, forceUpdate: nil)
-        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
+        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
         let mode = quadMode(from: state)
         let size = objectPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
@@ -755,7 +784,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             nonePart: QuadOSCPart.none.rawValue
         )
         let resolvedPart = resolvedPartRaw.flatMap(QuadOSCPart.init(rawValue:))
-        guard shouldShowQuadCornerAdjuster(from: state, mode: mode),
+        guard shouldEnableQuadOSCControls(from: state, mode: mode),
               let resolvedPart else {
             setDragState(nil)
             forceUpdate?.pointee = false
@@ -768,12 +797,12 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
     @objc(mouseDraggedAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseDragged(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
-        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
+        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
         let mode = quadMode(from: state)
         let storedState = currentDragState()
         let part = validDragPart(from: activePart) ?? storedState?.part
 
-        guard shouldShowQuadCornerAdjuster(from: state, mode: mode),
+        guard shouldEnableQuadOSCControls(from: state, mode: mode),
               let part,
               let settingAPI = parameterSettingAPI() else {
             forceUpdate?.pointee = false
@@ -887,6 +916,27 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             topRight: canvasPoint(fromObjectPoint: objectPoints.topRight),
             bottomRight: canvasPoint(fromObjectPoint: objectPoints.bottomRight),
             bottomLeft: canvasPoint(fromObjectPoint: objectPoints.bottomLeft)
+        )
+    }
+
+    private func renderOutputCornersOSC(from state: AnyUprightParameterState, outputSize: AUSize, destinationImage: FxImageTile) {
+        let objectPoints = quadObjectPoints(from: state, size: objectPixelSizeForOSC(defaultSize: outputSize), mode: .outputCorners)
+        let canvasPoints = quadCanvasPoints(from: objectPoints)
+        let handles = [
+            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+        ]
+        let displayPart = currentDisplayPart()
+        overlayRenderer.renderQuad(
+            points: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
+            handles: handles,
+            activePart: displayPart.rawValue,
+            destinationImage: destinationImage,
+            destinationSize: outputSize,
+            canvasFrame: objectCanvasFrame(),
+            coordinateSpace: .pixels
         )
     }
 
@@ -1074,9 +1124,9 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
     @discardableResult
     private func updateHoverPart(forEventPoint eventPoint: AUPoint, at time: CMTime, forceUpdate: UnsafeMutablePointer<ObjCBool>?) -> QuadOSCPart {
-        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI())
+        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
         let mode = quadMode(from: state)
-        guard shouldShowQuadCornerAdjuster(from: state, mode: mode) else {
+        guard shouldEnableQuadOSCControls(from: state, mode: mode) else {
             setHoverPart(.none, forceUpdate: forceUpdate)
             return .none
         }
@@ -1535,6 +1585,13 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         }
 
         return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY
+    }
+}
+
+@objc(AnyUprightQuadOutputCornersOSCPlugIn)
+class AnyUprightQuadOutputCornersOSCPlugIn: AnyUprightQuadManualOSCPlugIn {
+    override var fixedQuadMode: AUQuadTransformMode {
+        .outputCorners
     }
 }
 

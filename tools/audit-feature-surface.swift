@@ -51,7 +51,9 @@ struct AuditFeatureSurface {
         let expected = [
             FeaturePluginExpectation(className: "AnyUprightHorizonManualPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
             FeaturePluginExpectation(className: "AnyUprightQuadManualPlugIn", protocols: ["FxFilter"]),
+            FeaturePluginExpectation(className: "AnyUprightQuadOutputCornersPlugIn", protocols: ["FxFilter"]),
             FeaturePluginExpectation(className: "AnyUprightQuadManualOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]),
+            FeaturePluginExpectation(className: "AnyUprightQuadOutputCornersOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["81C621CF-4119-46E9-BC04-47A1539A8B54"]),
             FeaturePluginExpectation(className: "AnyUprightUprightManualPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
             FeaturePluginExpectation(className: "AnyUprightUprightManualOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB"])
         ]
@@ -76,12 +78,14 @@ struct AuditFeatureSurface {
     }
 
     private static func auditQuad(_ effects: String, geometry: String, overlay: String, metal: String) throws {
-        try require(effects, "Output Corners", "Quad exposes realtime output-corner mode")
-        try require(effects, "Source Quad", "Quad exposes Lens-style source-quad mode")
-        try require(effects, "defaultValue: UInt32(AUQuadTransformMode.sourceQuad.rawValue)", "Quad defaults new instances to Source Quad")
+        try require(effects, "class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn", "Source Quad is registered as its own filter")
+        try require(effects, "class AnyUprightQuadOutputCornersPlugIn: AnyUprightQuadModePlugIn", "Outer Corners is registered as its own filter")
+        try require(effects, "override var fixedQuadMode: AUQuadTransformMode", "Quad filters choose fixed modes")
+        try require(effects, "class AnyUprightQuadOutputCornersOSCPlugIn: AnyUprightQuadManualOSCPlugIn", "Outer Corners exposes its own onscreen control")
+        try require(effects, "parameterFlags: hiddenFlags()", "Quad fixed mode parameter is hidden from the inspector")
         try require(effects, "Edit Mode", "Quad exposes edit mode for source-quad handles without applying the warp")
-        try require(effects, "class AnyUprightQuadManualPlugIn: AnyUprightWarpEffect", "Quad filter owns render parameters")
-        try require(effects, "class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Quad exposes onscreen controls as a separate FxPlug class")
+        try require(effects, "class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Source Quad exposes onscreen controls as a separate FxPlug class")
+        try require(effects, "renderOutputCornersOSC", "Outer Corners draws host onscreen output-corner controls")
         try require(effects, "hiddenCollapsedFlags", "Source Quad hides the offset controls while keeping them as persistent state")
         try require(effects, "sourceCornerPercentOffset", "Source Quad OSC writes hidden source-corner percent offsets")
         try require(effects, "overlayRenderer.clear", "Quad OSC clears its host overlay surface while the effect render output owns the visible Source Quad adjuster")

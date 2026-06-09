@@ -78,11 +78,11 @@
 			<key>className</key>
 			<string>AnyUprightQuadManualPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Quad Manual Name</string>
+			<string>AnyUpright::Source Quad Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 				<key>infoString</key>
-				<string>AnyUpright::Quad Manual Description</string>
+				<string>AnyUpright::Source Quad Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
@@ -94,13 +94,31 @@
 		</dict>
 		<dict>
 			<key>className</key>
-			<string>AnyUprightQuadManualOSCPlugIn</string>
+			<string>AnyUprightQuadOutputCornersPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Quad Manual OSC Name</string>
+			<string>AnyUpright::Outer Corners Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 			<key>infoString</key>
-			<string>AnyUpright::Quad Manual OSC Description</string>
+			<string>AnyUpright::Outer Corners Description</string>
+			<key>protocolNames</key>
+			<array>
+				<string>FxFilter</string>
+			</array>
+			<key>uuid</key>
+			<string>81C621CF-4119-46E9-BC04-47A1539A8B54</string>
+			<key>version</key>
+			<string>1.0</string>
+		</dict>
+		<dict>
+			<key>className</key>
+			<string>AnyUprightQuadManualOSCPlugIn</string>
+			<key>displayName</key>
+			<string>AnyUpright::Source Quad OSC Name</string>
+			<key>group</key>
+			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<key>infoString</key>
+			<string>AnyUpright::Source Quad OSC Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxOnScreenControl</string>
@@ -111,6 +129,28 @@
 			</array>
 			<key>uuid</key>
 			<string>1E97E435-F4A5-4252-8B14-86F44BAD0BF7</string>
+			<key>version</key>
+			<string>1.0</string>
+		</dict>
+		<dict>
+			<key>className</key>
+			<string>AnyUprightQuadOutputCornersOSCPlugIn</string>
+			<key>displayName</key>
+			<string>AnyUpright::Outer Corners OSC Name</string>
+			<key>group</key>
+			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<key>infoString</key>
+			<string>AnyUpright::Outer Corners OSC Description</string>
+			<key>protocolNames</key>
+			<array>
+				<string>FxOnScreenControl</string>
+			</array>
+			<key>supportedPlugins</key>
+			<array>
+				<string>81C621CF-4119-46E9-BC04-47A1539A8B54</string>
+			</array>
+			<key>uuid</key>
+			<string>4CA1AA25-31BD-4AB8-BF52-A379917B80E3</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>

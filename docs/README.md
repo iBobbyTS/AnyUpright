@@ -5,7 +5,7 @@ AnyUpright is a suite of FxPlug effects for single-frame-assisted perspective an
 ## Current State
 
 - The repository is initialized as an Xcode FxPlug 4 project.
-- The template brightness filter has been replaced with three separate FxPlug filters under the `AnyUpright` group.
+- The template brightness filter has been replaced with four separate FxPlug filters under the `AnyUpright` group.
 - No Motion template files are tracked here yet; the current product is the registered FxPlug filters.
 - There is no package manager, Docker runtime, or CI workflow yet.
 - Geometry tests live in `AnyUprightTests/` and can be run as a lightweight Swift executable.
@@ -45,24 +45,25 @@ Primary risks:
 
 ### AnyUpright Quad Transform
 
-Provides manual four-point perspective transforms.
+Provides manual four-point perspective transforms through two separate FxPlug filters.
 
 Current implementation:
 
-- `AnyUpright Quad Manual` is registered as a separate FxPlug filter.
-- `Mode` selects `Output Corners` or `Source Quad`; new Quad instances default to `Source Quad`.
-- `Edit Mode` is shown only in `Source Quad` mode. It is enabled by default: when enabled, the current source quadrilateral is drawn into the filter output, handle drags only move the stored quadrilateral, and the image is not warped. Disable it to hide the adjuster and stretch the selected source quadrilateral to the full output frame.
-- In `Source Quad` mode, the default source quadrilateral is the central 80% of the frame. The 100% full-frame selection is still covered as an identity/no-offset geometry case for validation. The edit preview dims the outside area to 70% brightness, leaves the selected quadrilateral at original brightness, connects the four handles with a visible quadrilateral outline, and draws the handles as fixed-size circular markers in output image space so they do not stretch with the quadrilateral.
-- In `Output Corners` mode, each visible output corner exposes `X %`, `Y %`, `X px`, and `Y px` offsets in the inspector.
-- In `Source Quad` mode, the corner coordinate groups are hidden from the inspector; users position the source quadrilateral with onscreen handles.
+- `AnyUpright Source Quad` is registered as a separate FxPlug filter. It fixes the shared Quad render path to `Source Quad` semantics.
+- `AnyUpright Outer Corners` is registered as a separate FxPlug filter. It fixes the shared Quad render path to output/outer-corner warp semantics.
+- The old inspector `Mode` popup is now a hidden fixed parameter so each filter keeps stable render state without asking the user to switch modes inside one effect.
+- `Edit Mode` is shown only in `AnyUpright Source Quad`. It is enabled by default: when enabled, the current source quadrilateral is drawn into the filter output, handle drags only move the stored quadrilateral, and the image is not warped. Disable it to hide the adjuster and stretch the selected source quadrilateral to the full output frame.
+- In `AnyUpright Source Quad`, the default source quadrilateral is the central 80% of the frame. The 100% full-frame selection is still covered as an identity/no-offset geometry case for validation. The edit preview dims the outside area to 70% brightness, leaves the selected quadrilateral at original brightness, connects the four handles with a visible quadrilateral outline, and draws the handles as fixed-size circular markers in output image space so they do not stretch with the quadrilateral.
+- In `AnyUpright Outer Corners`, each visible output corner exposes `X %`, `Y %`, `X px`, and `Y px` offsets in the inspector.
+- In `AnyUpright Source Quad`, the corner coordinate groups are hidden from the inspector; users position the source quadrilateral with onscreen handles.
 - Final offset is `percentage * current frame dimension + pixels`.
 - Positive `X` moves right. Positive `Y` moves up.
-- In `Output Corners` mode, the four offsets are a destination/output quadrilateral and map back to the full source frame, matching the direction a user sees in the Motion canvas.
-- In `Source Quad` mode, the same corner offset parameters describe a source quadrilateral that maps to the full output frame, matching a document-scanner or Microsoft Lens style correction. Those parameter groups are hidden in the inspector while this mode is active.
-- The visible `Source Quad` edit layer is not a canvas-space OSC drawing anymore. It is part of the Metal filter output, so it is image-space preview content and follows the clip/image through host framing. The Quad `FxOnScreenControl` remains as the interactive input path where the host supports OSC; it converts object-space quadrilateral points to canvas space for hit testing, maps Motion's surface-local event points back to canvas coordinates when needed, then converts the dragged point back to object space before writing persistent parameters. In `Source Quad` mode, dragging writes hidden source-corner percentage offsets and clears matching pixel offsets so the render-time source quad is independent of OSC surface resolution. In `Output Corners` mode, dragging writes output-corner pixel offsets while preserving any existing percentage offset.
+- In `AnyUpright Outer Corners`, the four offsets are a destination/output quadrilateral and map back to the full source frame, matching the direction a user sees in the Motion canvas.
+- In `AnyUpright Source Quad`, the same corner offset parameters describe a source quadrilateral that maps to the full output frame, matching a document-scanner or Microsoft Lens style correction. Those parameter groups are hidden in the inspector while this filter is active.
+- The visible `Source Quad` edit layer is not a canvas-space OSC drawing anymore. It is part of the Metal filter output, so it is image-space preview content and follows the clip/image through host framing. The Source Quad `FxOnScreenControl` remains as the interactive input path where the host supports OSC; it converts object-space quadrilateral points to canvas space for hit testing, maps Motion's surface-local event points back to canvas coordinates when needed, then converts the dragged point back to object space before writing persistent parameters. Source Quad dragging writes hidden source-corner percentage offsets and clears matching pixel offsets so the render-time source quad is independent of OSC surface resolution. Outer Corners uses its own OSC entry and writes output-corner pixel offsets while preserving any existing percentage offset.
 - A hidden point-parameter experiment was intentionally backed out: Motion accepted `setXValue(_:yValue:)` during OSC drags but subsequent reads still returned the default points. Source Quad now uses the float-parameter path because Motion was verified to persist those writes.
 
-Two intended modes:
+Two intended filters:
 
 1. Source quad to full frame: user drags four points around an object such as a phone screen or sign; editing can display handles without moving the image, and applying maps that quadrilateral to the original frame size.
 2. Frame-corner warp: user drags the four output corners and sees the warped image in realtime; the stretched result is the actual output.
@@ -115,14 +116,14 @@ Primary risks:
 
 ## Architecture Direction
 
-Use one repository and one product suite, but expose three separate Final Cut effects. Shared implementation should live behind small common modules:
+Use one repository and one product suite, but expose four separate Final Cut effects. Shared implementation should live behind small common modules:
 
 - Geometry: normalized points, lines, homography, affine transforms, vanishing-point helpers, and coordinate conversion.
 - Detection: frame downsampling, edge/line detection, candidate scoring, and analysis result serialization.
 - Rendering: shared Metal pipeline for affine and projective texture warps.
 - UI/controls: image-space edit previews in the filter render output, reusable Metal onscreen overlay drawing for controls that still need host OSC visuals, canvas-space hit testing, object/canvas conversion through `FxOnScreenControlAPI_v4`, and parameter writeback where FxPlug APIs permit it.
-- FxPlug OSC registration: Quad and Upright use separate OSC classes linked with `supportedPlugins`. Apple documentation describes this as the expected shape for onscreen controls, and an installed Pixel Film Studios FxPlug (`PFSMaskV2`) uses the same `supportedPlugins` key in its plist. If Motion does not call OSC methods, first suspect stale PlugInKit registration or host instance caching before changing coordinate math. In Motion's Metal OSC path, the `drawOSC` width/height values can describe the source object, while the drawable tile is represented by `destinationImage`; host OSC surfaces should map canvas coordinates to the destination texture/tile dimensions instead of treating `width` and `height` as the viewport. Quad Source visible edit content is rendered by the filter output so it follows the clip/image. The Quad OSC keeps the host hit-test and drag path active but clears its own drawable surface, so users see only one set of source-quad handles.
-- Quad object-space conversion: `AnyUprightGeometry.quadObjectPoints`, `sourceQuadObjectPoints`, `sourceCornerPercentOffset`, and `cornerPixelOffset` own the Motion/FxPlug handle coordinate semantics so corner names, X direction, and Y direction stay testable outside the host app. `Source Quad` stores the four handles as hidden percent offsets during OSC drags; `Output Corners` exposes the same offset parameters in the inspector.
+- FxPlug OSC registration: Source Quad, Outer Corners, and Upright use separate OSC classes linked with `supportedPlugins`. Apple documentation describes this as the expected shape for onscreen controls, and an installed Pixel Film Studios FxPlug (`PFSMaskV2`) uses the same `supportedPlugins` key in its plist. If Motion does not call OSC methods, first suspect stale PlugInKit registration or host instance caching before changing coordinate math. In Motion's Metal OSC path, the `drawOSC` width/height values can describe the source object, while the drawable tile is represented by `destinationImage`; host OSC surfaces should map canvas coordinates to the destination texture/tile dimensions instead of treating `width` and `height` as the viewport. Source Quad visible edit content is rendered by the filter output so it follows the clip/image. The Source Quad OSC keeps the host hit-test and drag path active but clears its own drawable surface unless it needs hover/active highlighting, so users see only one persistent set of source-quad handles.
+- Quad object-space conversion: `AnyUprightGeometry.quadObjectPoints`, `sourceQuadObjectPoints`, `sourceCornerPercentOffset`, and `cornerPixelOffset` own the Motion/FxPlug handle coordinate semantics so corner names, X direction, and Y direction stay testable outside the host app. `Source Quad` stores the four handles as hidden percent offsets during OSC drags; `Outer Corners` exposes the same offset parameters in the inspector.
 - Upright candidate slots: fixed inspector slot IDs, object/image coordinate conversion, selection limits, and onscreen hit testing live in `AnyUprightUprightCandidates.swift`; FxPlug parameter read/write remains in the effect class.
 
 Playback rendering should use precomputed parameters only. Detection should be explicit, cached, or analysis-driven instead of happening on every frame.
@@ -196,7 +197,7 @@ The preview renderer is CPU-only and exists to prove mapping semantics. Playback
 
 ### Motion Validation Checklist
 
-After building the wrapper app, Motion should see three independent FxPlug filters under the AnyUpright group. Use a 1920 x 1080 project and import the generated PNGs as still images.
+After building the wrapper app, Motion should see four independent FxPlug filters under the AnyUpright group. Use a 1920 x 1080 project and import the generated PNGs as still images.
 
 Horizon:
 
@@ -206,13 +207,14 @@ Horizon:
 
 Quad:
 
-- Apply `AnyUpright Quad Manual` to `quad-phone-screen.png`.
+- Apply `AnyUpright Source Quad` to `quad-phone-screen.png`.
 - The Source Quad edit overlay should be visible even when Motion's `Publish OSC` checkbox is off, because it is rendered by the filter output. Enable `Publish OSC` only when testing mouse-driven handle dragging in Motion.
-- In `Output Corners` mode, drag the four onscreen handles; the image should warp in realtime.
-- In `Output Corners` mode, `Edit Mode` should be hidden and the four corner coordinate groups should be visible.
-- In `Source Quad` mode with `Edit Mode` on, the four handles should start at the central 80% of the frame, the outside area should be dimmed to 70% brightness, and dragging the handles around the phone-screen quadrilateral should not warp the image while editing.
-- In `Source Quad` mode, the four corner coordinate groups should be hidden because positioning happens through onscreen handles.
+- With `Edit Mode` on, the four handles should start at the central 80% of the frame, the outside area should be dimmed to 70% brightness, and dragging the handles around the phone-screen quadrilateral should not warp the image while editing.
+- The four corner coordinate groups should be hidden in Source Quad because positioning happens through onscreen handles.
 - Turn `Edit Mode` off; the selected screen quadrilateral should map to the full output frame and the handles should be hidden.
+- Apply `AnyUpright Outer Corners` to `quad-phone-screen.png`.
+- Drag the four onscreen handles; the image should warp in realtime.
+- `Edit Mode` should be hidden and the four corner coordinate groups should be visible in Outer Corners.
 
 Upright:
 
@@ -234,6 +236,6 @@ Upright:
 
 ## Motion And Final Cut Templates
 
-This repository currently ships the three effects as FxPlug filters registered by the wrapper app. Motion or Final Cut template files are not tracked yet. If a template-based distribution is required later, run the wrapper app once so macOS registers the plug-in, apply each FxPlug filter in Motion, publish the intended parameters, and save three separate Final Cut Effect templates.
+This repository currently ships the four effects as FxPlug filters registered by the wrapper app. Motion or Final Cut template files are not tracked yet. If a template-based distribution is required later, run the wrapper app once so macOS registers the plug-in, apply each FxPlug filter in Motion, publish the intended parameters, and save four separate Final Cut Effect templates.
 
-For Final Cut templates that need onscreen dragging, the Motion template must include the host `Publish OSC` setting for the FxPlug filter. In the local `.moef` XML this appears as the built-in filter parameter `id="10005"` with `name="Publish OSC"` and `value="1"`. Publishing only the user-facing `Mode` / `Edit Mode` parameters is not enough: Final Cut can still render the filter output overlay, but it may not instantiate or dispatch mouse events to the `FxOnScreenControl`.
+For Final Cut templates that need onscreen dragging, the Motion template must include the host `Publish OSC` setting for the FxPlug filter. In the local `.moef` XML this appears as the built-in filter parameter `id="10005"` with `name="Publish OSC"` and `value="1"`. Publishing only user-facing parameters such as `Edit Mode` is not enough: Final Cut can still render the filter output overlay, but it may not instantiate or dispatch mouse events to the `FxOnScreenControl`.

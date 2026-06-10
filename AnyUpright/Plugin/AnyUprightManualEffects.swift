@@ -670,6 +670,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     }
 
     private let overlayRenderer = AnyUprightOSCOverlayRenderer()
+    private let sourceQuadRawCanvasHitPadding = 24.0
     private let dragStateLock = NSLock()
     private let hoverStateLock = NSLock()
     private var dragState: QuadOSCDragState?
@@ -766,6 +767,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             rawCanvasHandles: geometry.rawCanvasHandles,
             rawCanvasQuad: geometry.rawCanvasQuad,
             canvasFrame: canvasFrame,
+            rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
             preferredMode: nil
         )
         let part = hit?.part.rawValue ?? QuadOSCPart.none.rawValue
@@ -788,10 +790,17 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             rawCanvasHandles: geometry.rawCanvasHandles,
             rawCanvasQuad: geometry.rawCanvasQuad,
             canvasFrame: canvasFrame,
+            rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
             preferredMode: nil
         )
         let resolvedCanvasPoint = resolvedEvent?.resolution
-            ?? resolvedCanvasPoint(fromEventPoint: eventPoint, canvasFrame: canvasFrame, state: state, mode: mode, preferredMode: nil)
+            ?? resolvedCanvasPoint(
+                fromEventPoint: eventPoint,
+                canvasFrame: canvasFrame,
+                rawCanvasQuad: geometry.rawCanvasQuad,
+                rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
+                preferredMode: nil
+            )
 
         let resolvedPartRaw = resolveOSCDragPart(
             hostActivePart: activePart,
@@ -833,12 +842,13 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         }
 
         let size = objectPixelSizeForOSC()
+        let geometry = hitGeometry(from: state, size: size, mode: mode)
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
         let resolved = resolvedCanvasPoint(
             fromEventPoint: eventPoint,
             canvasFrame: objectCanvasFrame(),
-            state: state,
-            mode: mode,
+            rawCanvasQuad: geometry.rawCanvasQuad,
+            rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
             preferredMode: storedState?.eventCoordinateMode
         )
         let canvasPoint = resolved.canvasPoint
@@ -1408,6 +1418,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             rawCanvasHandles: geometry.rawCanvasHandles,
             rawCanvasQuad: geometry.rawCanvasQuad,
             canvasFrame: canvasFrame,
+            rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
             preferredMode: currentDragState()?.eventCoordinateMode
         )
         let part = hit?.part ?? .none
@@ -1499,9 +1510,16 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         rawCanvasHandles: [AUOSCHandle],
         rawCanvasQuad: [AUPoint],
         canvasFrame: [AUPoint],
+        rawCanvasHitPadding: Double,
         preferredMode: QuadOSCEventCoordinateMode?
     ) -> (part: QuadOSCPart, resolution: QuadOSCEventResolution)? {
-        let resolutions = eventResolutions(fromEventPoint: eventPoint, canvasFrame: canvasFrame, preferredMode: preferredMode)
+        let resolutions = eventResolutions(
+            fromEventPoint: eventPoint,
+            canvasFrame: canvasFrame,
+            rawCanvasQuad: rawCanvasQuad,
+            rawCanvasHitPadding: rawCanvasHitPadding,
+            preferredMode: preferredMode
+        )
         let hitRadius = 24.0
         var closestHandleHit: (part: QuadOSCPart, resolution: QuadOSCEventResolution, distance: Double)?
 
@@ -1575,6 +1593,8 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     private func eventResolutions(
         fromEventPoint eventPoint: AUPoint,
         canvasFrame: [AUPoint],
+        rawCanvasQuad: [AUPoint],
+        rawCanvasHitPadding: Double,
         preferredMode: QuadOSCEventCoordinateMode?
     ) -> [QuadOSCEventResolution] {
         let raw = QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvas)
@@ -1592,7 +1612,12 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             }
         }
 
-        return shouldIncludeMappedSurfaceOSCCandidate(forInitialEventPoint: eventPoint, canvasFrame: canvasFrame)
+        return shouldIncludeMappedSurfaceOSCCandidate(
+            forInitialEventPoint: eventPoint,
+            canvasFrame: canvasFrame,
+            visibleControlPoints: rawCanvasQuad,
+            hitPadding: rawCanvasHitPadding
+        )
             ? [mapped]
             : [raw]
     }
@@ -1600,11 +1625,17 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     private func resolvedCanvasPoint(
         fromEventPoint eventPoint: AUPoint,
         canvasFrame: [AUPoint],
-        state: AnyUprightParameterState,
-        mode: AUQuadTransformMode,
+        rawCanvasQuad: [AUPoint],
+        rawCanvasHitPadding: Double,
         preferredMode: QuadOSCEventCoordinateMode?
     ) -> QuadOSCEventResolution {
-        return eventResolutions(fromEventPoint: eventPoint, canvasFrame: canvasFrame, preferredMode: preferredMode).first
+        return eventResolutions(
+            fromEventPoint: eventPoint,
+            canvasFrame: canvasFrame,
+            rawCanvasQuad: rawCanvasQuad,
+            rawCanvasHitPadding: rawCanvasHitPadding,
+            preferredMode: preferredMode
+        ).first
             ?? QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvas)
     }
 

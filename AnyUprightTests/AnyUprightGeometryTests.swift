@@ -40,6 +40,7 @@ struct AnyUprightGeometryTests {
         try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
         try testInitialOSCHitResolutionDoesNotAddMappedLayerForRawCanvasEvents()
+        try testInitialOSCHitResolutionKeepsRawCanvasForVisibleControlsOutsideFrame()
         try testHostCanvasPixelsStayAbsoluteForOSCOverlay()
         try testOSCSurfacePixelsFlipYOnlyAtMetalVertexBoundary()
         try testAspectFitPixelSurfaceMapperKeepsHitTestingInsideVideoFrame()
@@ -559,6 +560,64 @@ struct AnyUprightGeometryTests {
         try assertTrue(
             shouldIncludeMappedSurfaceOSCCandidate(forInitialEventPoint: motionSurfaceEvent, canvasFrame: motionCanvasFrame),
             "surface-local events outside the host canvas frame should still use mapped-surface hit testing"
+        )
+    }
+
+    static func testInitialOSCHitResolutionKeepsRawCanvasForVisibleControlsOutsideFrame() throws {
+        let finalCutCanvasFrame = [
+            AUPoint(x: 580.0, y: 876.0),
+            AUPoint(x: 1604.0, y: 876.0),
+            AUPoint(x: 1604.0, y: 336.0),
+            AUPoint(x: 580.0, y: 336.0)
+        ]
+        let finalCutVisibleSourceQuad = [
+            AUPoint(x: 788.4, y: 523.9),
+            AUPoint(x: 1273.2, y: 511.1),
+            AUPoint(x: 1305.4, y: 1043.7),
+            AUPoint(x: 797.7, y: 821.0)
+        ]
+        let finalCutBottomRightHandle = AUPoint(x: 1305.4, y: 1043.7)
+
+        try assertTrue(
+            !isPointInsideAxisAlignedFrame(finalCutBottomRightHandle, frame: finalCutCanvasFrame),
+            "regression point should sit outside the object canvas frame"
+        )
+        try assertTrue(
+            !shouldIncludeMappedSurfaceOSCCandidate(
+                forInitialEventPoint: finalCutBottomRightHandle,
+                canvasFrame: finalCutCanvasFrame,
+                visibleControlPoints: finalCutVisibleSourceQuad,
+                hitPadding: 24.0
+            ),
+            "visible Final Cut controls outside the video frame should keep raw-canvas hit testing"
+        )
+
+        let motionCanvasFrame = [
+            AUPoint(x: 531.1, y: 791.2),
+            AUPoint(x: 1811.1, y: 791.2),
+            AUPoint(x: 1811.1, y: 71.2),
+            AUPoint(x: 531.1, y: 71.2)
+        ]
+        let motionVisibleSourceQuad = [
+            AUPoint(x: 659.1, y: 719.2),
+            AUPoint(x: 1683.1, y: 719.2),
+            AUPoint(x: 1683.1, y: 143.2),
+            AUPoint(x: 659.1, y: 143.2)
+        ]
+        let mapper = try unwrap(
+            AUCanvasSurfaceMapper(canvasFrame: motionCanvasFrame, surfaceSize: AUSize(width: 1670.0, height: 844.0)),
+            "canvas mapper"
+        )
+        let motionSurfaceEvent = mapper.eventPoint(fromCanvasPoint: motionVisibleSourceQuad[0])
+
+        try assertTrue(
+            shouldIncludeMappedSurfaceOSCCandidate(
+                forInitialEventPoint: motionSurfaceEvent,
+                canvasFrame: motionCanvasFrame,
+                visibleControlPoints: motionVisibleSourceQuad,
+                hitPadding: 24.0
+            ),
+            "Motion-style surface-local events should still map through the surface mapper"
         )
     }
 

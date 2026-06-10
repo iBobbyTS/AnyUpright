@@ -31,7 +31,7 @@ struct AnyUprightGeometryTests {
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
         try testQuadSourceOSCPixelDragDoesNotFlipYAgain()
         try testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting()
-        try testQuadSourceOSCHitPointsDoNotUseMirroredImageLayer()
+        try testQuadSourceRawCanvasLayerMatchesSourcePreview()
         try testDistanceToQuadEdgeUsesOutputPixelSegments()
         try testQuadSourceAdjusterPreviewAndApplyUseSameSelection()
         try testQuadSourceOutputHandlesStayInImageSpace()
@@ -309,23 +309,27 @@ struct AnyUprightGeometryTests {
         try assertEqual(sourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "flipped raw canvas drag should update the visible top-left source point")
     }
 
-    static func testQuadSourceOSCHitPointsDoNotUseMirroredImageLayer() throws {
+    static func testQuadSourceRawCanvasLayerMatchesSourcePreview() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
         offsets.topLeftPercent = AUPoint(x: 0.125, y: -0.15)
 
         let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
-        let visibleOSCHitPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: objectPoints, size: size)
-        let mirroredImageObjectPoints = AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints)
-        let mirroredImagePixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: mirroredImageObjectPoints, size: size)
-        let sourceImageQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let objectCanvasPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: objectPoints, size: size)
+        let rawCanvasObjectPoints = AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints)
+        let rawCanvasPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: rawCanvasObjectPoints, size: size)
+        let sourcePreviewHandles = AnyUprightGeometry.sourceQuadOutputHandles(
+            from: offsets,
+            outputSize: size,
+            sourceSize: size
+        )
 
-        try assertEqual(visibleOSCHitPixels.topLeft, AUPoint(x: 45.0, y: 75.0), "OSC hit top-left should stay in object/canvas pixel space")
-        try assertEqual(sourceImageQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "source image top-left crosses the Y-axis boundary")
-        try assertEqual(mirroredImagePixels.topLeft, sourceImageQuad.topLeft, "mirrored image pixels match render-time source image space")
+        try assertEqual(objectCanvasPixels.topLeft, AUPoint(x: 45.0, y: 75.0), "object/canvas top-left keeps FxPlug object-space Y")
+        try assertEqual(sourcePreviewHandles.topLeft, AUPoint(x: 45.0, y: 25.0), "source preview top-left crosses the Y-axis boundary")
+        try assertEqual(rawCanvasPixels.topLeft, sourcePreviewHandles.topLeft, "raw Final Cut canvas layer should match the source preview handle")
         try assertTrue(
-            visibleOSCHitPixels.topLeft.y != mirroredImagePixels.topLeft.y,
-            "using mirrored image pixels for OSC hit testing would create a second vertical hit layer"
+            objectCanvasPixels.topLeft.y != rawCanvasPixels.topLeft.y,
+            "raw canvas hit testing should pick the source-preview layer instead of adding an object-space second layer"
         )
     }
 

@@ -18,12 +18,14 @@ This note records the current project convention. It is intentionally about sema
 - Current Quad object-space helpers treat visual top as larger Y and visual bottom as smaller Y. The full-frame object base is top-left `(0, 1)`, top-right `(1, 1)`, bottom-right `(1, 0)`, bottom-left `(0, 0)`.
 - Source Quad object-space storage uses the same visual direction: top source handles have larger Y than bottom source handles.
 - Converting object-space points to source image pixels crosses a Y-axis boundary. Do not assume an object-space point's Y has the same visual meaning as an image-space pixel's Y.
+- Source Quad's visible edit preview is image/output-space geometry, not storage object-space geometry. To make the OSC outline and hit layer match that preview, convert Source Quad storage points through the explicit object-space Y flip before converting to host canvas points. Use the unflipped object/canvas quad only as storage/writeback geometry or diagnostics.
 
 ### FxPlug Canvas And OSC Events
 
 - Source Quad OSC hit testing primarily works in host canvas coordinates returned by FxPlug conversions.
 - Final Cut can provide raw canvas-position events, while Motion may provide surface-local events. The current code keeps candidate paths for both and maps Motion-style surface-local events back to canvas coordinates before hit testing. Initial hover/hit tests must choose one event interpretation for a given mouse point: raw-canvas events inside the host canvas frame should not also compete against mapped-surface candidates, because that creates a second mirrored hit layer.
-- Host canvas points used for Source Quad's persistent OSC outline, handles, hover highlights, and active highlights already have the correct Y direction for OSC drawing. Do not flip their Y again when drawing those controls.
+- Host canvas points used for Source Quad's persistent OSC outline, handles, hover highlights, and active highlights already have the correct Y direction for OSC drawing once the Source Quad preview/object boundary has been crossed. Do not flip their Y again in the canvas-to-overlay renderer.
+- Source Quad raw-canvas drag writeback crosses back from the source-preview canvas layer to Source Quad object-space storage. That conversion must be explicit and separate from hit testing so the visible layer can stay single while the saved source-corner percentages retain object-space semantics.
 - Source Quad's persistent OSC drawing treats host canvas X and Y symmetrically: control points are drawn directly in host canvas pixels. Do not add frame-center, surface-scale, backing-scale, aspect-fit, or Y-only compensation unless host callback data proves X and Y are arriving in different coordinate spaces.
 
 ### Metal Render Vertices
@@ -38,6 +40,7 @@ This note records the current project convention. It is intentionally about sema
 - Never fix a vertical mismatch by adding a local `height - y` until the two coordinate spaces on either side of the line are named.
 - Positive user-facing Quad Y moves up, but image/output pixel Y grows down. That sign difference belongs in the parameter-to-image conversion layer.
 - FxPlug object-space visual top uses larger normalized Y. Image/output pixel visual top uses smaller Y. That conversion should be explicit and covered by geometry tests.
+- Source Quad hit testing should use only one visible geometry layer for a given event interpretation. Do not let the storage object/canvas quad compete with the source-preview canvas quad.
 - OSC outline, handles, and hover highlights for Source Quad are a display-only path. Keep their Y handling separate from drag writeback and persistent parameter conversion.
 - If a handle drags correctly but the yellow hover highlight appears on the opposite edge, suspect only the hover/overlay drawing path before changing geometry or parameter writeback.
 - If a visible source quad moves correctly but the hit target is mirrored, inspect the raw canvas versus mapped surface event path before changing the render preview.

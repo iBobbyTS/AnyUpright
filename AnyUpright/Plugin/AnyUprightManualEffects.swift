@@ -64,7 +64,6 @@ private struct QuadOSCDragState {
 
 private enum QuadOSCEventCoordinateMode {
     case rawCanvas
-    case rawCanvasUnflipped
     case mappedSurface
 }
 
@@ -73,8 +72,6 @@ extension QuadOSCEventCoordinateMode: CustomStringConvertible {
         switch self {
         case .rawCanvas:
             return "rawCanvas"
-        case .rawCanvasUnflipped:
-            return "rawCanvasUnflipped"
         case .mappedSurface:
             return "mappedSurface"
         }
@@ -710,7 +707,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
         let objectSize = objectPixelSizeForOSC(defaultSize: outputSize)
         let geometry = hitGeometry(from: state, size: objectSize, mode: mode)
-        let quad = geometry.quad
+        let quad = geometry.rawCanvasQuad
         let canvasFrame = objectCanvasFrame()
         let displayPart = currentDisplayPart(hostActivePart: activePart)
         let debugSequence = nextDebugDrawSequence()
@@ -729,7 +726,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             outputSize: outputSize,
             objectSize: objectSize,
             quad: quad,
-            rawCanvasQuad: geometry.rawCanvasQuad,
+            objectCanvasQuad: geometry.quad,
             canvasFrame: canvasFrame
         )
 
@@ -761,7 +758,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let canvasFrame = objectCanvasFrame()
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
-        debugCanvasMetrics(label: "hit", eventPoint: eventPoint, quad: geometry.quad, canvasFrame: canvasFrame)
+        debugCanvasMetrics(label: "hit", eventPoint: eventPoint, quad: geometry.rawCanvasQuad, canvasFrame: canvasFrame)
         let hit = hitTestPart(
             forEventPoint: eventPoint,
             handles: geometry.handles,
@@ -981,6 +978,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         case .outputCorners:
             return quadCanvasPoints(from: objectPoints)
         case .sourceQuad:
+            // Source Quad's render preview is top-origin image/output geometry; raw Final Cut canvas events need that same visible layer.
             return quadCanvasPoints(from: AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints))
         }
     }
@@ -1273,7 +1271,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         outputSize: AUSize,
         objectSize: AUSize,
         quad: [AUPoint],
-        rawCanvasQuad: [AUPoint],
+        objectCanvasQuad: [AUPoint],
         canvasFrame: [AUPoint]
     ) {
         guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadOSC.debug") else {
@@ -1329,7 +1327,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         debugCanvasMetrics(label: "draw-source seq=\(sequence)", width: width, height: height, destinationImage: destinationImage, quad: quad, canvasFrame: canvasFrame)
         debugLog(
             String(
-                format: "draw-source seq=%d output=(%.2f,%.2f) surface=(%.2f,%.2f) frameBounds=%@ quadBounds=%@ rawQuad=%@ frameCenter=(%.2f,%.2f) surfaceCenter=(%.2f,%.2f) frameToSurfaceDelta=(%.2f,%.2f) surfacePerFrame=(%.6f,%.6f)",
+                format: "draw-source seq=%d output=(%.2f,%.2f) surface=(%.2f,%.2f) frameBounds=%@ quadBounds=%@ objectQuad=%@ frameCenter=(%.2f,%.2f) surfaceCenter=(%.2f,%.2f) frameToSurfaceDelta=(%.2f,%.2f) surfacePerFrame=(%.6f,%.6f)",
                 sequence,
                 outputSize.width,
                 outputSize.height,
@@ -1337,7 +1335,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 surfaceSize.height,
                 debugBoundsDescription(of: canvasFrame),
                 debugBoundsDescription(of: quad),
-                debugDescription(of: rawCanvasQuad),
+                debugDescription(of: objectCanvasQuad),
                 frameCenter.x,
                 frameCenter.y,
                 surfaceCenter.x,
@@ -1402,7 +1400,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let size = objectPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let canvasFrame = objectCanvasFrame()
-        debugCanvasMetrics(label: "hover", eventPoint: eventPoint, quad: geometry.quad, canvasFrame: canvasFrame)
+        debugCanvasMetrics(label: "hover", eventPoint: eventPoint, quad: geometry.rawCanvasQuad, canvasFrame: canvasFrame)
         let hit = hitTestPart(
             forEventPoint: eventPoint,
             handles: geometry.handles,
@@ -1563,16 +1561,12 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         for resolutions: [QuadOSCEventResolution],
         handles: [AUOSCHandle],
         quad: [AUPoint],
-        rawCanvasHandles _: [AUOSCHandle],
-        rawCanvasQuad _: [AUPoint]
+        rawCanvasHandles: [AUOSCHandle],
+        rawCanvasQuad: [AUPoint]
     ) -> [(resolution: QuadOSCEventResolution, handles: [AUOSCHandle], quad: [AUPoint])] {
         resolutions.map { resolution in
             if resolution.coordinateMode == .rawCanvas {
-                return (
-                    QuadOSCEventResolution(canvasPoint: resolution.canvasPoint, coordinateMode: .rawCanvasUnflipped),
-                    handles,
-                    quad
-                )
+                return (resolution, rawCanvasHandles, rawCanvasQuad)
             }
             return (resolution, handles, quad)
         }
@@ -1593,8 +1587,6 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             switch preferredMode {
             case .rawCanvas:
                 return [raw]
-            case .rawCanvasUnflipped:
-                return [QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvasUnflipped)]
             case .mappedSurface:
                 return [mapped]
             }
@@ -1612,13 +1604,8 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         mode: AUQuadTransformMode,
         preferredMode: QuadOSCEventCoordinateMode?
     ) -> QuadOSCEventResolution {
-        let resolution = eventResolutions(fromEventPoint: eventPoint, canvasFrame: canvasFrame, preferredMode: preferredMode).first
+        return eventResolutions(fromEventPoint: eventPoint, canvasFrame: canvasFrame, preferredMode: preferredMode).first
             ?? QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvas)
-        guard mode == .sourceQuad,
-              resolution.coordinateMode == .rawCanvas else {
-            return resolution
-        }
-        return QuadOSCEventResolution(canvasPoint: resolution.canvasPoint, coordinateMode: .rawCanvasUnflipped)
     }
 
     private func validDragPart(from rawValue: Int) -> QuadOSCPart? {

@@ -19,7 +19,12 @@ typedef struct
 typedef struct
 {
     float4 clipSpacePosition [[position]];
+    float2 pixelSpacePosition;
     float4 color;
+    float2 primitiveOrigin;
+    float2 primitiveAxis;
+    float2 primitiveSize;
+    float primitiveKind;
 } OverlayRasterizerData;
 
 static float2 clampedImageCoordinate(float2 outputCoordinate, constant AnyUprightWarpState *warpState)
@@ -124,18 +129,58 @@ vertex OverlayRasterizerData anyUprightOverlayVertex(uint vertexID [[vertex_id]]
                                                      constant vector_uint2 *viewportSizePointer [[buffer(AUVII_ViewportSize)]])
 {
     OverlayRasterizerData out;
-    float2 pixelSpacePosition = vertexArray[vertexID].position.xy;
+    AnyUprightOverlayVertex2D overlayVertex = vertexArray[vertexID];
+    float2 pixelSpacePosition = overlayVertex.position.xy;
     float2 viewportSize = float2(*viewportSizePointer);
 
     out.clipSpacePosition.xy = pixelSpacePosition / (viewportSize / 2.0);
     out.clipSpacePosition.z = 0.0;
     out.clipSpacePosition.w = 1.0;
-    out.color = vertexArray[vertexID].color;
+    out.pixelSpacePosition = pixelSpacePosition;
+    out.color = overlayVertex.color;
+    out.primitiveOrigin = overlayVertex.primitiveOrigin;
+    out.primitiveAxis = overlayVertex.primitiveAxis;
+    out.primitiveSize = overlayVertex.primitiveSize;
+    out.primitiveKind = overlayVertex.primitiveKind;
 
     return out;
 }
 
+static float antialiasedCoverage(float signedDistance)
+{
+    float antialiasWidth = max(fwidth(signedDistance), 0.75);
+    return 1.0 - smoothstep(-antialiasWidth, antialiasWidth, signedDistance);
+}
+
+static float signedDistanceToOrientedRect(float2 point, float2 center, float2 axis, float2 halfSize)
+{
+    float2 unitAxis = normalize(axis);
+    float2 normal = float2(-unitAxis.y, unitAxis.x);
+    float2 offset = point - center;
+    float2 localPoint = float2(dot(offset, unitAxis), dot(offset, normal));
+    float2 q = abs(localPoint) - halfSize;
+    return length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0);
+}
+
 fragment float4 anyUprightOverlayFragment(OverlayRasterizerData in [[stage_in]])
 {
-    return in.color;
+    if (in.primitiveKind < 0.5) {
+        return in.color;
+    }
+
+    float signedDistance = 0.0;
+    if (in.primitiveKind < 1.5) {
+        signedDistance = signedDistanceToOrientedRect(
+            in.pixelSpacePosition,
+            in.primitiveOrigin,
+            in.primitiveAxis,
+            in.primitiveSize
+        );
+    } else {
+        signedDistance = length(in.pixelSpacePosition - in.primitiveOrigin) - in.primitiveSize.x;
+    }
+
+    float4 color = in.color;
+    color.a *= antialiasedCoverage(signedDistance);
+    return color;
 }

@@ -33,6 +33,11 @@ typedef struct AnyUprightVertex2D {
 typedef struct AnyUprightOverlayVertex2D {
     vector_float2 position;
     vector_float4 color;
+    vector_float2 primitiveOrigin;
+    vector_float2 primitiveAxis;
+    vector_float2 primitiveSize;
+    float primitiveKind;
+    float reserved0;
 } AnyUprightOverlayVertex2D;
 
 typedef struct AnyUprightWarpState {

@@ -74,6 +74,12 @@ enum AUOSCOverlayCoordinateSpace {
 }
 
 final class AnyUprightOSCOverlayRenderer {
+    private enum OverlayPrimitiveKind: Float {
+        case fill = 0.0
+        case rect = 1.0
+        case circle = 2.0
+    }
+
     private struct PipelineKey: Hashable {
         var registryID: UInt64
         var pixelFormat: MTLPixelFormat
@@ -404,14 +410,23 @@ final class AnyUprightOSCOverlayRenderer {
         let endPixel = localPixel(from: end, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
         let delta = endPixel - startPixel
         let length = max(0.0001, hypot(delta.x, delta.y))
-        let normal = SIMD2<Double>(-delta.y / length, delta.x / length) * (thickness / 2.0)
+        let axis = SIMD2<Double>(delta.x / length, delta.y / length)
+        let normal = SIMD2<Double>(-axis.y, axis.x)
+        let halfLength = length / 2.0
+        let halfThickness = thickness / 2.0
+        let padding = antialiasPadding()
+        let centerPixel = (startPixel + endPixel) / 2.0
 
-        appendQuad(
-            p0: startPixel + normal,
-            p1: endPixel + normal,
-            p2: endPixel - normal,
-            p3: startPixel - normal,
+        appendPrimitiveQuad(
+            p0: centerPixel - axis * (halfLength + padding) + normal * (halfThickness + padding),
+            p1: centerPixel + axis * (halfLength + padding) + normal * (halfThickness + padding),
+            p2: centerPixel + axis * (halfLength + padding) - normal * (halfThickness + padding),
+            p3: centerPixel - axis * (halfLength + padding) - normal * (halfThickness + padding),
             color: color,
+            primitiveOrigin: centeredPixel(centerPixel, width: width, height: height),
+            primitiveAxis: SIMD2<Float>(Float(axis.x), Float(axis.y)),
+            primitiveSize: SIMD2<Float>(Float(halfLength), Float(halfThickness)),
+            primitiveKind: .rect,
             width: width,
             height: height,
             to: &vertices
@@ -430,12 +445,17 @@ final class AnyUprightOSCOverlayRenderer {
         to vertices: inout [AnyUprightOverlayVertex2D]
     ) {
         let centerPixel = localPixel(from: center, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
-        appendQuad(
-            p0: centerPixel + SIMD2<Double>(-radius, -radius),
-            p1: centerPixel + SIMD2<Double>(radius, -radius),
-            p2: centerPixel + SIMD2<Double>(radius, radius),
-            p3: centerPixel + SIMD2<Double>(-radius, radius),
+        let padding = antialiasPadding()
+        appendPrimitiveQuad(
+            p0: centerPixel + SIMD2<Double>(-(radius + padding), -(radius + padding)),
+            p1: centerPixel + SIMD2<Double>(radius + padding, -(radius + padding)),
+            p2: centerPixel + SIMD2<Double>(radius + padding, radius + padding),
+            p3: centerPixel + SIMD2<Double>(-(radius + padding), radius + padding),
             color: color,
+            primitiveOrigin: centeredPixel(centerPixel, width: width, height: height),
+            primitiveAxis: SIMD2<Float>(1.0, 0.0),
+            primitiveSize: SIMD2<Float>(Float(radius), Float(radius)),
+            primitiveKind: .rect,
             width: width,
             height: height,
             to: &vertices
@@ -494,16 +514,21 @@ final class AnyUprightOSCOverlayRenderer {
         to vertices: inout [AnyUprightOverlayVertex2D]
     ) {
         let centerPixel = localPixel(from: center, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
-        let segmentCount = 48
-
-        for index in 0..<segmentCount {
-            let angle0 = Double(index) / Double(segmentCount) * Double.pi * 2.0
-            let angle1 = Double(index + 1) / Double(segmentCount) * Double.pi * 2.0
-            let p0 = centerPixel
-            let p1 = centerPixel + SIMD2<Double>(cos(angle0) * radius, sin(angle0) * radius)
-            let p2 = centerPixel + SIMD2<Double>(cos(angle1) * radius, sin(angle1) * radius)
-            appendTriangle(p0: p0, p1: p1, p2: p2, color: color, width: width, height: height, to: &vertices)
-        }
+        let padding = antialiasPadding()
+        appendPrimitiveQuad(
+            p0: centerPixel + SIMD2<Double>(-(radius + padding), -(radius + padding)),
+            p1: centerPixel + SIMD2<Double>(radius + padding, -(radius + padding)),
+            p2: centerPixel + SIMD2<Double>(radius + padding, radius + padding),
+            p3: centerPixel + SIMD2<Double>(-(radius + padding), radius + padding),
+            color: color,
+            primitiveOrigin: centeredPixel(centerPixel, width: width, height: height),
+            primitiveAxis: SIMD2<Float>(1.0, 0.0),
+            primitiveSize: SIMD2<Float>(Float(radius), 0.0),
+            primitiveKind: .circle,
+            width: width,
+            height: height,
+            to: &vertices
+        )
     }
 
     private func appendCoordinateQuad(
@@ -517,12 +542,16 @@ final class AnyUprightOSCOverlayRenderer {
         to vertices: inout [AnyUprightOverlayVertex2D]
     ) {
         let pixels = points.map { localPixel(from: $0, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height) }
-        appendQuad(
+        appendPrimitiveQuad(
             p0: pixels[0],
             p1: pixels[1],
             p2: pixels[2],
             p3: pixels[3],
             color: color,
+            primitiveOrigin: SIMD2<Float>(0.0, 0.0),
+            primitiveAxis: SIMD2<Float>(1.0, 0.0),
+            primitiveSize: SIMD2<Float>(0.0, 0.0),
+            primitiveKind: .fill,
             width: width,
             height: height,
             to: &vertices
@@ -630,46 +659,42 @@ final class AnyUprightOSCOverlayRenderer {
         )
     }
 
-    private func appendQuad(
+    private func appendPrimitiveQuad(
         p0: SIMD2<Double>,
         p1: SIMD2<Double>,
         p2: SIMD2<Double>,
         p3: SIMD2<Double>,
         color: SIMD4<Float>,
+        primitiveOrigin: SIMD2<Float>,
+        primitiveAxis: SIMD2<Float>,
+        primitiveSize: SIMD2<Float>,
+        primitiveKind: OverlayPrimitiveKind,
         width: Double,
         height: Double,
         to vertices: inout [AnyUprightOverlayVertex2D]
     ) {
         let converted = [p0, p1, p2, p0, p2, p3].map { point in
             AnyUprightOverlayVertex2D(
-                position: SIMD2<Float>(
-                    Float(point.x - width / 2.0),
-                    Float(point.y - height / 2.0)
-                ),
-                color: color
+                position: centeredPixel(point, width: width, height: height),
+                color: color,
+                primitiveOrigin: primitiveOrigin,
+                primitiveAxis: primitiveAxis,
+                primitiveSize: primitiveSize,
+                primitiveKind: primitiveKind.rawValue,
+                reserved0: 0.0
             )
         }
         vertices.append(contentsOf: converted)
     }
 
-    private func appendTriangle(
-        p0: SIMD2<Double>,
-        p1: SIMD2<Double>,
-        p2: SIMD2<Double>,
-        color: SIMD4<Float>,
-        width: Double,
-        height: Double,
-        to vertices: inout [AnyUprightOverlayVertex2D]
-    ) {
-        let converted = [p0, p1, p2].map { point in
-            AnyUprightOverlayVertex2D(
-                position: SIMD2<Float>(
-                    Float(point.x - width / 2.0),
-                    Float(point.y - height / 2.0)
-                ),
-                color: color
-            )
-        }
-        vertices.append(contentsOf: converted)
+    private func centeredPixel(_ point: SIMD2<Double>, width: Double, height: Double) -> SIMD2<Float> {
+        SIMD2<Float>(
+            Float(point.x - width / 2.0),
+            Float(point.y - height / 2.0)
+        )
+    }
+
+    private func antialiasPadding() -> Double {
+        1.5
     }
 }

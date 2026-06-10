@@ -699,11 +699,6 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let canvasFrame = objectCanvasFrame()
         let displayPart = currentDisplayPart(hostActivePart: activePart)
         debugCanvasMetrics(label: "draw-source-entry part=\(displayPart.rawValue) host=\(activePart)", width: width, height: height, destinationImage: destinationImage, quad: quad, canvasFrame: canvasFrame)
-        guard displayPart != .none else {
-            overlayRenderer.clear(destinationImage: destinationImage)
-            return
-        }
-
         let handles = [
             AUOSCHandle(point: quad[0], part: QuadOSCPart.topLeft.rawValue),
             AUOSCHandle(point: quad[1], part: QuadOSCPart.topRight.rawValue),
@@ -713,14 +708,14 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         debugCanvasMetrics(label: "draw-source", width: width, height: height, destinationImage: destinationImage, quad: quad, canvasFrame: canvasFrame)
 
         overlayRenderer.renderStyledSegments(
-            highlightedSegments(for: displayPart, quad: quad),
-            handles: highlightedHandles(for: displayPart, handles: handles),
+            sourceQuadOverlaySegments(for: displayPart, quad: quad),
+            handles: handles,
             activePart: displayPart.rawValue,
             destinationImage: destinationImage,
             destinationSize: outputSize,
             canvasFrame: canvasFrame,
             coordinateSpace: .canvasFramePixels,
-            handleStyle: hoverOverlayStyle()
+            handleStyle: sourceQuadOverlayStyle()
         )
     }
 
@@ -1154,6 +1149,18 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         forceUpdate?.pointee = ObjCBool(changed)
     }
 
+    private func sourceQuadOverlayStyle() -> AUOSCOverlayStyle {
+        var style = AUOSCOverlayStyle()
+        style.lineColor = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
+        style.shadowColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.72)
+        style.handleColor = SIMD4<Float>(0.0, 0.55, 1.0, 1.0)
+        style.activeHandleColor = SIMD4<Float>(1.0, 0.85, 0.0, 1.0)
+        style.lineThickness = 3.0
+        style.handleRadius = 15.0
+        style.handleShape = .circle
+        return style
+    }
+
     private func hoverOverlayStyle() -> AUOSCOverlayStyle {
         var style = AUOSCOverlayStyle()
         style.lineColor = SIMD4<Float>(1.0, 0.85, 0.0, 1.0)
@@ -1166,40 +1173,39 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         return style
     }
 
-    private func highlightedHandles(for part: QuadOSCPart, handles: [AUOSCHandle]) -> [AUOSCHandle] {
-        switch part {
-        case .topLeft, .topRight, .bottomRight, .bottomLeft:
-            return handles.filter { $0.part == part.rawValue }
-        default:
-            return []
-        }
-    }
-
-    private func highlightedSegments(for part: QuadOSCPart, quad: [AUPoint]) -> [AUOSCStyledSegment] {
+    private func sourceQuadOverlaySegments(for part: QuadOSCPart, quad: [AUPoint]) -> [AUOSCStyledSegment] {
         guard quad.count == 4 else {
             return []
         }
 
-        var style = hoverOverlayStyle()
-        style.handleRadius = 0.0
-        let top = AUOSCStyledSegment(start: quad[0], end: quad[1], style: style)
-        let right = AUOSCStyledSegment(start: quad[1], end: quad[2], style: style)
-        let bottom = AUOSCStyledSegment(start: quad[3], end: quad[2], style: style)
-        let left = AUOSCStyledSegment(start: quad[0], end: quad[3], style: style)
+        var baseStyle = sourceQuadOverlayStyle()
+        baseStyle.handleRadius = 0.0
+        let top = AUOSCStyledSegment(start: quad[0], end: quad[1], style: baseStyle)
+        let right = AUOSCStyledSegment(start: quad[1], end: quad[2], style: baseStyle)
+        let bottom = AUOSCStyledSegment(start: quad[3], end: quad[2], style: baseStyle)
+        let left = AUOSCStyledSegment(start: quad[0], end: quad[3], style: baseStyle)
+        let base = [top, right, bottom, left]
+
+        var hoverStyle = hoverOverlayStyle()
+        hoverStyle.handleRadius = 0.0
+        let hoverTop = AUOSCStyledSegment(start: quad[0], end: quad[1], style: hoverStyle)
+        let hoverRight = AUOSCStyledSegment(start: quad[1], end: quad[2], style: hoverStyle)
+        let hoverBottom = AUOSCStyledSegment(start: quad[3], end: quad[2], style: hoverStyle)
+        let hoverLeft = AUOSCStyledSegment(start: quad[0], end: quad[3], style: hoverStyle)
 
         switch part {
         case .quad:
-            return [top, right, bottom, left]
+            return base + [hoverTop, hoverRight, hoverBottom, hoverLeft]
         case .topEdge:
-            return [top]
+            return base + [hoverTop]
         case .rightEdge:
-            return [right]
+            return base + [hoverRight]
         case .bottomEdge:
-            return [bottom]
+            return base + [hoverBottom]
         case .leftEdge:
-            return [left]
+            return base + [hoverLeft]
         default:
-            return []
+            return base
         }
     }
 

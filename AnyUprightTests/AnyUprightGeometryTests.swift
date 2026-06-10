@@ -35,6 +35,7 @@ struct AnyUprightGeometryTests {
         try testDistanceToQuadEdgeUsesOutputPixelSegments()
         try testQuadSourceAdjusterPreviewAndApplyUseSameSelection()
         try testQuadSourceOutputHandlesStayInImageSpace()
+        try testQuadSourceOutputHandlesMayLeaveVideoFrame()
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
         try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
@@ -418,6 +419,34 @@ struct AnyUprightGeometryTests {
         try assertTrue(handles.topLeft != AUPoint(x: 0.0, y: 0.0), "fixed-size handles should be centered in output image space, not rect space")
     }
 
+    static func testQuadSourceOutputHandlesMayLeaveVideoFrame() throws {
+        let outputSize = AUSize(width: 300.0, height: 150.0)
+        let sourceSize = AUSize(width: 600.0, height: 300.0)
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPercent = AUPoint(x: -0.25, y: 0.20)
+        offsets.topRightPercent = AUPoint(x: 0.30, y: 0.10)
+        offsets.bottomRightPercent = AUPoint(x: 0.20, y: -0.25)
+        offsets.bottomLeftPercent = AUPoint(x: -0.15, y: -0.30)
+
+        let handles = AnyUprightGeometry.sourceQuadOutputHandles(
+            from: offsets,
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+        let selectionToRect = AnyUprightGeometry.quadSelectionToOutputRectMatrix(
+            from: offsets,
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+
+        try assertTrue(handles.topLeft.x < 0.0, "top-left handle should be allowed outside the left video edge")
+        try assertTrue(handles.topRight.x > outputSize.width, "top-right handle should be allowed outside the right video edge")
+        try assertTrue(handles.bottomRight.y > outputSize.height, "bottom-right handle should be allowed below the video edge")
+        try assertTrue(handles.bottomLeft.y > outputSize.height, "bottom-left handle should be allowed below the video edge")
+        try assertMaps(selectionToRect, handles.topLeft, to: AUPoint(x: 0.0, y: 0.0))
+        try assertMaps(selectionToRect, handles.bottomRight, to: AUPoint(x: outputSize.width, y: outputSize.height))
+    }
+
     static func testCanvasSurfaceMapperConvertsFxPlugOSCEvents() throws {
         let canvasFrame = [
             AUPoint(x: 531.1, y: 791.2),
@@ -502,11 +531,17 @@ struct AnyUprightGeometryTests {
             fromHostCanvasPixel: AUPoint(x: -439.4, y: 1550.0),
             surfaceSize: surfaceSize
         )
+        let farOutsideBottomRight = oscSurfacePixel(
+            fromHostCanvasPixel: AUPoint(x: 2600.0, y: 1800.0),
+            surfaceSize: surfaceSize
+        )
 
         try assertApprox(fitTopLeft.x, 239.8, "fit overlay x should stay at visible canvas x")
         try assertApprox(fitTopLeft.y, 1191.8, "fit overlay y should stay at visible canvas y")
         try assertApprox(zoomedTopLeft.x, -439.4, "zoomed overlay x should remain outside the visible surface when the source point is panned offscreen")
         try assertApprox(zoomedTopLeft.y, 1550.0, "zoomed overlay y should remain outside the visible surface when the source point is panned offscreen")
+        try assertApprox(farOutsideBottomRight.x, 2600.0, "overlay x should not clamp to the surface")
+        try assertApprox(farOutsideBottomRight.y, 1800.0, "overlay y should not clamp or flip")
         try assertTrue(
             zoomedTopLeft.x < 0.0 && zoomedTopLeft.y > surfaceSize.height,
             "host-canvas overlay mapping must not renormalize zoomed coordinates back into the Fit-position surface"

@@ -22,30 +22,6 @@ typedef struct
     float4 color;
 } OverlayRasterizerData;
 
-static float coverageWithinRadius(float distance, float radius)
-{
-    float aa = max(fwidth(distance), 0.75);
-    return 1.0 - smoothstep(radius - aa, radius + aa, distance);
-}
-
-static float coverageBoundary(float distance)
-{
-    float aa = max(fwidth(distance), 0.75);
-    return 1.0 - smoothstep(0.0, aa, distance);
-}
-
-static float distanceToSegment(float2 point, float2 start, float2 end)
-{
-    float2 delta = end - start;
-    float lengthSquared = dot(delta, delta);
-    if (lengthSquared <= 0.000001) {
-        return length(point - start);
-    }
-
-    float projection = clamp(dot(point - start, delta) / lengthSquared, 0.0, 1.0);
-    return length(point - (start + delta * projection));
-}
-
 static float2 clampedImageCoordinate(float2 outputCoordinate, constant AnyUprightWarpState *warpState)
 {
     return clamp(outputCoordinate, warpState->imageCoordinateMin, warpState->imageCoordinateMax);
@@ -101,23 +77,6 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
             return color;
         }
 
-        float2 handleCenters[4] = {
-            warpState->sourceQuadTopLeft,
-            warpState->sourceQuadTopRight,
-            warpState->sourceQuadBottomRight,
-            warpState->sourceQuadBottomLeft
-        };
-
-        float edgeDistance = min(
-            min(
-                distanceToSegment(outputCoordinate, handleCenters[0], handleCenters[1]),
-                distanceToSegment(outputCoordinate, handleCenters[1], handleCenters[2])
-            ),
-            min(
-                distanceToSegment(outputCoordinate, handleCenters[2], handleCenters[3]),
-                distanceToSegment(outputCoordinate, handleCenters[3], handleCenters[0])
-            )
-        );
         float2 rectPoint = selectionHomogeneous.xy / selectionHomogeneous.z;
         float2 outputSize = warpState->outputSize;
         float outsideDistance = max(
@@ -125,25 +84,9 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
             max(-rectPoint.y, rectPoint.y - outputSize.y)
         );
         float insideSelection = outsideDistance <= 0.0 ? 1.0 : 0.0;
-        float boundaryCoverage = coverageBoundary(edgeDistance);
-        float dimAmount = (1.0 - insideSelection) * (1.0 - boundaryCoverage);
+        float dimAmount = 1.0 - insideSelection;
 
         color.rgb *= mix(1.0, 0.70, dimAmount);
-
-        float handleDistance = 1000000.0;
-        for (int i = 0; i < 4; ++i) {
-            handleDistance = min(handleDistance, length(outputCoordinate - handleCenters[i]));
-        }
-
-        float edgeShadow = coverageWithinRadius(edgeDistance, 5.0);
-        float edgeLine = coverageWithinRadius(edgeDistance, 3.0);
-        float handleShadow = coverageWithinRadius(handleDistance, 22.0);
-        float handleFill = coverageWithinRadius(handleDistance, 16.0);
-
-        color.rgb = mix(color.rgb, float3(0.0, 0.0, 0.0), edgeShadow * 0.70);
-        color.rgb = mix(color.rgb, float3(1.0, 1.0, 1.0), edgeLine);
-        color.rgb = mix(color.rgb, float3(0.0, 0.0, 0.0), handleShadow * 0.70);
-        color.rgb = mix(color.rgb, float3(0.0, 0.55, 1.0), handleFill);
 
         return color;
     }

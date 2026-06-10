@@ -306,10 +306,14 @@ final class AnyUprightOSCOverlayRenderer {
         }
 
         var viewportSize = simd_uint2(UInt32(width), UInt32(height))
+        let vertexBufferLength = MemoryLayout<AnyUprightOverlayVertex2D>.stride * vertices.count
+        guard let vertexBuffer = device.makeBuffer(bytes: vertices, length: vertexBufferLength, options: .storageModeShared) else {
+            return
+        }
         let viewport = MTLViewport(originX: 0.0, originY: 0.0, width: width, height: height, znear: -1.0, zfar: 1.0)
         encoder.setViewport(viewport)
         encoder.setRenderPipelineState(pipelineState)
-        encoder.setVertexBytes(&vertices, length: MemoryLayout<AnyUprightOverlayVertex2D>.stride * vertices.count, index: Int(AUVII_Vertices.rawValue))
+        encoder.setVertexBuffer(vertexBuffer, offset: 0, index: Int(AUVII_Vertices.rawValue))
         encoder.setVertexBytes(&viewportSize, length: MemoryLayout.size(ofValue: viewportSize), index: Int(AUVII_ViewportSize.rawValue))
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: vertices.count)
         encoder.endEncoding()

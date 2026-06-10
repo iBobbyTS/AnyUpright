@@ -23,20 +23,20 @@ This note records the current project convention. It is intentionally about sema
 
 - Source Quad OSC hit testing primarily works in host canvas coordinates returned by FxPlug conversions.
 - Final Cut can provide raw canvas-position events, while Motion may provide surface-local events. The current code keeps candidate paths for both and maps Motion-style surface-local events back to canvas coordinates before hit testing.
-- Host canvas points used for hover and active highlights are already in the coordinate frame expected by the OSC surface path. Do not flip their Y again when drawing the yellow highlight.
+- Host canvas points used for Source Quad's persistent OSC outline, handles, hover highlights, and active highlights are already in the coordinate frame expected by the OSC surface path. Do not flip their Y again when drawing those controls.
 
 ### Metal Render Vertices
 
 - The warp renderer builds tile-local Metal vertices from FxPlug tile bounds and pairs them with image/output coordinates.
 - The source/output geometry used by the shader remains image/output pixel geometry. Keep Y-axis conversion at the boundary where tile vertices are paired with output coordinates.
-- The OSC overlay renderer receives local pixel positions for the overlay surface. For host-canvas highlight points, the local pixel should remain the same canvas X/Y value; it should not be re-normalized through output-image aspect fit and should not be vertically mirrored.
+- The OSC overlay renderer receives local pixel positions for the overlay surface. For Source Quad host-canvas control points, the local pixel should remain the same canvas X/Y value; it should not be clamped, re-normalized through output-image aspect fit, or vertically mirrored.
 
 ## Practical Rules
 
 - Never fix a vertical mismatch by adding a local `height - y` until the two coordinate spaces on either side of the line are named.
 - Positive user-facing Quad Y moves up, but image/output pixel Y grows down. That sign difference belongs in the parameter-to-image conversion layer.
 - FxPlug object-space visual top uses larger normalized Y. Image/output pixel visual top uses smaller Y. That conversion should be explicit and covered by geometry tests.
-- OSC hover highlights for Source Quad are a display-only path. Keep their Y handling separate from drag writeback and persistent parameter conversion.
+- OSC outline, handles, and hover highlights for Source Quad are a display-only path. Keep their Y handling separate from drag writeback and persistent parameter conversion.
 - If a handle drags correctly but the yellow hover highlight appears on the opposite edge, suspect only the hover/overlay drawing path before changing geometry or parameter writeback.
 - If a visible source quad moves correctly but the hit target is mirrored, inspect the raw canvas versus mapped surface event path before changing the render preview.
 - Any change that crosses one of these boundaries should add or update a deterministic geometry test that names the two coordinate spaces involved.
@@ -47,7 +47,7 @@ The lightweight geometry test executable includes coverage for:
 
 - Source Quad image-space selection and object-space handle positions.
 - Raw canvas event handling versus Motion-style surface-local event mapping.
-- Host canvas pixels staying absolute for OSC hover overlay drawing.
+- Host canvas pixels staying absolute for Source Quad OSC overlay drawing.
 - Positive Quad Y offset semantics.
 
 Run the documented geometry command in `docs/README.md` after changing any Y-axis conversion.

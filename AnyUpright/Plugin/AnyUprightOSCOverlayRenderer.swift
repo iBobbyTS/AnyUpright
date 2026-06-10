@@ -70,6 +70,7 @@ private struct AUOSCOverlayPixelFrame {
 enum AUOSCOverlayCoordinateSpace {
     case normalized
     case pixels
+    case canvasFramePixels
 }
 
 final class AnyUprightOSCOverlayRenderer {
@@ -539,6 +540,12 @@ final class AnyUprightOSCOverlayRenderer {
             let normalizedX = (point.x - pixelFrame.minX) / max(coordinateSize.width, 1.0)
             let normalizedY = (point.y - pixelFrame.minY) / max(coordinateSize.height, 1.0)
             return SIMD2<Double>(normalizedX * width, normalizedY * height)
+        case .canvasFramePixels:
+            let surfacePixel = oscSurfacePixel(
+                fromHostCanvasPixel: point,
+                surfaceSize: AUSize(width: width, height: height)
+            )
+            return SIMD2<Double>(surfacePixel.x, surfacePixel.y)
         }
     }
 
@@ -550,7 +557,7 @@ final class AnyUprightOSCOverlayRenderer {
         textureWidth: Double,
         textureHeight: Double
     ) -> AUOSCOverlayPixelFrame {
-        if coordinateSpace == .pixels {
+        if coordinateSpace == .pixels || coordinateSpace == .canvasFramePixels {
             if let canvasFrame = canvasFrameFromPoints(canvasFrame) {
                 return canvasFrame
             }

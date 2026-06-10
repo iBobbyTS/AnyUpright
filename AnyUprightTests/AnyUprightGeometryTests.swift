@@ -38,6 +38,7 @@ struct AnyUprightGeometryTests {
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
         try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
+        try testHostCanvasPixelsStayAbsoluteForOSCOverlay()
         try testAspectFitPixelSurfaceMapperKeepsHitTestingInsideVideoFrame()
         try testOSCDragPartFallsBackToLocalHitWhenHostPartIsNone()
         try testOSCDisplayPartKeepsDragHighlightedWhenHoverStops()
@@ -488,6 +489,27 @@ struct AnyUprightGeometryTests {
         try assertTrue(
             abs(incorrectlyMapped.y - draggedOutsideCanvas.y) > 100.0,
             "treating an outside raw canvas event as a surface-local event would jump the drag vertically"
+        )
+    }
+
+    static func testHostCanvasPixelsStayAbsoluteForOSCOverlay() throws {
+        let surfaceSize = AUSize(width: 2398.0, height: 1372.0)
+        let fitTopLeft = oscSurfacePixel(
+            fromHostCanvasPixel: AUPoint(x: 239.8, y: 1191.8),
+            surfaceSize: surfaceSize
+        )
+        let zoomedTopLeft = oscSurfacePixel(
+            fromHostCanvasPixel: AUPoint(x: -439.4, y: 1550.0),
+            surfaceSize: surfaceSize
+        )
+
+        try assertApprox(fitTopLeft.x, 239.8, "fit overlay x should stay at visible canvas x")
+        try assertApprox(fitTopLeft.y, 180.2, "fit overlay y should flip into Metal surface coordinates")
+        try assertApprox(zoomedTopLeft.x, -439.4, "zoomed overlay x should remain outside the visible surface when the source point is panned offscreen")
+        try assertApprox(zoomedTopLeft.y, -178.0, "zoomed overlay y should remain outside the visible surface when the source point is panned offscreen")
+        try assertTrue(
+            zoomedTopLeft.x < 0.0 && zoomedTopLeft.y < 0.0,
+            "host-canvas overlay mapping must not renormalize zoomed coordinates back into the Fit-position surface"
         )
     }
 

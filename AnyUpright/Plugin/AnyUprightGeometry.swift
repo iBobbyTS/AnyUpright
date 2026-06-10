@@ -178,6 +178,13 @@ struct AUCanvasSurfaceMapper {
     }
 }
 
+func oscSurfacePixel(fromHostCanvasPixel point: AUPoint, surfaceSize: AUSize) -> AUPoint {
+    AUPoint(
+        x: point.x,
+        y: max(1.0, surfaceSize.height) - point.y
+    )
+}
+
 struct AUAspectFitPixelSurfaceMapper {
     var coordinateFrame: AUCoordinateFrame
     var surfaceSize: AUSize
@@ -262,9 +269,13 @@ func resolveOSCDragPart(hostActivePart: Int, localHitPart: Int?, nonePart: Int =
     return localHitPart
 }
 
-func resolveOSCDisplayPart(hoverPart: Int, dragPart: Int?, nonePart: Int = 0) -> Int {
+func resolveOSCDisplayPart(hostActivePart: Int = 0, hoverPart: Int, dragPart: Int?, nonePart: Int = 0) -> Int {
     if let dragPart, dragPart != nonePart {
         return dragPart
+    }
+
+    if hostActivePart != nonePart {
+        return hostActivePart
     }
 
     return hoverPart

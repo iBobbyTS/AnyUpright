@@ -504,11 +504,11 @@ struct AnyUprightGeometryTests {
         )
 
         try assertApprox(fitTopLeft.x, 239.8, "fit overlay x should stay at visible canvas x")
-        try assertApprox(fitTopLeft.y, 180.2, "fit overlay y should flip into Metal surface coordinates")
+        try assertApprox(fitTopLeft.y, 1191.8, "fit overlay y should stay at visible canvas y")
         try assertApprox(zoomedTopLeft.x, -439.4, "zoomed overlay x should remain outside the visible surface when the source point is panned offscreen")
-        try assertApprox(zoomedTopLeft.y, -178.0, "zoomed overlay y should remain outside the visible surface when the source point is panned offscreen")
+        try assertApprox(zoomedTopLeft.y, 1550.0, "zoomed overlay y should remain outside the visible surface when the source point is panned offscreen")
         try assertTrue(
-            zoomedTopLeft.x < 0.0 && zoomedTopLeft.y < 0.0,
+            zoomedTopLeft.x < 0.0 && zoomedTopLeft.y > surfaceSize.height,
             "host-canvas overlay mapping must not renormalize zoomed coordinates back into the Fit-position surface"
         )
     }

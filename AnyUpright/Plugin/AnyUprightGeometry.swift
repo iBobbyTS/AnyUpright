@@ -178,10 +178,10 @@ struct AUCanvasSurfaceMapper {
     }
 }
 
-func oscSurfacePixel(fromHostCanvasPixel point: AUPoint, surfaceSize: AUSize) -> AUPoint {
+func oscSurfacePixel(fromHostCanvasPixel point: AUPoint, surfaceSize _: AUSize) -> AUPoint {
     AUPoint(
         x: point.x,
-        y: max(1.0, surfaceSize.height) - point.y
+        y: point.y
     )
 }
 

@@ -31,7 +31,7 @@ struct AnyUprightGeometryTests {
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
         try testQuadSourceOSCPixelDragDoesNotFlipYAgain()
         try testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting()
-        try testQuadSourceRawCanvasHitPointsFollowVisibleSourceQuad()
+        try testQuadSourceOSCHitPointsDoNotUseMirroredImageLayer()
         try testDistanceToQuadEdgeUsesOutputPixelSegments()
         try testQuadSourceAdjusterPreviewAndApplyUseSameSelection()
         try testQuadSourceOutputHandlesStayInImageSpace()
@@ -39,6 +39,7 @@ struct AnyUprightGeometryTests {
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
         try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
+        try testInitialOSCHitResolutionDoesNotAddMappedLayerForRawCanvasEvents()
         try testHostCanvasPixelsStayAbsoluteForOSCOverlay()
         try testOSCSurfacePixelsFlipYOnlyAtMetalVertexBoundary()
         try testAspectFitPixelSurfaceMapperKeepsHitTestingInsideVideoFrame()
@@ -308,21 +309,24 @@ struct AnyUprightGeometryTests {
         try assertEqual(sourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "flipped raw canvas drag should update the visible top-left source point")
     }
 
-    static func testQuadSourceRawCanvasHitPointsFollowVisibleSourceQuad() throws {
+    static func testQuadSourceOSCHitPointsDoNotUseMirroredImageLayer() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
         offsets.topLeftPercent = AUPoint(x: 0.125, y: -0.15)
 
         let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
-        let staleObjectPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: objectPoints, size: size)
-        let rawHitObjectPoints = AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints)
-        let rawHitPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: rawHitObjectPoints, size: size)
-        let visibleSourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let visibleOSCHitPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: objectPoints, size: size)
+        let mirroredImageObjectPoints = AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints)
+        let mirroredImagePixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: mirroredImageObjectPoints, size: size)
+        let sourceImageQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
 
-        try assertEqual(visibleSourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "visible moved source top-left")
-        try assertEqual(staleObjectPixels.topLeft, AUPoint(x: 45.0, y: 75.0), "unflipped object-space hit point would stay at the stale invisible top-left")
-        try assertEqual(rawHitPixels.topLeft, visibleSourceQuad.topLeft, "raw canvas hit point should follow moved visible top-left")
-        try assertEqual(rawHitPixels.bottomLeft, visibleSourceQuad.bottomLeft, "raw canvas hit point should keep bottom-left aligned")
+        try assertEqual(visibleOSCHitPixels.topLeft, AUPoint(x: 45.0, y: 75.0), "OSC hit top-left should stay in object/canvas pixel space")
+        try assertEqual(sourceImageQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "source image top-left crosses the Y-axis boundary")
+        try assertEqual(mirroredImagePixels.topLeft, sourceImageQuad.topLeft, "mirrored image pixels match render-time source image space")
+        try assertTrue(
+            visibleOSCHitPixels.topLeft.y != mirroredImagePixels.topLeft.y,
+            "using mirrored image pixels for OSC hit testing would create a second vertical hit layer"
+        )
     }
 
     static func testPixelQuadFlipMapsOutputHandlesToOSCRenderTargetCoordinates() throws {
@@ -519,6 +523,38 @@ struct AnyUprightGeometryTests {
         try assertTrue(
             abs(incorrectlyMapped.y - draggedOutsideCanvas.y) > 100.0,
             "treating an outside raw canvas event as a surface-local event would jump the drag vertically"
+        )
+    }
+
+    static func testInitialOSCHitResolutionDoesNotAddMappedLayerForRawCanvasEvents() throws {
+        let finalCutCanvasFrame = [
+            AUPoint(x: 0.0, y: 1181.86),
+            AUPoint(x: 2184.0, y: 1181.86),
+            AUPoint(x: 2184.0, y: 30.14),
+            AUPoint(x: 0.0, y: 30.14)
+        ]
+        let finalCutHoverEvent = AUPoint(x: 1725.4, y: 891.8)
+
+        try assertTrue(
+            !shouldIncludeMappedSurfaceOSCCandidate(forInitialEventPoint: finalCutHoverEvent, canvasFrame: finalCutCanvasFrame),
+            "raw Final Cut canvas events inside the canvas frame should not also test a mapped-surface layer"
+        )
+
+        let motionCanvasFrame = [
+            AUPoint(x: 531.1, y: 791.2),
+            AUPoint(x: 1811.1, y: 791.2),
+            AUPoint(x: 1811.1, y: 71.2),
+            AUPoint(x: 531.1, y: 71.2)
+        ]
+        let mapper = try unwrap(
+            AUCanvasSurfaceMapper(canvasFrame: motionCanvasFrame, surfaceSize: AUSize(width: 1670.0, height: 844.0)),
+            "canvas mapper"
+        )
+        let motionSurfaceEvent = mapper.eventPoint(fromCanvasPoint: AUPoint(x: 659.1, y: 719.2))
+
+        try assertTrue(
+            shouldIncludeMappedSurfaceOSCCandidate(forInitialEventPoint: motionSurfaceEvent, canvasFrame: motionCanvasFrame),
+            "surface-local events outside the host canvas frame should still use mapped-surface hit testing"
         )
     }
 

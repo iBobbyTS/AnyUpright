@@ -178,6 +178,27 @@ struct AUCanvasSurfaceMapper {
     }
 }
 
+func isPointInsideAxisAlignedFrame(_ point: AUPoint, frame: [AUPoint]) -> Bool {
+    guard frame.count >= 2 else {
+        return false
+    }
+
+    let xs = frame.map(\.x)
+    let ys = frame.map(\.y)
+    guard let minX = xs.min(),
+          let maxX = xs.max(),
+          let minY = ys.min(),
+          let maxY = ys.max() else {
+        return false
+    }
+
+    return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY
+}
+
+func shouldIncludeMappedSurfaceOSCCandidate(forInitialEventPoint point: AUPoint, canvasFrame: [AUPoint]) -> Bool {
+    !isPointInsideAxisAlignedFrame(point, frame: canvasFrame)
+}
+
 func oscSurfacePixel(fromHostCanvasPixel point: AUPoint, surfaceSize _: AUSize) -> AUPoint {
     point
 }

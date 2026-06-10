@@ -871,7 +871,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 settingAPI: settingAPI,
                 time: time
             )
-            setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? .rawCanvas))
+            setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode))
             forceUpdate?.pointee = true
             return
         }
@@ -893,12 +893,12 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 settingAPI: settingAPI,
                 time: time
             )
-            setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? .rawCanvas))
+            setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode))
             forceUpdate?.pointee = true
             return
         }
 
-        setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? .rawCanvas))
+        setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode))
         setCorner(draggedObjectPoint, part: part, mode: mode, offsets: quadCornerOffsets(from: state), size: size, settingAPI: settingAPI, time: time)
         forceUpdate?.pointee = true
     }
@@ -1563,18 +1563,18 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         for resolutions: [QuadOSCEventResolution],
         handles: [AUOSCHandle],
         quad: [AUPoint],
-        rawCanvasHandles: [AUOSCHandle],
-        rawCanvasQuad: [AUPoint]
+        rawCanvasHandles _: [AUOSCHandle],
+        rawCanvasQuad _: [AUPoint]
     ) -> [(resolution: QuadOSCEventResolution, handles: [AUOSCHandle], quad: [AUPoint])] {
-        resolutions.flatMap { resolution -> [(QuadOSCEventResolution, [AUOSCHandle], [AUPoint])] in
+        resolutions.map { resolution in
             if resolution.coordinateMode == .rawCanvas {
-                let unflipped = QuadOSCEventResolution(canvasPoint: resolution.canvasPoint, coordinateMode: .rawCanvasUnflipped)
-                return [
-                    (resolution, rawCanvasHandles, rawCanvasQuad),
-                    (unflipped, handles, quad)
-                ]
+                return (
+                    QuadOSCEventResolution(canvasPoint: resolution.canvasPoint, coordinateMode: .rawCanvasUnflipped),
+                    handles,
+                    quad
+                )
             }
-            return [(resolution, handles, quad)]
+            return (resolution, handles, quad)
         }
     }
 
@@ -1589,19 +1589,20 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         }
 
         let mapped = QuadOSCEventResolution(canvasPoint: mapper.canvasPoint(fromEventPoint: eventPoint), coordinateMode: .mappedSurface)
-        let candidates = isPoint(eventPoint, insideAxisAlignedFrame: canvasFrame) ? [raw, mapped] : [mapped]
-        switch preferredMode {
-        case .rawCanvas:
-            return candidates.contains { $0.coordinateMode == .rawCanvas } ? candidates : [raw, mapped]
-        case .rawCanvasUnflipped:
-            return candidates.contains { $0.coordinateMode == .rawCanvas }
-                ? [QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvasUnflipped)]
-                : candidates
-        case .mappedSurface:
-            return candidates.sorted { first, _ in first.coordinateMode == .mappedSurface }
-        case .none:
-            return candidates
+        if let preferredMode {
+            switch preferredMode {
+            case .rawCanvas:
+                return [raw]
+            case .rawCanvasUnflipped:
+                return [QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvasUnflipped)]
+            case .mappedSurface:
+                return [mapped]
+            }
         }
+
+        return shouldIncludeMappedSurfaceOSCCandidate(forInitialEventPoint: eventPoint, canvasFrame: canvasFrame)
+            ? [mapped]
+            : [raw]
     }
 
     private func resolvedCanvasPoint(
@@ -1611,8 +1612,13 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         mode: AUQuadTransformMode,
         preferredMode: QuadOSCEventCoordinateMode?
     ) -> QuadOSCEventResolution {
-        return eventResolutions(fromEventPoint: eventPoint, canvasFrame: canvasFrame, preferredMode: preferredMode).first
+        let resolution = eventResolutions(fromEventPoint: eventPoint, canvasFrame: canvasFrame, preferredMode: preferredMode).first
             ?? QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvas)
+        guard mode == .sourceQuad,
+              resolution.coordinateMode == .rawCanvas else {
+            return resolution
+        }
+        return QuadOSCEventResolution(canvasPoint: resolution.canvasPoint, coordinateMode: .rawCanvasUnflipped)
     }
 
     private func validDragPart(from rawValue: Int) -> QuadOSCPart? {
@@ -1830,22 +1836,6 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         return true
     }
 
-    private func isPoint(_ point: AUPoint, insideAxisAlignedFrame frame: [AUPoint]) -> Bool {
-        guard frame.count >= 2 else {
-            return false
-        }
-
-        let xs = frame.map(\.x)
-        let ys = frame.map(\.y)
-        guard let minX = xs.min(),
-              let maxX = xs.max(),
-              let minY = ys.min(),
-              let maxY = ys.max() else {
-            return false
-        }
-
-        return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY
-    }
 }
 
 @objc(AnyUprightQuadOutputCornersOSCPlugIn)

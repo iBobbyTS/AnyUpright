@@ -22,7 +22,7 @@ This note records the current project convention. It is intentionally about sema
 ### FxPlug Canvas And OSC Events
 
 - Source Quad OSC hit testing primarily works in host canvas coordinates returned by FxPlug conversions.
-- Final Cut can provide raw canvas-position events, while Motion may provide surface-local events. The current code keeps candidate paths for both and maps Motion-style surface-local events back to canvas coordinates before hit testing.
+- Final Cut can provide raw canvas-position events, while Motion may provide surface-local events. The current code keeps candidate paths for both and maps Motion-style surface-local events back to canvas coordinates before hit testing. Initial hover/hit tests must choose one event interpretation for a given mouse point: raw-canvas events inside the host canvas frame should not also compete against mapped-surface candidates, because that creates a second mirrored hit layer.
 - Host canvas points used for Source Quad's persistent OSC outline, handles, hover highlights, and active highlights already have the correct Y direction for OSC drawing. Do not flip their Y again when drawing those controls.
 - Source Quad's persistent OSC drawing treats host canvas X and Y symmetrically: control points are drawn directly in host canvas pixels. Do not add frame-center, surface-scale, backing-scale, aspect-fit, or Y-only compensation unless host callback data proves X and Y are arriving in different coordinate spaces.
 

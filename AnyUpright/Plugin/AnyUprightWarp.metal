@@ -33,6 +33,29 @@ static float2 inputTextureUV(float2 sourcePixel, constant AnyUprightWarpState *w
     return texturePixel / warpState->inputTextureSize;
 }
 
+static float sourceImageCoverage(float2 sourcePixel, constant AnyUprightWarpState *warpState)
+{
+    float2 sourceSize = max(warpState->inputSize, float2(1.0));
+    float outsideDistance = max(
+        max(-sourcePixel.x, sourcePixel.x - sourceSize.x),
+        max(-sourcePixel.y, sourcePixel.y - sourceSize.y)
+    );
+    float antialiasWidth = max(fwidth(outsideDistance), 0.0001);
+    return 1.0 - smoothstep(-antialiasWidth, antialiasWidth, outsideDistance);
+}
+
+static float4 sampleInputImage(texture2d<half> colorTexture,
+                               sampler textureSampler,
+                               float2 sourcePixel,
+                               constant AnyUprightWarpState *warpState)
+{
+    float coverage = sourceImageCoverage(sourcePixel, warpState);
+    float2 sourceUV = clamp(inputTextureUV(sourcePixel, warpState), float2(0.0), float2(1.0));
+    float4 color = float4(colorTexture.sample(textureSampler, sourceUV));
+    color.rgb *= coverage;
+    return color;
+}
+
 vertex RasterizerData anyUprightWarpVertex(uint vertexID [[vertex_id]],
                                            constant AnyUprightVertex2D *vertexArray [[buffer(AUVII_Vertices)]],
                                            constant vector_uint2 *viewportSizePointer [[buffer(AUVII_ViewportSize)]])
@@ -65,12 +88,7 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
         }
 
         float2 sourcePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
-        float2 sourceUV = inputTextureUV(sourcePixel, warpState);
-        if (sourceUV.x < 0.0 || sourceUV.x > 1.0 || sourceUV.y < 0.0 || sourceUV.y > 1.0) {
-            return float4(0.0, 0.0, 0.0, 1.0);
-        }
-
-        float4 color = float4(colorTexture.sample(textureSampler, sourceUV));
+        float4 color = sampleInputImage(colorTexture, textureSampler, sourcePixel, warpState);
         float3 selectionHomogeneous = warpState->selectionOutputToRect * float3(outputCoordinate, 1.0);
         if (fabs(selectionHomogeneous.z) < 0.000001) {
             color.rgb *= 0.70;
@@ -98,13 +116,7 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
     }
 
     float2 sourcePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
-    float2 sourceUV = inputTextureUV(sourcePixel, warpState);
-
-    if (sourceUV.x < 0.0 || sourceUV.x > 1.0 || sourceUV.y < 0.0 || sourceUV.y > 1.0) {
-        return float4(0.0, 0.0, 0.0, 1.0);
-    }
-
-    return float4(colorTexture.sample(textureSampler, sourceUV));
+    return sampleInputImage(colorTexture, textureSampler, sourcePixel, warpState);
 }
 
 vertex OverlayRasterizerData anyUprightOverlayVertex(uint vertexID [[vertex_id]],

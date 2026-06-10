@@ -40,6 +40,7 @@ struct AnyUprightGeometryTests {
         try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
         try testHostCanvasPixelsStayAbsoluteForOSCOverlay()
+        try testOSCSurfacePixelsFlipYOnlyAtMetalVertexBoundary()
         try testAspectFitPixelSurfaceMapperKeepsHitTestingInsideVideoFrame()
         try testOSCDragPartFallsBackToLocalHitWhenHostPartIsNone()
         try testOSCDisplayPartKeepsDragHighlightedWhenHoverStops()
@@ -522,13 +523,25 @@ struct AnyUprightGeometryTests {
     }
 
     static func testHostCanvasPixelsStayAbsoluteForOSCOverlay() throws {
-        let surfaceSize = AUSize(width: 2398.0, height: 1372.0)
+        let surfaceSize = AUSize(width: 2184.0, height: 1212.0)
         let fitTopLeft = oscSurfacePixel(
-            fromHostCanvasPixel: AUPoint(x: 239.8, y: 1191.8),
+            fromHostCanvasPixel: AUPoint(x: 218.4, y: 1066.69),
             surfaceSize: surfaceSize
         )
-        let zoomedTopLeft = oscSurfacePixel(
-            fromHostCanvasPixel: AUPoint(x: -439.4, y: 1550.0),
+        let centeredTopLeft = oscSurfacePixel(
+            fromHostCanvasPixel: AUPoint(x: -546.4, y: 1470.0),
+            surfaceSize: surfaceSize
+        )
+        let pannedUpTopLeft = oscSurfacePixel(
+            fromHostCanvasPixel: AUPoint(x: -1502.4, y: 996.0),
+            surfaceSize: surfaceSize
+        )
+        let pannedDownTopLeft = oscSurfacePixel(
+            fromHostCanvasPixel: AUPoint(x: -1502.4, y: 1944.0),
+            surfaceSize: surfaceSize
+        )
+        let horizontalPannedTopLeft = oscSurfacePixel(
+            fromHostCanvasPixel: AUPoint(x: -1163.49, y: 1944.0),
             surfaceSize: surfaceSize
         )
         let farOutsideBottomRight = oscSurfacePixel(
@@ -536,16 +549,25 @@ struct AnyUprightGeometryTests {
             surfaceSize: surfaceSize
         )
 
-        try assertApprox(fitTopLeft.x, 239.8, "fit overlay x should stay at visible canvas x")
-        try assertApprox(fitTopLeft.y, 1191.8, "fit overlay y should stay at visible canvas y")
-        try assertApprox(zoomedTopLeft.x, -439.4, "zoomed overlay x should remain outside the visible surface when the source point is panned offscreen")
-        try assertApprox(zoomedTopLeft.y, 1550.0, "zoomed overlay y should remain outside the visible surface when the source point is panned offscreen")
-        try assertApprox(farOutsideBottomRight.x, 2600.0, "overlay x should not clamp to the surface")
-        try assertApprox(farOutsideBottomRight.y, 1800.0, "overlay y should not clamp or flip")
-        try assertTrue(
-            zoomedTopLeft.x < 0.0 && zoomedTopLeft.y > surfaceSize.height,
-            "host-canvas overlay mapping must not renormalize zoomed coordinates back into the Fit-position surface"
-        )
+        try assertEqual(fitTopLeft, AUPoint(x: 218.4, y: 1066.69), "fit overlay should stay in host canvas pixels")
+        try assertEqual(centeredTopLeft, AUPoint(x: -546.4, y: 1470.0), "centered zoom overlay should stay in host canvas pixels")
+        try assertEqual(pannedUpTopLeft, AUPoint(x: -1502.4, y: 996.0), "vertical pan should keep host canvas pixels")
+        try assertEqual(pannedDownTopLeft, AUPoint(x: -1502.4, y: 1944.0), "vertical pan should keep host canvas pixels")
+        try assertApprox(horizontalPannedTopLeft.x, -1163.49, "horizontal pan should keep host canvas x")
+        try assertApprox(horizontalPannedTopLeft.y, 1944.0, "horizontal pan should not perturb host canvas y")
+        try assertEqual(farOutsideBottomRight, AUPoint(x: 2600.0, y: 1800.0), "overlay should remain direct")
+    }
+
+    static func testOSCSurfacePixelsFlipYOnlyAtMetalVertexBoundary() throws {
+        let surfaceSize = AUSize(width: 2184.0, height: 1212.0)
+        let canvasPoint = AUPoint(x: -1502.4, y: 996.0)
+        let surfacePoint = oscSurfacePixel(fromHostCanvasPixel: canvasPoint, surfaceSize: surfaceSize)
+        let metalPoint = oscMetalCenteredPixel(fromSurfacePixel: surfacePoint, surfaceSize: surfaceSize)
+        let roundTrippedSurfacePoint = oscSurfacePixel(fromMetalCenteredPixel: metalPoint, surfaceSize: surfaceSize)
+
+        try assertEqual(surfacePoint, canvasPoint, "canvas to OSC surface should stay direct")
+        try assertEqual(metalPoint, AUPoint(x: -2594.4, y: -390.0), "Metal overlay vertices should flip Y at the viewport boundary")
+        try assertEqual(roundTrippedSurfacePoint, surfacePoint, "Metal centered conversion should round-trip to the same OSC surface pixel")
     }
 
     static func testAspectFitPixelSurfaceMapperKeepsHitTestingInsideVideoFrame() throws {

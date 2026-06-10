@@ -23,13 +23,15 @@ This note records the current project convention. It is intentionally about sema
 
 - Source Quad OSC hit testing primarily works in host canvas coordinates returned by FxPlug conversions.
 - Final Cut can provide raw canvas-position events, while Motion may provide surface-local events. The current code keeps candidate paths for both and maps Motion-style surface-local events back to canvas coordinates before hit testing.
-- Host canvas points used for Source Quad's persistent OSC outline, handles, hover highlights, and active highlights are already in the coordinate frame expected by the OSC surface path. Do not flip their Y again when drawing those controls.
+- Host canvas points used for Source Quad's persistent OSC outline, handles, hover highlights, and active highlights already have the correct Y direction for OSC drawing. Do not flip their Y again when drawing those controls.
+- Source Quad's persistent OSC drawing treats host canvas X and Y symmetrically: control points are drawn directly in host canvas pixels. Do not add frame-center, surface-scale, backing-scale, aspect-fit, or Y-only compensation unless host callback data proves X and Y are arriving in different coordinate spaces.
 
 ### Metal Render Vertices
 
 - The warp renderer builds tile-local Metal vertices from FxPlug tile bounds and pairs them with image/output coordinates.
 - The source/output geometry used by the shader remains image/output pixel geometry. Keep Y-axis conversion at the boundary where tile vertices are paired with output coordinates.
-- The OSC overlay renderer receives local pixel positions for the overlay surface. For Source Quad host-canvas control points, the local pixel should remain the same canvas X/Y value; it should not be clamped, re-normalized through output-image aspect fit, or vertically mirrored.
+- The OSC overlay renderer receives local pixel positions for the overlay surface. For Source Quad host-canvas control points, local X and local Y should remain the host canvas X and Y. They should not be clamped, re-normalized through output-image aspect fit, offset by viewer-frame centers, scaled by backing scale, or vertically mirrored.
+- The OSC overlay renderer flips Y only when converting local surface pixels into the centered Metal vertex space: `metalX = surfaceX - surfaceWidth / 2`, `metalY = surfaceHeight / 2 - surfaceY`. Apply the same conversion to overlay primitive origins and axes so fragment distance fields stay aligned with the drawn vertices.
 
 ## Practical Rules
 
@@ -47,7 +49,8 @@ The lightweight geometry test executable includes coverage for:
 
 - Source Quad image-space selection and object-space handle positions.
 - Raw canvas event handling versus Motion-style surface-local event mapping.
-- Host canvas pixels staying absolute for Source Quad OSC overlay drawing.
+- Source Quad OSC overlay drawing keeping host canvas X and Y direct, including points outside the visible surface.
+- OSC surface-pixel to Metal centered-pixel conversion, including the single viewport-height Y flip at that boundary.
 - Positive Quad Y offset semantics.
 
 Run the documented geometry command in `docs/README.md` after changing any Y-axis conversion.

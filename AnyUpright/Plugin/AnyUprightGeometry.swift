@@ -179,9 +179,24 @@ struct AUCanvasSurfaceMapper {
 }
 
 func oscSurfacePixel(fromHostCanvasPixel point: AUPoint, surfaceSize _: AUSize) -> AUPoint {
-    AUPoint(
-        x: point.x,
-        y: point.y
+    point
+}
+
+func oscMetalCenteredPixel(fromSurfacePixel point: AUPoint, surfaceSize: AUSize) -> AUPoint {
+    let width = max(1.0, surfaceSize.width)
+    let height = max(1.0, surfaceSize.height)
+    return AUPoint(
+        x: point.x - width / 2.0,
+        y: height / 2.0 - point.y
+    )
+}
+
+func oscSurfacePixel(fromMetalCenteredPixel point: AUPoint, surfaceSize: AUSize) -> AUPoint {
+    let width = max(1.0, surfaceSize.width)
+    let height = max(1.0, surfaceSize.height)
+    return AUPoint(
+        x: point.x + width / 2.0,
+        y: height / 2.0 - point.y
     )
 }
 

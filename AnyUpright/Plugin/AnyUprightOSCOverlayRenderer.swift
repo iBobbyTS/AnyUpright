@@ -48,6 +48,10 @@ private struct AUOSCOverlayPixelFrame {
         max(1.0, maxY - minY)
     }
 
+    var center: SIMD2<Double> {
+        SIMD2<Double>((minX + maxX) / 2.0, (minY + maxY) / 2.0)
+    }
+
     var coordinateFrame: AUCoordinateFrame {
         AUCoordinateFrame(minX: minX, minY: minY, maxX: maxX, maxY: maxY)
     }
@@ -220,7 +224,8 @@ final class AnyUprightOSCOverlayRenderer {
         canvasFrame: [AUPoint]? = nil,
         coordinateSpace: AUOSCOverlayCoordinateSpace = .normalized,
         handleStyle: AUOSCOverlayStyle = AUOSCOverlayStyle(),
-        dimmingQuads: [[AUPoint]] = []
+        dimmingQuads: [[AUPoint]] = [],
+        debugLog: ((String) -> Void)? = nil
     ) {
         guard !segments.isEmpty || !handles.isEmpty else {
             return
@@ -242,8 +247,10 @@ final class AnyUprightOSCOverlayRenderer {
             return
         }
 
-        let surfaceWidth = max(1.0, Double(destinationImage.ioSurface.map { IOSurfaceGetWidth($0) } ?? outputTexture.width))
-        let surfaceHeight = max(1.0, Double(destinationImage.ioSurface.map { IOSurfaceGetHeight($0) } ?? outputTexture.height))
+        let ioSurfaceWidth = destinationImage.ioSurface.map { IOSurfaceGetWidth($0) }
+        let ioSurfaceHeight = destinationImage.ioSurface.map { IOSurfaceGetHeight($0) }
+        let surfaceWidth = max(1.0, Double(ioSurfaceWidth ?? outputTexture.width))
+        let surfaceHeight = max(1.0, Double(ioSurfaceHeight ?? outputTexture.height))
         let width = surfaceWidth
         let height = surfaceHeight
         let coordinateFrame = pixelFrame(
@@ -256,6 +263,32 @@ final class AnyUprightOSCOverlayRenderer {
         )
         let coordinateSize = AUSize(width: coordinateFrame.width, height: coordinateFrame.height)
         var vertices: [AnyUprightOverlayVertex2D] = []
+
+        debugOverlayRenderTarget(
+            destinationImage: destinationImage,
+            destinationSize: destinationSize,
+            canvasFrame: canvasFrame,
+            coordinateSpace: coordinateSpace,
+            coordinateFrame: coordinateFrame,
+            width: width,
+            height: height,
+            ioSurfaceWidth: ioSurfaceWidth,
+            ioSurfaceHeight: ioSurfaceHeight,
+            textureWidth: outputTexture.width,
+            textureHeight: outputTexture.height,
+            pixelFormat: outputTexture.pixelFormat.rawValue,
+            log: debugLog
+        )
+        debugOverlayMapping(
+            segments: segments,
+            handles: handles,
+            coordinateSpace: coordinateSpace,
+            coordinateFrame: coordinateFrame,
+            coordinateSize: coordinateSize,
+            width: width,
+            height: height,
+            log: debugLog
+        )
 
         for quad in dimmingQuads where quad.count == 4 {
             appendCoordinateQuad(quad, color: handleStyle.dimOutsideColor, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
@@ -293,6 +326,8 @@ final class AnyUprightOSCOverlayRenderer {
             appendHandle(center: handle.point, radius: handleStyle.handleRadius + 2.0, color: handleStyle.shadowColor, shape: handleStyle.handleShape, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
             appendHandle(center: handle.point, radius: handleStyle.handleRadius, color: color, shape: handleStyle.handleShape, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
         }
+
+        debugOverlayVertexSummary(vertices: vertices, width: width, height: height, log: debugLog)
 
         guard !vertices.isEmpty else {
             return
@@ -416,6 +451,11 @@ final class AnyUprightOSCOverlayRenderer {
         let halfThickness = thickness / 2.0
         let padding = antialiasPadding()
         let centerPixel = (startPixel + endPixel) / 2.0
+        let metalStart = metalCenteredPixel(startPixel, width: width, height: height)
+        let metalEnd = metalCenteredPixel(endPixel, width: width, height: height)
+        let metalDelta = metalEnd - metalStart
+        let metalLength = max(0.0001, hypot(metalDelta.x, metalDelta.y))
+        let metalAxis = SIMD2<Float>(Float(metalDelta.x / metalLength), Float(metalDelta.y / metalLength))
 
         appendPrimitiveQuad(
             p0: centerPixel - axis * (halfLength + padding) + normal * (halfThickness + padding),
@@ -423,8 +463,8 @@ final class AnyUprightOSCOverlayRenderer {
             p2: centerPixel + axis * (halfLength + padding) - normal * (halfThickness + padding),
             p3: centerPixel - axis * (halfLength + padding) - normal * (halfThickness + padding),
             color: color,
-            primitiveOrigin: centeredPixel(centerPixel, width: width, height: height),
-            primitiveAxis: SIMD2<Float>(Float(axis.x), Float(axis.y)),
+            primitiveOrigin: metalCenteredPixel(centerPixel, width: width, height: height),
+            primitiveAxis: metalAxis,
             primitiveSize: SIMD2<Float>(Float(halfLength), Float(halfThickness)),
             primitiveKind: .rect,
             width: width,
@@ -452,7 +492,7 @@ final class AnyUprightOSCOverlayRenderer {
             p2: centerPixel + SIMD2<Double>(radius + padding, radius + padding),
             p3: centerPixel + SIMD2<Double>(-(radius + padding), radius + padding),
             color: color,
-            primitiveOrigin: centeredPixel(centerPixel, width: width, height: height),
+            primitiveOrigin: metalCenteredPixel(centerPixel, width: width, height: height),
             primitiveAxis: SIMD2<Float>(1.0, 0.0),
             primitiveSize: SIMD2<Float>(Float(radius), Float(radius)),
             primitiveKind: .rect,
@@ -521,7 +561,7 @@ final class AnyUprightOSCOverlayRenderer {
             p2: centerPixel + SIMD2<Double>(radius + padding, radius + padding),
             p3: centerPixel + SIMD2<Double>(-(radius + padding), radius + padding),
             color: color,
-            primitiveOrigin: centeredPixel(centerPixel, width: width, height: height),
+            primitiveOrigin: metalCenteredPixel(centerPixel, width: width, height: height),
             primitiveAxis: SIMD2<Float>(1.0, 0.0),
             primitiveSize: SIMD2<Float>(Float(radius), 0.0),
             primitiveKind: .circle,
@@ -580,6 +620,350 @@ final class AnyUprightOSCOverlayRenderer {
             )
             return SIMD2<Double>(surfacePixel.x, surfacePixel.y)
         }
+    }
+
+    private func debugOverlayMapping(
+        segments: [AUOSCStyledSegment],
+        handles: [AUOSCHandle],
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        coordinateFrame: AUOSCOverlayPixelFrame,
+        coordinateSize: AUSize,
+        width: Double,
+        height: Double,
+        log: ((String) -> Void)?
+    ) {
+        guard let log else {
+            return
+        }
+
+        var points: [(String, AUPoint)] = []
+        for (index, handle) in handles.enumerated() {
+            points.append(("h\(index + 1)/part\(handle.part)", handle.point))
+        }
+        for (index, segment) in segments.prefix(4).enumerated() {
+            points.append(("s\(index + 1)a", segment.start))
+            points.append(("s\(index + 1)b", segment.end))
+        }
+
+        var seen = Set<String>()
+        let mappings = points.compactMap { label, point -> String? in
+            let key = String(format: "%.3f,%.3f", point.x, point.y)
+            guard seen.insert(key).inserted else {
+                return nil
+            }
+
+            let pixel = localPixel(
+                from: point,
+                coordinateSpace: coordinateSpace,
+                coordinateSize: coordinateSize,
+                pixelFrame: coordinateFrame,
+                width: width,
+                height: height
+            )
+            let direct = oscSurfacePixel(fromHostCanvasPixel: point, surfaceSize: AUSize(width: width, height: height))
+            let frameLocal = frameLocalPixel(from: point, pixelFrame: coordinateFrame, width: width, height: height, flipsY: false)
+            let frameLocalFlipped = frameLocalPixel(from: point, pixelFrame: coordinateFrame, width: width, height: height, flipsY: true)
+            let centerRelative = centerRelativePixel(from: point, pixelFrame: coordinateFrame, width: width, height: height)
+            let centered = metalCenteredPixel(pixel, width: width, height: height)
+            let clip = clipSpacePosition(fromCenteredPixel: centered, width: width, height: height)
+            return String(
+                format: "%@ in=(%.2f,%.2f) local=(%.2f,%.2f) direct=(%.2f,%.2f) frameLocal=(%.2f,%.2f) frameLocalFlipY=(%.2f,%.2f) centerRel=(%.2f,%.2f) centered=(%.2f,%.2f) clip=(%.5f,%.5f)",
+                label,
+                point.x,
+                point.y,
+                pixel.x,
+                pixel.y,
+                direct.x,
+                direct.y,
+                frameLocal.x,
+                frameLocal.y,
+                frameLocalFlipped.x,
+                frameLocalFlipped.y,
+                centerRelative.x,
+                centerRelative.y,
+                centered.x,
+                centered.y,
+                clip.x,
+                clip.y
+            )
+        }
+        let frameDescription = String(
+            format: "coordSpace=%@ coordFrame=(%.2f,%.2f,%.2f,%.2f) coordCenter=(%.2f,%.2f) coordSize=(%.2f,%.2f) surface=(%.2f,%.2f)",
+            debugDescription(of: coordinateSpace),
+            coordinateFrame.minX,
+            coordinateFrame.minY,
+            coordinateFrame.maxX,
+            coordinateFrame.maxY,
+            coordinateFrame.center.x,
+            coordinateFrame.center.y,
+            coordinateSize.width,
+            coordinateSize.height,
+            width,
+            height
+        )
+        log("overlay-map \(frameDescription) \(mappings.joined(separator: " | "))")
+
+        debugOverlayPrimitiveSamples(
+            segments: segments,
+            handles: handles,
+            coordinateSpace: coordinateSpace,
+            coordinateSize: coordinateSize,
+            pixelFrame: coordinateFrame,
+            width: width,
+            height: height,
+            log: log
+        )
+    }
+
+    private func debugOverlayRenderTarget(
+        destinationImage: FxImageTile,
+        destinationSize: AUSize?,
+        canvasFrame: [AUPoint]?,
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        coordinateFrame: AUOSCOverlayPixelFrame,
+        width: Double,
+        height: Double,
+        ioSurfaceWidth: Int?,
+        ioSurfaceHeight: Int?,
+        textureWidth: Int,
+        textureHeight: Int,
+        pixelFormat: UInt,
+        log: ((String) -> Void)?
+    ) {
+        guard let log else {
+            return
+        }
+
+        let destinationDescription = destinationSize.map {
+            String(format: "(%.2f,%.2f)", $0.width, $0.height)
+        } ?? "nil"
+        let canvasDescription = canvasFrame.map { debugDescription(of: $0) } ?? "nil"
+        let ioSurfaceDescription: String
+        if let ioSurfaceWidth, let ioSurfaceHeight {
+            ioSurfaceDescription = "\(ioSurfaceWidth)x\(ioSurfaceHeight)"
+        } else {
+            ioSurfaceDescription = "nil"
+        }
+
+        log(
+            String(
+                format: "overlay-target coordSpace=%@ drawSurface=(%.2f,%.2f) ioSurface=%@ texture=%dx%d pixelFormat=%lu imageBounds=%@ tileBounds=%@ destinationSize=%@ canvasFrame=%@ coordFrame=(%.2f,%.2f,%.2f,%.2f)",
+                debugDescription(of: coordinateSpace),
+                width,
+                height,
+                ioSurfaceDescription,
+                textureWidth,
+                textureHeight,
+                pixelFormat,
+                debugDescription(of: destinationImage.imagePixelBounds),
+                debugDescription(of: destinationImage.tilePixelBounds),
+                destinationDescription,
+                canvasDescription,
+                coordinateFrame.minX,
+                coordinateFrame.minY,
+                coordinateFrame.maxX,
+                coordinateFrame.maxY
+            )
+        )
+    }
+
+    private func debugOverlayPrimitiveSamples(
+        segments: [AUOSCStyledSegment],
+        handles: [AUOSCHandle],
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        coordinateSize: AUSize,
+        pixelFrame: AUOSCOverlayPixelFrame,
+        width: Double,
+        height: Double,
+        log: (String) -> Void
+    ) {
+        let lineRows = segments.prefix(4).enumerated().map { index, segment -> String in
+            let startPixel = localPixel(from: segment.start, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
+            let endPixel = localPixel(from: segment.end, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
+            let delta = endPixel - startPixel
+            let length = max(0.0001, hypot(delta.x, delta.y))
+            let axis = SIMD2<Double>(delta.x / length, delta.y / length)
+            let normal = SIMD2<Double>(-axis.y, axis.x)
+            let halfLength = length / 2.0
+            let halfThickness = segment.style.lineThickness / 2.0
+            let padding = antialiasPadding()
+            let centerPixel = (startPixel + endPixel) / 2.0
+            let firstVertex = centerPixel - axis * (halfLength + padding) + normal * (halfThickness + padding)
+            let centered = metalCenteredPixel(centerPixel, width: width, height: height)
+            let vertexCentered = metalCenteredPixel(firstVertex, width: width, height: height)
+            let centerClip = clipSpacePosition(fromCenteredPixel: centered, width: width, height: height)
+            let vertexClip = clipSpacePosition(fromCenteredPixel: vertexCentered, width: width, height: height)
+            return String(
+                format: "s%d localStart=(%.2f,%.2f) localEnd=(%.2f,%.2f) center=(%.2f,%.2f) axis=(%.5f,%.5f) firstVertexLocal=(%.2f,%.2f) centerClip=(%.5f,%.5f) firstVertexClip=(%.5f,%.5f)",
+                index + 1,
+                startPixel.x,
+                startPixel.y,
+                endPixel.x,
+                endPixel.y,
+                centerPixel.x,
+                centerPixel.y,
+                axis.x,
+                axis.y,
+                firstVertex.x,
+                firstVertex.y,
+                centerClip.x,
+                centerClip.y,
+                vertexClip.x,
+                vertexClip.y
+            )
+        }.joined(separator: " | ")
+
+        if !lineRows.isEmpty {
+            log("overlay-line-sample \(lineRows)")
+        }
+
+        let handleRows = handles.prefix(4).enumerated().map { index, handle -> String in
+            let centerPixel = localPixel(from: handle.point, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
+            let radius = 15.0
+            let localMin = centerPixel - SIMD2<Double>(radius, radius)
+            let localMax = centerPixel + SIMD2<Double>(radius, radius)
+            let centered = metalCenteredPixel(centerPixel, width: width, height: height)
+            let clip = clipSpacePosition(fromCenteredPixel: centered, width: width, height: height)
+            return String(
+                format: "h%d/part%d centerLocal=(%.2f,%.2f) localBounds=(%.2f,%.2f)-(%.2f,%.2f) centerClip=(%.5f,%.5f)",
+                index + 1,
+                handle.part,
+                centerPixel.x,
+                centerPixel.y,
+                localMin.x,
+                localMin.y,
+                localMax.x,
+                localMax.y,
+                clip.x,
+                clip.y
+            )
+        }.joined(separator: " | ")
+
+        if !handleRows.isEmpty {
+            log("overlay-handle-sample \(handleRows)")
+        }
+    }
+
+    private func debugOverlayVertexSummary(
+        vertices: [AnyUprightOverlayVertex2D],
+        width: Double,
+        height: Double,
+        log: ((String) -> Void)?
+    ) {
+        guard let log, !vertices.isEmpty else {
+            return
+        }
+
+        var minPosition = SIMD2<Double>(Double.greatestFiniteMagnitude, Double.greatestFiniteMagnitude)
+        var maxPosition = SIMD2<Double>(-Double.greatestFiniteMagnitude, -Double.greatestFiniteMagnitude)
+        for vertex in vertices {
+            let position = SIMD2<Double>(Double(vertex.position.x), Double(vertex.position.y))
+            minPosition = simd.min(minPosition, position)
+            maxPosition = simd.max(maxPosition, position)
+        }
+
+        let localBounds = surfaceBounds(
+            fromMetalCenteredMin: minPosition,
+            maxPosition,
+            width: width,
+            height: height
+        )
+        let clipMin = clipSpacePosition(fromCenteredPixel: SIMD2<Float>(Float(minPosition.x), Float(minPosition.y)), width: width, height: height)
+        let clipMax = clipSpacePosition(fromCenteredPixel: SIMD2<Float>(Float(maxPosition.x), Float(maxPosition.y)), width: width, height: height)
+        log(
+            String(
+                format: "overlay-vertex-bounds count=%d centeredMin=(%.2f,%.2f) centeredMax=(%.2f,%.2f) localMin=(%.2f,%.2f) localMax=(%.2f,%.2f) clipMin=(%.5f,%.5f) clipMax=(%.5f,%.5f)",
+                vertices.count,
+                minPosition.x,
+                minPosition.y,
+                maxPosition.x,
+                maxPosition.y,
+                localBounds.min.x,
+                localBounds.min.y,
+                localBounds.max.x,
+                localBounds.max.y,
+                clipMin.x,
+                clipMin.y,
+                clipMax.x,
+                clipMax.y
+            )
+        )
+
+        let samples = vertices.prefix(6).enumerated().map { index, vertex -> String in
+            let centered = SIMD2<Float>(vertex.position.x, vertex.position.y)
+            let local = surfacePixel(fromMetalCenteredPixel: SIMD2<Double>(Double(centered.x), Double(centered.y)), width: width, height: height)
+            let clip = clipSpacePosition(fromCenteredPixel: centered, width: width, height: height)
+            return String(
+                format: "v%d centered=(%.2f,%.2f) local=(%.2f,%.2f) clip=(%.5f,%.5f) kind=%.1f",
+                index,
+                centered.x,
+                centered.y,
+                local.x,
+                local.y,
+                clip.x,
+                clip.y,
+                vertex.primitiveKind
+            )
+        }.joined(separator: " | ")
+        log("overlay-vertex-sample \(samples)")
+    }
+
+    private func frameLocalPixel(
+        from point: AUPoint,
+        pixelFrame: AUOSCOverlayPixelFrame,
+        width: Double,
+        height: Double,
+        flipsY: Bool
+    ) -> SIMD2<Double> {
+        let normalizedX = (point.x - pixelFrame.minX) / pixelFrame.width
+        let normalizedY = (point.y - pixelFrame.minY) / pixelFrame.height
+        return SIMD2<Double>(
+            normalizedX * width,
+            (flipsY ? 1.0 - normalizedY : normalizedY) * height
+        )
+    }
+
+    private func centerRelativePixel(
+        from point: AUPoint,
+        pixelFrame: AUOSCOverlayPixelFrame,
+        width: Double,
+        height: Double
+    ) -> SIMD2<Double> {
+        let centerDelta = pixelFrame.center - SIMD2<Double>(width / 2.0, height / 2.0)
+        return SIMD2<Double>(point.x, point.y) - centerDelta
+    }
+
+    private func clipSpacePosition(
+        fromCenteredPixel point: SIMD2<Float>,
+        width: Double,
+        height: Double
+    ) -> SIMD2<Double> {
+        SIMD2<Double>(
+            Double(point.x) / (width / 2.0),
+            Double(point.y) / (height / 2.0)
+        )
+    }
+
+    private func debugDescription(of coordinateSpace: AUOSCOverlayCoordinateSpace) -> String {
+        switch coordinateSpace {
+        case .normalized:
+            return "normalized"
+        case .pixels:
+            return "pixels"
+        case .canvasFramePixels:
+            return "canvasFramePixels"
+        }
+    }
+
+    private func debugDescription(of points: [AUPoint]) -> String {
+        points.map { point in
+            String(format: "(%.1f,%.1f)", point.x, point.y)
+        }
+        .joined(separator: " ")
+    }
+
+    private func debugDescription(of rect: FxRect) -> String {
+        String(format: "(%.1f,%.1f,%.1f,%.1f)", Double(rect.left), Double(rect.bottom), Double(rect.right), Double(rect.top))
     }
 
     private func pixelFrame(
@@ -675,7 +1059,7 @@ final class AnyUprightOSCOverlayRenderer {
     ) {
         let converted = [p0, p1, p2, p0, p2, p3].map { point in
             AnyUprightOverlayVertex2D(
-                position: centeredPixel(point, width: width, height: height),
+                position: metalCenteredPixel(point, width: width, height: height),
                 color: color,
                 primitiveOrigin: primitiveOrigin,
                 primitiveAxis: primitiveAxis,
@@ -687,10 +1071,43 @@ final class AnyUprightOSCOverlayRenderer {
         vertices.append(contentsOf: converted)
     }
 
-    private func centeredPixel(_ point: SIMD2<Double>, width: Double, height: Double) -> SIMD2<Float> {
-        SIMD2<Float>(
-            Float(point.x - width / 2.0),
-            Float(point.y - height / 2.0)
+    private func metalCenteredPixel(_ point: SIMD2<Double>, width: Double, height: Double) -> SIMD2<Float> {
+        let metalPoint = oscMetalCenteredPixel(
+            fromSurfacePixel: AUPoint(x: point.x, y: point.y),
+            surfaceSize: AUSize(width: width, height: height)
+        )
+        return SIMD2<Float>(Float(metalPoint.x), Float(metalPoint.y))
+    }
+
+    private func surfacePixel(fromMetalCenteredPixel point: SIMD2<Double>, width: Double, height: Double) -> SIMD2<Double> {
+        let surfacePoint = oscSurfacePixel(
+            fromMetalCenteredPixel: AUPoint(x: point.x, y: point.y),
+            surfaceSize: AUSize(width: width, height: height)
+        )
+        return SIMD2<Double>(
+            surfacePoint.x,
+            surfacePoint.y
+        )
+    }
+
+    private func surfaceBounds(
+        fromMetalCenteredMin minPosition: SIMD2<Double>,
+        _ maxPosition: SIMD2<Double>,
+        width: Double,
+        height: Double
+    ) -> (min: SIMD2<Double>, max: SIMD2<Double>) {
+        let corners = [
+            SIMD2<Double>(minPosition.x, minPosition.y),
+            SIMD2<Double>(minPosition.x, maxPosition.y),
+            SIMD2<Double>(maxPosition.x, minPosition.y),
+            SIMD2<Double>(maxPosition.x, maxPosition.y)
+        ].map {
+            surfacePixel(fromMetalCenteredPixel: $0, width: width, height: height)
+        }
+
+        return (
+            min: corners.reduce(SIMD2<Double>(Double.greatestFiniteMagnitude, Double.greatestFiniteMagnitude)) { simd.min($0, $1) },
+            max: corners.reduce(SIMD2<Double>(-Double.greatestFiniteMagnitude, -Double.greatestFiniteMagnitude)) { simd.max($0, $1) }
         )
     }
 

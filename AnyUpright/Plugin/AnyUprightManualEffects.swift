@@ -68,6 +68,19 @@ private enum QuadOSCEventCoordinateMode {
     case mappedSurface
 }
 
+extension QuadOSCEventCoordinateMode: CustomStringConvertible {
+    var description: String {
+        switch self {
+        case .rawCanvas:
+            return "rawCanvas"
+        case .rawCanvasUnflipped:
+            return "rawCanvasUnflipped"
+        case .mappedSurface:
+            return "mappedSurface"
+        }
+    }
+}
+
 private struct QuadOSCEventResolution {
     var canvasPoint: AUPoint
     var coordinateMode: QuadOSCEventCoordinateMode
@@ -664,6 +677,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     private let hoverStateLock = NSLock()
     private var dragState: QuadOSCDragState?
     private var hoverPart: QuadOSCPart = .none
+    private var debugDrawSequence = 0
 
     required init?(apiManager: PROAPIAccessing) {
         super.init(apiManager: apiManager)
@@ -694,18 +708,30 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             return
         }
 
-        let geometry = hitGeometry(from: state, size: objectPixelSizeForOSC(defaultSize: outputSize), mode: mode)
+        let objectSize = objectPixelSizeForOSC(defaultSize: outputSize)
+        let geometry = hitGeometry(from: state, size: objectSize, mode: mode)
         let quad = geometry.quad
         let canvasFrame = objectCanvasFrame()
         let displayPart = currentDisplayPart(hostActivePart: activePart)
-        debugCanvasMetrics(label: "draw-source-entry part=\(displayPart.rawValue) host=\(activePart)", width: width, height: height, destinationImage: destinationImage, quad: quad, canvasFrame: canvasFrame)
+        let debugSequence = nextDebugDrawSequence()
+        debugCanvasMetrics(label: "draw-source-entry seq=\(debugSequence) part=\(displayPart.rawValue) host=\(activePart)", width: width, height: height, destinationImage: destinationImage, quad: quad, canvasFrame: canvasFrame)
         let handles = [
             AUOSCHandle(point: quad[0], part: QuadOSCPart.topLeft.rawValue),
             AUOSCHandle(point: quad[1], part: QuadOSCPart.topRight.rawValue),
             AUOSCHandle(point: quad[2], part: QuadOSCPart.bottomRight.rawValue),
             AUOSCHandle(point: quad[3], part: QuadOSCPart.bottomLeft.rawValue)
         ]
-        debugCanvasMetrics(label: "draw-source", width: width, height: height, destinationImage: destinationImage, quad: quad, canvasFrame: canvasFrame)
+        debugSourceQuadDrawMapping(
+            sequence: debugSequence,
+            width: width,
+            height: height,
+            destinationImage: destinationImage,
+            outputSize: outputSize,
+            objectSize: objectSize,
+            quad: quad,
+            rawCanvasQuad: geometry.rawCanvasQuad,
+            canvasFrame: canvasFrame
+        )
 
         overlayRenderer.renderStyledSegments(
             sourceQuadOverlaySegments(for: displayPart, quad: quad),
@@ -715,7 +741,10 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             destinationSize: outputSize,
             canvasFrame: canvasFrame,
             coordinateSpace: .canvasFramePixels,
-            handleStyle: sourceQuadOverlayStyle()
+            handleStyle: sourceQuadOverlayStyle(),
+            debugLog: { [weak self] message in
+                self?.debugLog("draw-source seq=\(debugSequence) \(message)")
+            }
         )
     }
 
@@ -773,6 +802,14 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             nonePart: QuadOSCPart.none.rawValue
         )
         let resolvedPart = resolvedPartRaw.flatMap(QuadOSCPart.init(rawValue:))
+        debugOSCEventResolution(
+            label: "mouse-down",
+            eventPoint: eventPoint,
+            resolved: resolvedCanvasPoint,
+            part: resolvedPart,
+            mode: mode,
+            size: size
+        )
         guard shouldEnableQuadOSCControls(from: state, mode: mode),
               let resolvedPart else {
             setDragState(nil)
@@ -809,6 +846,14 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         )
         let canvasPoint = resolved.canvasPoint
         let draggedObjectPoint = dragObjectPoint(from: resolved, mode: mode, sourceSize: size)
+        debugOSCEventResolution(
+            label: "mouse-drag",
+            eventPoint: eventPoint,
+            resolved: resolved,
+            part: part,
+            mode: mode,
+            size: size
+        )
         if part == .quad, let previousCanvasPoint = storedState?.lastCanvasPoint {
             let previousResolution = QuadOSCEventResolution(canvasPoint: previousCanvasPoint, coordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode)
             let previousDragPoint = dragObjectPoint(from: previousResolution, mode: mode, sourceSize: size)
@@ -816,6 +861,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 x: (draggedObjectPoint.x - previousDragPoint.x) * size.width,
                 y: (draggedObjectPoint.y - previousDragPoint.y) * size.height
             )
+            debugOSCDragDelta(label: "mouse-drag-quad", previous: previousResolution, current: resolved, previousObject: previousDragPoint, currentObject: draggedObjectPoint, pixelDelta: pixelDelta, size: size)
             translateCorners(
                 from: state,
                 pixelDelta: pixelDelta,
@@ -837,6 +883,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 x: (draggedObjectPoint.x - previousDragPoint.x) * size.width,
                 y: (draggedObjectPoint.y - previousDragPoint.y) * size.height
             )
+            debugOSCDragDelta(label: "mouse-drag-edge", previous: previousResolution, current: resolved, previousObject: previousDragPoint, currentObject: draggedObjectPoint, pixelDelta: pixelDelta, size: size)
             translateCorners(
                 from: state,
                 pixelDelta: pixelDelta,
@@ -1076,6 +1123,82 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         }
     }
 
+    private func debugOSCEventResolution(
+        label: String,
+        eventPoint: AUPoint,
+        resolved: QuadOSCEventResolution,
+        part: QuadOSCPart?,
+        mode: AUQuadTransformMode,
+        size: AUSize
+    ) {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadOSC.debug") else {
+            return
+        }
+
+        let objectPoint = objectPoint(fromCanvasPoint: resolved.canvasPoint)
+        let dragPoint = sourceQuadDragPoint(from: objectPoint, mode: mode, coordinateMode: resolved.coordinateMode)
+        let partDescription = part.map { "\($0.rawValue)" } ?? "nil"
+        debugLog(
+            String(
+                format: "%@ event=(%.2f,%.2f) resolved=(%.2f,%.2f) eventMode=%@ part=%@ object=(%.5f,%.5f) dragObject=(%.5f,%.5f) objectPx=(%.2f,%.2f) dragPx=(%.2f,%.2f)",
+                label,
+                eventPoint.x,
+                eventPoint.y,
+                resolved.canvasPoint.x,
+                resolved.canvasPoint.y,
+                resolved.coordinateMode.description,
+                partDescription,
+                objectPoint.x,
+                objectPoint.y,
+                dragPoint.x,
+                dragPoint.y,
+                objectPoint.x * size.width,
+                objectPoint.y * size.height,
+                dragPoint.x * size.width,
+                dragPoint.y * size.height
+            )
+        )
+    }
+
+    private func debugOSCDragDelta(
+        label: String,
+        previous: QuadOSCEventResolution,
+        current: QuadOSCEventResolution,
+        previousObject: AUPoint,
+        currentObject: AUPoint,
+        pixelDelta: AUPoint,
+        size: AUSize
+    ) {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadOSC.debug") else {
+            return
+        }
+
+        let percentDelta = AUPoint(
+            x: pixelDelta.x / max(size.width, 1.0),
+            y: pixelDelta.y / max(size.height, 1.0)
+        )
+        debugLog(
+            String(
+                format: "%@ prev=(%.2f,%.2f %@) curr=(%.2f,%.2f %@) prevObj=(%.5f,%.5f) currObj=(%.5f,%.5f) pixelDelta=(%.2f,%.2f) percentDelta=(%.5f,%.5f)",
+                label,
+                previous.canvasPoint.x,
+                previous.canvasPoint.y,
+                previous.coordinateMode.description,
+                current.canvasPoint.x,
+                current.canvasPoint.y,
+                current.coordinateMode.description,
+                previousObject.x,
+                previousObject.y,
+                currentObject.x,
+                currentObject.y,
+                pixelDelta.x,
+                pixelDelta.y,
+                percentDelta.x,
+                percentDelta.y
+            )
+        )
+    }
+
     private func debugDescription(of points: [AUPoint]) -> String {
         points.map { point in
             String(format: "(%.1f,%.1f)", point.x, point.y)
@@ -1085,6 +1208,159 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
     private func debugDescription(of rect: FxRect) -> String {
         String(format: "(%.1f,%.1f,%.1f,%.1f)", Double(rect.left), Double(rect.bottom), Double(rect.right), Double(rect.top))
+    }
+
+    private func nextDebugDrawSequence() -> Int {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadOSC.debug") else {
+            return 0
+        }
+
+        debugDrawSequence += 1
+        return debugDrawSequence
+    }
+
+    private func debugBoundsDescription(of points: [AUPoint]) -> String {
+        guard let bounds = coordinateFrame(from: points) else {
+            return "nil"
+        }
+
+        return String(
+            format: "min=(%.2f,%.2f) max=(%.2f,%.2f) size=(%.2f,%.2f) center=(%.2f,%.2f)",
+            bounds.minX,
+            bounds.minY,
+            bounds.maxX,
+            bounds.maxY,
+            bounds.width,
+            bounds.height,
+            bounds.center.x,
+            bounds.center.y
+        )
+    }
+
+    private func coordinateFrame(from points: [AUPoint]) -> (minX: Double, minY: Double, maxX: Double, maxY: Double, width: Double, height: Double, center: AUPoint)? {
+        guard let minX = points.map(\.x).min(),
+              let maxX = points.map(\.x).max(),
+              let minY = points.map(\.y).min(),
+              let maxY = points.map(\.y).max() else {
+            return nil
+        }
+
+        let width = max(1.0, maxX - minX)
+        let height = max(1.0, maxY - minY)
+        return (
+            minX: minX,
+            minY: minY,
+            maxX: maxX,
+            maxY: maxY,
+            width: width,
+            height: height,
+            center: AUPoint(x: (minX + maxX) / 2.0, y: (minY + maxY) / 2.0)
+        )
+    }
+
+    private func debugSurfaceSize(from destinationImage: FxImageTile, fallback: AUSize) -> AUSize {
+        AUSize(
+            width: Double(destinationImage.ioSurface.map { IOSurfaceGetWidth($0) } ?? Int(max(1.0, fallback.width))),
+            height: Double(destinationImage.ioSurface.map { IOSurfaceGetHeight($0) } ?? Int(max(1.0, fallback.height)))
+        )
+    }
+
+    private func debugSourceQuadDrawMapping(
+        sequence: Int,
+        width: Int,
+        height: Int,
+        destinationImage: FxImageTile,
+        outputSize: AUSize,
+        objectSize: AUSize,
+        quad: [AUPoint],
+        rawCanvasQuad: [AUPoint],
+        canvasFrame: [AUPoint]
+    ) {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadOSC.debug") else {
+            return
+        }
+
+        let surfaceSize = debugSurfaceSize(from: destinationImage, fallback: AUSize(width: Double(width), height: Double(height)))
+        let frameBounds = coordinateFrame(from: canvasFrame)
+        let frameCenter = frameBounds?.center ?? AUPoint(x: 0.0, y: 0.0)
+        let surfaceCenter = AUPoint(x: surfaceSize.width / 2.0, y: surfaceSize.height / 2.0)
+        let frameToSurfaceDelta = AUPoint(x: frameCenter.x - surfaceCenter.x, y: frameCenter.y - surfaceCenter.y)
+        let frameScale = AUPoint(
+            x: surfaceSize.width / max(frameBounds?.width ?? 1.0, 1.0),
+            y: surfaceSize.height / max(frameBounds?.height ?? 1.0, 1.0)
+        )
+
+        let pointRows = quad.enumerated().map { index, point -> String in
+            let normalizedInFrame = AUPoint(
+                x: (point.x - (frameBounds?.minX ?? 0.0)) / max(frameBounds?.width ?? 1.0, 1.0),
+                y: (point.y - (frameBounds?.minY ?? 0.0)) / max(frameBounds?.height ?? 1.0, 1.0)
+            )
+            let direct = point
+            let centerRelative = AUPoint(
+                x: point.x - frameToSurfaceDelta.x,
+                y: point.y - frameToSurfaceDelta.y
+            )
+            let surfaceDirect = oscSurfacePixel(
+                fromHostCanvasPixel: point,
+                surfaceSize: surfaceSize
+            )
+            let fitted = AUPoint(
+                x: normalizedInFrame.x * surfaceSize.width,
+                y: normalizedInFrame.y * surfaceSize.height
+            )
+            return String(
+                format: "p%d canvas=(%.2f,%.2f) norm=(%.4f,%.4f) direct=(%.2f,%.2f) centerRel=(%.2f,%.2f) surfaceDirect=(%.2f,%.2f) frameFit=(%.2f,%.2f)",
+                index,
+                point.x,
+                point.y,
+                normalizedInFrame.x,
+                normalizedInFrame.y,
+                direct.x,
+                direct.y,
+                centerRelative.x,
+                centerRelative.y,
+                surfaceDirect.x,
+                surfaceDirect.y,
+                fitted.x,
+                fitted.y
+            )
+        }.joined(separator: " | ")
+
+        debugCanvasMetrics(label: "draw-source seq=\(sequence)", width: width, height: height, destinationImage: destinationImage, quad: quad, canvasFrame: canvasFrame)
+        debugLog(
+            String(
+                format: "draw-source seq=%d output=(%.2f,%.2f) surface=(%.2f,%.2f) frameBounds=%@ quadBounds=%@ rawQuad=%@ frameCenter=(%.2f,%.2f) surfaceCenter=(%.2f,%.2f) frameToSurfaceDelta=(%.2f,%.2f) surfacePerFrame=(%.6f,%.6f)",
+                sequence,
+                outputSize.width,
+                outputSize.height,
+                surfaceSize.width,
+                surfaceSize.height,
+                debugBoundsDescription(of: canvasFrame),
+                debugBoundsDescription(of: quad),
+                debugDescription(of: rawCanvasQuad),
+                frameCenter.x,
+                frameCenter.y,
+                surfaceCenter.x,
+                surfaceCenter.y,
+                frameToSurfaceDelta.x,
+                frameToSurfaceDelta.y,
+                frameScale.x,
+                frameScale.y
+            )
+        )
+        debugLog(
+            String(
+                format: "draw-source seq=%d objectSize=(%.2f,%.2f) outputSize=(%.2f,%.2f) surfaceSize=(%.2f,%.2f)",
+                sequence,
+                objectSize.width,
+                objectSize.height,
+                outputSize.width,
+                outputSize.height,
+                surfaceSize.width,
+                surfaceSize.height
+            )
+        )
+        debugLog("draw-source seq=\(sequence) point-map \(pointRows)")
     }
 
     private func debugCanvasMetrics(label: String, width: Int? = nil, height: Int? = nil, destinationImage: FxImageTile? = nil, eventPoint: AUPoint? = nil, quad: [AUPoint]? = nil, canvasFrame: [AUPoint]? = nil) {
@@ -1388,11 +1664,31 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 offsets: offsets,
                 size: size
             )
+            debugLog(
+                String(
+                    format: "set-corner part=%d mode=output object=(%.5f,%.5f) writePixels=(%.2f,%.2f)",
+                    part.rawValue,
+                    point.x,
+                    point.y,
+                    pixels.x,
+                    pixels.y
+                )
+            )
             settingAPI.setFloatValue(pixels.x, toParameter: ids.pixelX.rawValue, at: time)
             settingAPI.setFloatValue(pixels.y, toParameter: ids.pixelY.rawValue, at: time)
 
         case .sourceQuad:
             let percent = AnyUprightGeometry.sourceCornerPercentOffset(forObjectPoint: point, corner: ids.corner)
+            debugLog(
+                String(
+                    format: "set-corner part=%d mode=source object=(%.5f,%.5f) writePercent=(%.5f,%.5f)",
+                    part.rawValue,
+                    point.x,
+                    point.y,
+                    percent.x,
+                    percent.y
+                )
+            )
             settingAPI.setFloatValue(percent.x, toParameter: ids.percentX.rawValue, at: time)
             settingAPI.setFloatValue(percent.y, toParameter: ids.percentY.rawValue, at: time)
             settingAPI.setFloatValue(0.0, toParameter: ids.pixelX.rawValue, at: time)
@@ -1408,6 +1704,16 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 x: pixelDelta.x / max(size.width, 1.0),
                 y: pixelDelta.y / max(size.height, 1.0)
             )
+            debugLog(
+                String(
+                    format: "translate-corners mode=source corners=%@ pixelDelta=(%.2f,%.2f) percentDelta=(%.5f,%.5f)",
+                    corners.map { "\($0)" }.joined(separator: ","),
+                    pixelDelta.x,
+                    pixelDelta.y,
+                    percentDelta.x,
+                    percentDelta.y
+                )
+            )
             for corner in corners {
                 let ids = parameterIDs(for: corner)
                 let percent = percentOffset(for: corner, in: offsets)
@@ -1422,6 +1728,16 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         for corner in corners {
             let ids = parameterIDs(for: corner)
             let pixels = pixelOffset(for: corner, in: offsets)
+            debugLog(
+                String(
+                    format: "translate-corner mode=output corner=%@ pixelBase=(%.2f,%.2f) pixelDelta=(%.2f,%.2f)",
+                    "\(corner)",
+                    pixels.x,
+                    pixels.y,
+                    pixelDelta.x,
+                    pixelDelta.y
+                )
+            )
             settingAPI.setFloatValue(pixels.x + pixelDelta.x, toParameter: ids.pixelX.rawValue, at: time)
             settingAPI.setFloatValue(pixels.y + pixelDelta.y, toParameter: ids.pixelY.rawValue, at: time)
         }

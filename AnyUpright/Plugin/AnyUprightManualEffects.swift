@@ -88,6 +88,7 @@ private struct QuadOSCHitGeometry {
     var quad: [AUPoint]
     var rawCanvasHandles: [AUOSCHandle]
     var rawCanvasQuad: [AUPoint]
+    var usesRawCanvasHitLayer: Bool
 }
 
 private enum UprightParam: UInt32 {
@@ -766,6 +767,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             quad: geometry.quad,
             rawCanvasHandles: geometry.rawCanvasHandles,
             rawCanvasQuad: geometry.rawCanvasQuad,
+            useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
             rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
             preferredMode: nil
@@ -789,6 +791,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             quad: geometry.quad,
             rawCanvasHandles: geometry.rawCanvasHandles,
             rawCanvasQuad: geometry.rawCanvasQuad,
+            useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
             rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
             preferredMode: nil
@@ -1014,7 +1017,8 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             handles: handles,
             quad: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
             rawCanvasHandles: rawHandles,
-            rawCanvasQuad: [rawCanvasPoints.topLeft, rawCanvasPoints.topRight, rawCanvasPoints.bottomRight, rawCanvasPoints.bottomLeft]
+            rawCanvasQuad: [rawCanvasPoints.topLeft, rawCanvasPoints.topRight, rawCanvasPoints.bottomRight, rawCanvasPoints.bottomLeft],
+            usesRawCanvasHitLayer: mode == .sourceQuad
         )
     }
 
@@ -1417,6 +1421,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             quad: geometry.quad,
             rawCanvasHandles: geometry.rawCanvasHandles,
             rawCanvasQuad: geometry.rawCanvasQuad,
+            useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
             rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
             preferredMode: currentDragState()?.eventCoordinateMode
@@ -1509,6 +1514,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         quad: [AUPoint],
         rawCanvasHandles: [AUOSCHandle],
         rawCanvasQuad: [AUPoint],
+        useRawCanvasHitLayer: Bool,
         canvasFrame: [AUPoint],
         rawCanvasHitPadding: Double,
         preferredMode: QuadOSCEventCoordinateMode?
@@ -1523,7 +1529,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let hitRadius = 24.0
         var closestHandleHit: (part: QuadOSCPart, resolution: QuadOSCEventResolution, distance: Double)?
 
-        for candidate in hitCandidates(for: resolutions, handles: handles, quad: quad, rawCanvasHandles: rawCanvasHandles, rawCanvasQuad: rawCanvasQuad) {
+        for candidate in hitCandidates(for: resolutions, handles: handles, quad: quad, rawCanvasHandles: rawCanvasHandles, rawCanvasQuad: rawCanvasQuad, useRawCanvasHitLayer: useRawCanvasHitLayer) {
             let resolution = candidate.resolution
             for handle in candidate.handles {
                 let dx = resolution.canvasPoint.x - handle.point.x
@@ -1544,7 +1550,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
         let edgeHitRadius = 14.0
         var closestEdgeHit: (part: QuadOSCPart, resolution: QuadOSCEventResolution, distance: Double)?
-        for candidate in hitCandidates(for: resolutions, handles: handles, quad: quad, rawCanvasHandles: rawCanvasHandles, rawCanvasQuad: rawCanvasQuad) {
+        for candidate in hitCandidates(for: resolutions, handles: handles, quad: quad, rawCanvasHandles: rawCanvasHandles, rawCanvasQuad: rawCanvasQuad, useRawCanvasHitLayer: useRawCanvasHitLayer) {
             let resolution = candidate.resolution
             let edges: [(QuadOSCPart, AUPoint, AUPoint)] = [
                 (.topEdge, candidate.quad[0], candidate.quad[1]),
@@ -1566,7 +1572,7 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             return (closestEdgeHit.part, closestEdgeHit.resolution)
         }
 
-        for candidate in hitCandidates(for: resolutions, handles: handles, quad: quad, rawCanvasHandles: rawCanvasHandles, rawCanvasQuad: rawCanvasQuad) {
+        for candidate in hitCandidates(for: resolutions, handles: handles, quad: quad, rawCanvasHandles: rawCanvasHandles, rawCanvasQuad: rawCanvasQuad, useRawCanvasHitLayer: useRawCanvasHitLayer) {
             if isPoint(candidate.resolution.canvasPoint, insideQuad: candidate.quad) {
                 return (.quad, candidate.resolution)
             }
@@ -1580,10 +1586,11 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         handles: [AUOSCHandle],
         quad: [AUPoint],
         rawCanvasHandles: [AUOSCHandle],
-        rawCanvasQuad: [AUPoint]
+        rawCanvasQuad: [AUPoint],
+        useRawCanvasHitLayer: Bool
     ) -> [(resolution: QuadOSCEventResolution, handles: [AUOSCHandle], quad: [AUPoint])] {
         resolutions.map { resolution in
-            if resolution.coordinateMode == .rawCanvas {
+            if resolution.coordinateMode == .rawCanvas || useRawCanvasHitLayer {
                 return (resolution, rawCanvasHandles, rawCanvasQuad)
             }
             return (resolution, handles, quad)
@@ -1612,11 +1619,13 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             }
         }
 
-        return shouldIncludeMappedSurfaceOSCCandidate(
+        return shouldUseMappedSurfaceOSCEvent(
             forInitialEventPoint: eventPoint,
+            mappedCanvasPoint: mapped.canvasPoint,
             canvasFrame: canvasFrame,
             visibleControlPoints: rawCanvasQuad,
-            hitPadding: rawCanvasHitPadding
+            hitPadding: rawCanvasHitPadding,
+            hostBundleIdentifier: AnyUprightHostContext.hostBundleIdentifier
         )
             ? [mapped]
             : [raw]

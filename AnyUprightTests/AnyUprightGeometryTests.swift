@@ -41,6 +41,8 @@ struct AnyUprightGeometryTests {
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
         try testInitialOSCHitResolutionDoesNotAddMappedLayerForRawCanvasEvents()
         try testInitialOSCHitResolutionKeepsRawCanvasForVisibleControlsOutsideFrame()
+        try testFinalCutHostDisablesMappedSurfaceOSCHitFallback()
+        try testInitialOSCHitResolutionRejectsMappedGhostAboveVisibleControls()
         try testHostCanvasPixelsStayAbsoluteForOSCOverlay()
         try testOSCSurfacePixelsFlipYOnlyAtMetalVertexBoundary()
         try testAspectFitPixelSurfaceMapperKeepsHitTestingInsideVideoFrame()
@@ -609,15 +611,117 @@ struct AnyUprightGeometryTests {
             "canvas mapper"
         )
         let motionSurfaceEvent = mapper.eventPoint(fromCanvasPoint: motionVisibleSourceQuad[0])
+        let mappedMotionCanvasPoint = mapper.canvasPoint(fromEventPoint: motionSurfaceEvent)
 
         try assertTrue(
             shouldIncludeMappedSurfaceOSCCandidate(
                 forInitialEventPoint: motionSurfaceEvent,
+                mappedCanvasPoint: mappedMotionCanvasPoint,
                 canvasFrame: motionCanvasFrame,
                 visibleControlPoints: motionVisibleSourceQuad,
                 hitPadding: 24.0
             ),
             "Motion-style surface-local events should still map through the surface mapper"
+        )
+    }
+
+    static func testInitialOSCHitResolutionRejectsMappedGhostAboveVisibleControls() throws {
+        let finalCutCanvasFrame = [
+            AUPoint(x: 580.0, y: 876.0),
+            AUPoint(x: 1604.0, y: 876.0),
+            AUPoint(x: 1604.0, y: 336.0),
+            AUPoint(x: 580.0, y: 336.0)
+        ]
+        let finalCutVisibleSourceQuad = [
+            AUPoint(x: 778.5, y: 526.0),
+            AUPoint(x: 1268.2, y: 513.3),
+            AUPoint(x: 1273.2, y: 879.4),
+            AUPoint(x: 790.8, y: 817.8)
+        ]
+        let staleObjectCanvasQuad = AUQuad(
+            topLeft: AUPoint(x: 778.5, y: 686.0),
+            topRight: AUPoint(x: 1268.2, y: 698.7),
+            bottomRight: AUPoint(x: 1273.2, y: 332.6),
+            bottomLeft: AUPoint(x: 790.8, y: 394.2)
+        )
+        let visibleQuad = AUQuad(
+            topLeft: finalCutVisibleSourceQuad[0],
+            topRight: finalCutVisibleSourceQuad[1],
+            bottomRight: finalCutVisibleSourceQuad[2],
+            bottomLeft: finalCutVisibleSourceQuad[3]
+        )
+        let mapper = try unwrap(
+            AUCanvasSurfaceMapper(canvasFrame: finalCutCanvasFrame, surfaceSize: AUSize(width: 2184.0, height: 1212.0)),
+            "canvas mapper"
+        )
+        let rawEventAboveVisibleFrame = AUPoint(x: 1451.3, y: 921.7)
+        let incorrectlyMappedCanvasPoint = mapper.canvasPoint(fromEventPoint: rawEventAboveVisibleFrame)
+
+        try assertTrue(
+            !isPointInsideAxisAlignedFrame(rawEventAboveVisibleFrame, frame: finalCutCanvasFrame),
+            "regression event should sit above the object canvas frame"
+        )
+        try assertTrue(
+            AnyUprightGeometry.distanceToQuadEdge(from: incorrectlyMappedCanvasPoint, quad: staleObjectCanvasQuad) < 14.0,
+            "old storage/object hit layer would treat the mapped point as an edge hit"
+        )
+        try assertTrue(
+            AnyUprightGeometry.distanceToQuadEdge(from: incorrectlyMappedCanvasPoint, quad: visibleQuad) > 24.0,
+            "mapped point is not near the visible Source Quad control layer"
+        )
+        try assertTrue(
+            !shouldIncludeMappedSurfaceOSCCandidate(
+                forInitialEventPoint: rawEventAboveVisibleFrame,
+                mappedCanvasPoint: incorrectlyMappedCanvasPoint,
+                canvasFrame: finalCutCanvasFrame,
+                visibleControlPoints: finalCutVisibleSourceQuad,
+                hitPadding: 24.0
+            ),
+            "raw Final Cut events above the visible controls should not be folded into a hidden mapped hit layer"
+        )
+    }
+
+    static func testFinalCutHostDisablesMappedSurfaceOSCHitFallback() throws {
+        let finalCutCanvasFrame = [
+            AUPoint(x: 580.0, y: 876.0),
+            AUPoint(x: 1604.0, y: 876.0),
+            AUPoint(x: 1604.0, y: 336.0),
+            AUPoint(x: 580.0, y: 336.0)
+        ]
+        let finalCutVisibleSourceQuad = [
+            AUPoint(x: 778.5, y: 526.0),
+            AUPoint(x: 1268.2, y: 513.3),
+            AUPoint(x: 1273.2, y: 879.4),
+            AUPoint(x: 790.8, y: 817.8)
+        ]
+        let mapper = try unwrap(
+            AUCanvasSurfaceMapper(canvasFrame: finalCutCanvasFrame, surfaceSize: AUSize(width: 2184.0, height: 1212.0)),
+            "canvas mapper"
+        )
+        let motionStyleEvent = mapper.eventPoint(fromCanvasPoint: finalCutVisibleSourceQuad[0])
+        let mappedCanvasPoint = mapper.canvasPoint(fromEventPoint: motionStyleEvent)
+
+        try assertTrue(
+            shouldUseMappedSurfaceOSCEvent(
+                forInitialEventPoint: motionStyleEvent,
+                mappedCanvasPoint: mappedCanvasPoint,
+                canvasFrame: finalCutCanvasFrame,
+                visibleControlPoints: finalCutVisibleSourceQuad,
+                hitPadding: 24.0,
+                hostBundleIdentifier: "com.apple.Motion"
+            ),
+            "Motion host should keep the mapped-surface compatibility path"
+        )
+        try assertTrue(
+            !shouldUseMappedSurfaceOSCEvent(
+                forInitialEventPoint: motionStyleEvent,
+                mappedCanvasPoint: mappedCanvasPoint,
+                canvasFrame: finalCutCanvasFrame,
+                visibleControlPoints: finalCutVisibleSourceQuad,
+                hitPadding: 24.0,
+                hostBundleIdentifier: "com.apple.FinalCutApp"
+            ),
+            "Final Cut host should not fold raw canvas events into a hidden mapped hit layer"
         )
     }
 

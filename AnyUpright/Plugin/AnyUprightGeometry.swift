@@ -216,6 +216,59 @@ func shouldIncludeMappedSurfaceOSCCandidate(
     return shouldIncludeMappedSurfaceOSCCandidate(forInitialEventPoint: point, canvasFrame: canvasFrame)
 }
 
+func shouldIncludeMappedSurfaceOSCCandidate(
+    forInitialEventPoint point: AUPoint,
+    mappedCanvasPoint: AUPoint,
+    canvasFrame: [AUPoint],
+    visibleControlPoints: [AUPoint],
+    hitPadding: Double
+) -> Bool {
+    guard shouldIncludeMappedSurfaceOSCCandidate(
+        forInitialEventPoint: point,
+        canvasFrame: canvasFrame,
+        visibleControlPoints: visibleControlPoints,
+        hitPadding: hitPadding
+    ) else {
+        return false
+    }
+
+    return isPointInsideAxisAlignedFrame(mappedCanvasPoint, frame: visibleControlPoints, padding: hitPadding)
+}
+
+func isFinalCutProHost(_ bundleIdentifier: String?) -> Bool {
+    guard let normalized = bundleIdentifier?.lowercased() else {
+        return false
+    }
+
+    return normalized == "com.apple.finalcut"
+        || normalized == "com.apple.finalcutapp"
+}
+
+func shouldAllowMappedSurfaceOSCEvents(hostBundleIdentifier: String?) -> Bool {
+    !isFinalCutProHost(hostBundleIdentifier)
+}
+
+func shouldUseMappedSurfaceOSCEvent(
+    forInitialEventPoint point: AUPoint,
+    mappedCanvasPoint: AUPoint,
+    canvasFrame: [AUPoint],
+    visibleControlPoints: [AUPoint],
+    hitPadding: Double,
+    hostBundleIdentifier: String?
+) -> Bool {
+    guard shouldAllowMappedSurfaceOSCEvents(hostBundleIdentifier: hostBundleIdentifier) else {
+        return false
+    }
+
+    return shouldIncludeMappedSurfaceOSCCandidate(
+        forInitialEventPoint: point,
+        mappedCanvasPoint: mappedCanvasPoint,
+        canvasFrame: canvasFrame,
+        visibleControlPoints: visibleControlPoints,
+        hitPadding: hitPadding
+    )
+}
+
 func oscSurfacePixel(fromHostCanvasPixel point: AUPoint, surfaceSize _: AUSize) -> AUPoint {
     point
 }

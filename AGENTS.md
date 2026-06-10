@@ -22,6 +22,7 @@
 - Keep playback rendering lightweight. Detection and analysis should run on explicit user action or cached frame analysis, not on every rendered frame.
 - Persist user-facing state through FxPlug parameters so renders remain reproducible after Final Cut Pro, Motion, or the plug-in XPC process restarts.
 - Before adding behavior that crosses plugin boundaries, check `docs/README.md` for the intended shared architecture.
+- Before changing any behavior that touches Y-axis handling, coordinate conversion, hit testing, OSC drawing, Metal overlay/render coordinates, or parameter writeback involving positions, read `docs/engineering-notes/y-axis-coordinate-conventions.md` and follow its project conventions.
 - Keep the Final Cut effects separate in user-facing workflow; do not collapse Source Quad and Outer Corners into one effect with a mode selector unless the user explicitly changes that direction.
 
 ## Documentation

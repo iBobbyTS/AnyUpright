@@ -26,7 +26,29 @@ struct AuditFeatureSurface {
     static func run() throws {
         let root = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? FileManager.default.currentDirectoryPath)
         let infoPlist = root.appendingPathComponent("AnyUpright/Plugin/Info.plist")
-        let effects = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightManualEffects.swift"), encoding: .utf8)
+        let pluginDirectory = root.appendingPathComponent("AnyUpright/Plugin")
+        let horizonEffect = try pluginSwiftSources(
+            at: pluginDirectory,
+            relativePaths: [
+                "AnyUprightHorizonManualEffect.swift"
+            ]
+        )
+        let quadEffects = try pluginSwiftSources(
+            at: pluginDirectory,
+            relativePaths: [
+                "AnyUprightQuadManualEffects.swift",
+                "AnyUprightQuadOSCControls.swift",
+                "AnyUprightQuadOSCParameterWriter.swift"
+            ]
+        )
+        let uprightEffects = try pluginSwiftSources(
+            at: pluginDirectory,
+            relativePaths: [
+                "AnyUprightUprightManualEffect.swift",
+                "AnyUprightUprightOSCControls.swift",
+                "AnyUprightUprightParameters.swift"
+            ]
+        )
         let geometry = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightGeometry.swift"), encoding: .utf8)
         let overlay = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightOSCOverlayRenderer.swift"), encoding: .utf8)
         let warp = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightWarpEffect.swift"), encoding: .utf8)
@@ -34,11 +56,17 @@ struct AuditFeatureSurface {
         let candidates = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightUprightCandidates.swift"), encoding: .utf8)
 
         try auditRegisteredPlugins(infoPlist)
-        try auditHorizon(effects)
-        try auditQuad(effects, geometry: geometry, overlay: overlay, metal: metal)
-        try auditUpright(effects, geometry: geometry, warp: warp, candidates: candidates)
+        try auditHorizon(horizonEffect)
+        try auditQuad(quadEffects, geometry: geometry, overlay: overlay, metal: metal)
+        try auditUpright(uprightEffects, geometry: geometry, warp: warp, candidates: candidates)
 
         print("AnyUpright feature surface audit passed")
+    }
+
+    private static func pluginSwiftSources(at pluginDirectory: URL, relativePaths: [String]) throws -> String {
+        return try relativePaths
+            .map { try String(contentsOf: pluginDirectory.appendingPathComponent($0), encoding: .utf8) }
+            .joined(separator: "\n")
     }
 
     private static func auditRegisteredPlugins(_ infoPlist: URL) throws {

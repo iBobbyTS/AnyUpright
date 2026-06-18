@@ -133,8 +133,12 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         let sourceImage = sourceImages[0]
         let deviceCache = MetalDeviceCache.deviceCache
         let pixelFormat = MetalDeviceCache.FxMTLPixelFormat(for: destinationImage)
-        guard let commandQueue = deviceCache.commandQueue(with: sourceImage.deviceRegistryID, pixelFormat: pixelFormat),
-              let commandBuffer = commandQueue.makeCommandBuffer(),
+        guard let commandQueueLease = deviceCache.commandQueueLease(with: sourceImage.deviceRegistryID, pixelFormat: pixelFormat) else {
+            return
+        }
+        defer { commandQueueLease.returnToCache() }
+
+        guard let commandBuffer = commandQueueLease.commandQueue.makeCommandBuffer(),
               let inputDevice = deviceCache.device(with: sourceImage.deviceRegistryID),
               let outputDevice = deviceCache.device(with: destinationImage.deviceRegistryID),
               let inputTexture = sourceImage.metalTexture(for: inputDevice),
@@ -158,7 +162,6 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         guard let commandEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             commandBuffer.commit()
             commandBuffer.waitUntilCompleted()
-            deviceCache.returnCommandQueueToCache(commandQueue: commandQueue)
             return
         }
 
@@ -203,7 +206,6 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         commandEncoder.endEncoding()
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
-        deviceCache.returnCommandQueueToCache(commandQueue: commandQueue)
     }
 
     func parameterRetrievalAPI() -> FxParameterRetrievalAPI_v6? {

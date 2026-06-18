@@ -161,6 +161,8 @@ Current command-line checks:
 
 ```sh
 xcrun swiftc AnyUpright/Plugin/AnyUprightGeometry.swift AnyUpright/Plugin/AnyUprightLineDetection.swift AnyUpright/Plugin/AnyUprightUprightCandidates.swift AnyUprightTests/AnyUprightGeometryTests.swift -o /tmp/AnyUprightGeometryTests && /tmp/AnyUprightGeometryTests
+xcrun swiftc AnyUpright/Plugin/CommandQueuePool.swift AnyUprightTests/AnyUprightMetalDeviceCacheTests.swift -o /tmp/AnyUprightMetalDeviceCacheTests && /tmp/AnyUprightMetalDeviceCacheTests
+xcrun swiftc AnyUpright/Plugin/CommandQueuePool.swift tools/stress-metal-device-cache.swift -o /tmp/AnyUprightStressMetalDeviceCache && /tmp/AnyUprightStressMetalDeviceCache
 xcrun swiftc tools/validate-fxplug-manifest.swift -o /tmp/AnyUprightValidateManifest && /tmp/AnyUprightValidateManifest .
 xcrun swiftc tools/audit-feature-surface.swift -o /tmp/AnyUprightAuditFeatureSurface && /tmp/AnyUprightAuditFeatureSurface .
 xcrun swift tools/generate-test-assets.swift .agent-work/test-assets

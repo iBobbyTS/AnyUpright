@@ -8,31 +8,55 @@
 import Foundation
 
 let kMaxCommandQueues   = 5
-let kKey_InUse          = "InUse"
-let kKey_CommandQueue   = "CommandQueue"
+
+final class MetalCommandQueueLease {
+    let commandQueue: MTLCommandQueue
+
+    private let poolLease: CommandQueuePool<AnyObject>.Lease
+    private let returnLock = NSLock()
+    private var returned = false
+
+    fileprivate init(commandQueue: MTLCommandQueue, poolLease: CommandQueuePool<AnyObject>.Lease) {
+        self.commandQueue = commandQueue
+        self.poolLease = poolLease
+    }
+
+    func returnToCache() {
+        returnLock.lock()
+        guard !returned else {
+            returnLock.unlock()
+            return
+        }
+        returned = true
+        returnLock.unlock()
+
+        poolLease.returnToPool()
+    }
+
+    deinit {
+        returnToCache()
+    }
+}
 
 class MetalDeviceCacheItem: NSObject {
     let gpuDevice : MTLDevice
     let pipelineState : MTLRenderPipelineState
     let pixelFormat : MTLPixelFormat
-    var commandQueueCache : [Dictionary<String, Any>]
-    var commandQueueCacheLock : NSLock
+    private let commandQueuePool: CommandQueuePool<AnyObject>
     
     init(with newDevice:MTLDevice, pixFormat:MTLPixelFormat) throws {
         gpuDevice = newDevice
         
         // Set up the command queue cache for each device
-        commandQueueCache = Array.init()
+        var commandQueues = [AnyObject]()
         for _ in 0..<kMaxCommandQueues
         {
-            var commandDict = Dictionary.init() as Dictionary<String, Any>
-            commandDict[kKey_InUse] = false
-            
-            let commandQueue = gpuDevice.makeCommandQueue()
-            commandDict[kKey_CommandQueue] = commandQueue
-            
-            commandQueueCache.append(commandDict)
+            if let commandQueue = gpuDevice.makeCommandQueue()
+            {
+                commandQueues.append(commandQueue as AnyObject)
+            }
         }
+        commandQueuePool = CommandQueuePool(resources: commandQueues)
         
         // Load all the shader files with a .metal file extension in the project
         let defaultLibrary = gpuDevice.makeDefaultLibrary()
@@ -48,77 +72,25 @@ class MetalDeviceCacheItem: NSObject {
         pixelFormat = pixFormat
 
         try pipelineState = gpuDevice.makeRenderPipelineState(descriptor: pipelineStateDescriptor)
-        
-        commandQueueCacheLock = NSLock.init()
     }
     
-    func getNextFreeCommandQueue() -> MTLCommandQueue? {
-        var result = nil as MTLCommandQueue?
-        
-        commandQueueCacheLock.lock()
-        var index = 0;
-        while ((result == nil) && index < kMaxCommandQueues)
-        {
-            var nextCommandQueue = commandQueueCache [ index ]
-            let inUse = nextCommandQueue[kKey_InUse] as! Bool
-            if !inUse
-            {
-                nextCommandQueue[kKey_InUse] = true
-                result = nextCommandQueue[kKey_CommandQueue] as? MTLCommandQueue
-            }
-            index += 1
+    func commandQueueLease() -> MetalCommandQueueLease? {
+        guard let poolLease = commandQueuePool.checkout() else {
+            return nil
         }
-        commandQueueCacheLock.unlock()
-        
-        return result
-    }
-    
-    func returnCommandQueue(commandQueue:MTLCommandQueue) {
-        commandQueueCacheLock.lock()
-        
-        var found = false
-        var index = 0
-        while ((!found) && (index < kMaxCommandQueues))
-        {
-            var nextCommandQueueDict    = commandQueueCache[index]
-            let nextCommandQueue = nextCommandQueueDict [ kKey_CommandQueue ] as? MTLCommandQueue
-            if (nextCommandQueue === commandQueue)
-            {
-                found = true
-                nextCommandQueueDict [ kKey_InUse ] = false
-                commandQueueCache[index] = nextCommandQueueDict
-            }
-            index += 1;
+
+        guard let commandQueue = poolLease.resource as? MTLCommandQueue else {
+            poolLease.returnToPool()
+            return nil
         }
-        
-        commandQueueCacheLock.unlock()
-    }
-    
-    func containsCommandQueue(commandQueue:MTLCommandQueue) -> Bool {
-        var found = false
-        
-        commandQueueCacheLock.lock()
-        
-        var index   = 0
-        while ((!found) && (index < kMaxCommandQueues))
-        {
-            let nextCommandQueueDict    = commandQueueCache [ index ];
-            let nextCommandQueue        = nextCommandQueueDict [ kKey_CommandQueue ] as? MTLCommandQueue
-            if (nextCommandQueue === commandQueue)
-            {
-                found = true
-            }
-            index += 1
-        }
-        
-        commandQueueCacheLock.unlock()
-        
-        return found;
+
+        return MetalCommandQueueLease(commandQueue: commandQueue, poolLease: poolLease)
     }
 }
 
 class MetalDeviceCache: NSObject {
-    var deviceCaches : [MetalDeviceCacheItem]
+    private var deviceCaches : [MetalDeviceCacheItem]
+    private let deviceCachesLock = NSLock()
     static let deviceCache = MetalDeviceCache()
         
     override init() {
@@ -154,91 +126,43 @@ class MetalDeviceCache: NSObject {
     
 
     func device(with registryID:UInt64) -> MTLDevice? {
-        for nextCacheItem in deviceCaches
-        {
-            if (nextCacheItem.gpuDevice.registryID == registryID)
-            {
-                return nextCacheItem.gpuDevice
-            }
+        deviceCachesLock.lock()
+        defer { deviceCachesLock.unlock() }
+
+        if let cacheItem = deviceCaches.first(where: { $0.gpuDevice.registryID == registryID }) {
+            return cacheItem.gpuDevice
         }
         
         return nil
     }
     
     func pipelineState(with registryID:UInt64, pixelFormat:MTLPixelFormat) -> MTLRenderPipelineState? {
-        for nextCacheItem in deviceCaches
-        {
-            if ((nextCacheItem.gpuDevice.registryID == registryID) &&
-                (nextCacheItem.pixelFormat == pixelFormat))
-            {
-                return nextCacheItem.pipelineState
-            }
-        }
-        
-        // We didn't get one, so create a new one
-        let devices = MTLCopyAllDevices()
-        var device : MTLDevice?
-        for nextDevice:MTLDevice in devices {
-            if (nextDevice.registryID == registryID) {
-                device = nextDevice
-            }
-        }
-        
-        var result:MTLRenderPipelineState?  = nil;
-        if (device != nil) {
-            do {
-                let newCacheItem = try MetalDeviceCacheItem.init(with: device!, pixFormat: pixelFormat)
-                deviceCaches.append(newCacheItem)
-                result = newCacheItem.pipelineState
-            } catch {
-                NSLog ("Unable to create a new cache item with the desired pixel format")
-            }
-        }
-        
-        return result
+        cacheItem(with: registryID, pixelFormat: pixelFormat)?.pipelineState
     }
     
-    func commandQueue(with registryID:UInt64, pixelFormat:MTLPixelFormat) -> MTLCommandQueue? {
-        for nextCacheItem in deviceCaches
-        {
-            if ((nextCacheItem.gpuDevice.registryID == registryID) &&
-                (nextCacheItem.pixelFormat == pixelFormat))
-            {
-                return nextCacheItem.getNextFreeCommandQueue()
-            }
-        }
-        
-        // We didn't get one, so create a new one
-        let devices = MTLCopyAllDevices()
-        var device : MTLDevice?
-        for nextDevice:MTLDevice in devices {
-            if (nextDevice.registryID == registryID) {
-                device = nextDevice
-            }
-        }
-        
-        var result:MTLCommandQueue?  = nil;
-        if (device != nil) {
-            do {
-                let newCacheItem = try MetalDeviceCacheItem.init(with: device!, pixFormat: pixelFormat)
-                deviceCaches.append(newCacheItem)
-                result = newCacheItem.getNextFreeCommandQueue()
-            } catch {
-                NSLog ("Unable to create a new cache item with the desired pixel format")
-            }
-        }
-        
-        return result
+    func commandQueueLease(with registryID:UInt64, pixelFormat:MTLPixelFormat) -> MetalCommandQueueLease? {
+        cacheItem(with: registryID, pixelFormat: pixelFormat)?.commandQueueLease()
     }
-    
-    func returnCommandQueueToCache(commandQueue:MTLCommandQueue) {
-        for nextCacheItem in deviceCaches
-        {
-            if nextCacheItem.containsCommandQueue(commandQueue: commandQueue)
-            {
-                nextCacheItem.returnCommandQueue(commandQueue: commandQueue)
-                return
-            }
+
+    private func cacheItem(with registryID: UInt64, pixelFormat: MTLPixelFormat) -> MetalDeviceCacheItem? {
+        deviceCachesLock.lock()
+        defer { deviceCachesLock.unlock() }
+
+        if let cacheItem = deviceCaches.first(where: { $0.gpuDevice.registryID == registryID && $0.pixelFormat == pixelFormat }) {
+            return cacheItem
+        }
+
+        guard let device = MTLCopyAllDevices().first(where: { $0.registryID == registryID }) else {
+            return nil
+        }
+
+        do {
+            let newCacheItem = try MetalDeviceCacheItem.init(with: device, pixFormat: pixelFormat)
+            deviceCaches.append(newCacheItem)
+            return newCacheItem
+        } catch {
+            NSLog ("Unable to create a new cache item with the desired pixel format")
+            return nil
         }
     }
 }

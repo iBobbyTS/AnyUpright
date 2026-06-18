@@ -71,6 +71,7 @@
 				Plugin/AnyUprightUprightCandidates.swift,
 				Plugin/AnyUprightWarp.metal,
 				Plugin/AnyUprightWarpEffect.swift,
+				Plugin/CommandQueuePool.swift,
 				Plugin/Info.plist,
 				Plugin/main.swift,
 				Plugin/MetalDeviceCache.swift,

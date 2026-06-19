@@ -110,9 +110,10 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
 
 @objc(AnyUprightQuadManualPlugIn)
 class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustomParameterViewHost_v2 {
+    private static var retainedDetectSourceQuadButtonViews: [AnyUprightDetectSourceQuadButtonView] = []
+
     private let analysisLock = NSLock()
     private var analysisState = QuadAnalysisScratchState()
-    private var detectSourceQuadButtonViews: [AnyUprightDetectSourceQuadButtonView] = []
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         paramAPI.addCustomParameter(
@@ -157,7 +158,9 @@ class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustom
         }
 
         let view = AnyUprightDetectSourceQuadButtonView(plugin: self)
-        detectSourceQuadButtonViews.append(view)
+        // FxPlug hosts can release the plug-in object while custom inspector NSViews
+        // are still unwinding, so keep returned views alive for the XPC lifetime.
+        Self.retainedDetectSourceQuadButtonViews.append(view)
         return view
     }
 
@@ -346,14 +349,14 @@ class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustom
 
 private final class AnyUprightDetectSourceQuadButtonView: NSView {
     private static let rowContentWidth: CGFloat = 300.0
-    private static let buttonSize = NSSize(width: 136.0, height: 26.0)
+    private static let buttonSize = NSSize(width: 220.0, height: 26.0)
 
     private weak var plugin: AnyUprightQuadManualPlugIn?
     private let button: NSButton
 
     init(plugin: AnyUprightQuadManualPlugIn) {
         self.plugin = plugin
-        self.button = NSButton(title: "Detect", target: nil, action: nil)
+        self.button = NSButton(title: "Detect Edge and Corner", target: nil, action: nil)
         super.init(frame: NSRect(x: 0.0, y: 0.0, width: Self.rowContentWidth, height: 32.0))
 
         button.bezelStyle = .rounded

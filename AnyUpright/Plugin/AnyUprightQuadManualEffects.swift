@@ -350,6 +350,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustom
 private final class AnyUprightDetectSourceQuadButtonView: NSView {
     private static let rowContentWidth: CGFloat = 300.0
     private static let buttonSize = NSSize(width: 220.0, height: 26.0)
+    private static let buttonXOffset: CGFloat = 20.0
 
     private weak var plugin: AnyUprightQuadManualPlugIn?
     private let button: NSButton
@@ -383,9 +384,7 @@ private final class AnyUprightDetectSourceQuadButtonView: NSView {
     }
 
     private func updateButtonFrame() {
-        // FCP sizes this custom view from its intrinsic width, so make the view a
-        // wider row canvas and center the momentary button within it.
-        let x = max(0.0, (bounds.width - Self.buttonSize.width) / 2.0)
+        let x = min(max(0.0, Self.buttonXOffset), max(0.0, bounds.width - Self.buttonSize.width))
         let y = max(0.0, (bounds.height - Self.buttonSize.height) / 2.0)
         button.frame = NSRect(
             x: x,

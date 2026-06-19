@@ -28,6 +28,10 @@ struct AnyUprightGeometryTests {
         try testQuadSourceDefaultsToCentralEightyPercent()
         try testQuadSourceObjectDragPreservesCentralBase()
         try testDetectedSourceQuadOffsetsUseImageCoordinates()
+        try testDetectedSourceQuadObjectConversionUsesImageCoordinates()
+        try testDetectedSourceLineObjectConversionUsesImageCoordinates()
+        try testLineIntersectionFindsDetectedCorner()
+        try testDetectionScoresNormalizeToUnitRange()
         try testQuadSourceFullFrameSelectionHasNoDYDrift()
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
         try testQuadSourceOSCPixelDragDoesNotFlipYAgain()
@@ -64,6 +68,7 @@ struct AnyUprightGeometryTests {
         try testRotationCorrectionFromVerticalReferenceLine()
         try testPerspectiveEstimatesRecoverSyntheticReferenceLines()
         try testDetectorFindsNearHorizontalAndVerticalLines()
+        try testSupportedLineDetectorReturnsFiniteSegments()
         try testUprightCandidateSelectionLimitsToTwoAndConvertsCoordinates()
         try testUprightCandidateToggleSelectionStopsAtTwoPerOrientation()
         try testUprightCandidateObjectLineClampsAndFlipsY()
@@ -236,6 +241,59 @@ struct AnyUprightGeometryTests {
         try assertEqual(sourceQuad.bottomLeft, detectedSourceQuad.bottomLeft, "source quad bottom-left writeback")
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "object top-left after detection")
         try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.15, y: 0.10), "object bottom-left after detection")
+    }
+
+    static func testDetectedSourceQuadObjectConversionUsesImageCoordinates() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let imageQuad = AUQuad(
+            topLeft: AUPoint(x: 40.0, y: 20.0),
+            topRight: AUPoint(x: 170.0, y: 30.0),
+            bottomRight: AUPoint(x: 180.0, y: 85.0),
+            bottomLeft: AUPoint(x: 30.0, y: 90.0)
+        )
+
+        let objectQuad = AnyUprightGeometry.normalizedObjectQuad(fromImageQuad: imageQuad, size: size)
+
+        try assertEqual(objectQuad.topLeft, AUPoint(x: 0.20, y: 0.80), "top-left object point")
+        try assertEqual(objectQuad.topRight, AUPoint(x: 0.85, y: 0.70), "top-right object point")
+        try assertEqual(objectQuad.bottomRight, AUPoint(x: 0.90, y: 0.15), "bottom-right object point")
+        try assertEqual(objectQuad.bottomLeft, AUPoint(x: 0.15, y: 0.10), "bottom-left object point")
+    }
+
+    static func testDetectionScoresNormalizeToUnitRange() throws {
+        let scores = AnyUprightGeometry.normalizedScores([10.0, 5.0, -2.0, .infinity])
+
+        try assertEqual(scores.count, 4, "normalized score count")
+        try assertApprox(scores[0], 1.0, "maximum score")
+        try assertApprox(scores[1], 0.5, "half score")
+        try assertApprox(scores[2], 0.0, "negative score clamps to zero")
+        try assertApprox(scores[3], 0.0, "non-finite score clamps to zero")
+        let zeroScores = AnyUprightGeometry.normalizedScores([0.0, 0.0])
+        try assertApprox(zeroScores[0], 0.0, "first zero score")
+        try assertApprox(zeroScores[1], 0.0, "second zero score")
+    }
+
+    static func testDetectedSourceLineObjectConversionUsesImageCoordinates() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let imageLine = AULineSegment(
+            start: AUPoint(x: 20.0, y: 10.0),
+            end: AUPoint(x: 180.0, y: 85.0)
+        )
+
+        let objectLine = AnyUprightGeometry.normalizedObjectLine(fromImageLine: imageLine, size: size)
+
+        try assertEqual(objectLine.start, AUPoint(x: 0.10, y: 0.90), "line start object point")
+        try assertEqual(objectLine.end, AUPoint(x: 0.90, y: 0.15), "line end object point")
+    }
+
+    static func testLineIntersectionFindsDetectedCorner() throws {
+        let vertical = AULineSegment(start: AUPoint(x: 40.0, y: 5.0), end: AUPoint(x: 50.0, y: 95.0))
+        let horizontal = AULineSegment(start: AUPoint(x: 10.0, y: 30.0), end: AUPoint(x: 110.0, y: 20.0))
+
+        let point = try unwrap(AnyUprightGeometry.intersection(of: vertical, and: horizontal), "line intersection")
+
+        try assertApprox(point.x, 42.42, "corner x", accuracy: 0.01)
+        try assertApprox(point.y, 26.76, "corner y", accuracy: 0.01)
     }
 
     static func testQuadSourceFullFrameSelectionHasNoDYDrift() throws {
@@ -1175,6 +1233,25 @@ struct AnyUprightGeometryTests {
         try assertTrue(verticalCandidates[0].absoluteDeviationRadians <= degreesToRadians(15.0), "detected vertical angle should be a near-vertical candidate")
     }
 
+    static func testSupportedLineDetectorReturnsFiniteSegments() throws {
+        let image = horizontalSegmentImage(width: 120, height: 80)
+        let lines = AnyUprightLineDetection.detectSupportedLineSegments(
+            in: image,
+            options: AULineDetectionOptions(
+                orientation: .horizontal,
+                edgeThreshold: 20.0,
+                voteThreshold: 12,
+                maxLines: 4
+            )
+        )
+
+        let line = try unwrap(lines.first, "supported horizontal segment")
+
+        try assertTrue(line.line.length > 35.0, "supported segment should keep the visible edge span")
+        try assertTrue(line.line.length < 90.0, "supported segment should not expand to the full image width")
+        try assertTrue(line.score > 0.0, "supported segment should carry a positive score")
+    }
+
     static func testUprightCandidateSelectionLimitsToTwoAndConvertsCoordinates() throws {
         let specs = AnyUprightUprightCandidates.specs
         let candidates = [
@@ -1371,6 +1448,16 @@ struct AnyUprightGeometryTests {
                 if Double(x) >= boundary {
                     image.pixels[y * width + x] = 255
                 }
+            }
+        }
+        return image
+    }
+
+    static func horizontalSegmentImage(width: Int, height: Int) -> AUGrayscaleImage {
+        var image = AUGrayscaleImage(width: width, height: height, pixels: Array(repeating: 0, count: width * height))
+        for y in 24..<56 {
+            for x in 32..<88 {
+                image.pixels[y * width + x] = 255
             }
         }
         return image

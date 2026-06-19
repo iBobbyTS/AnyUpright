@@ -38,7 +38,8 @@ struct AuditFeatureSurface {
             relativePaths: [
                 "AnyUprightQuadManualEffects.swift",
                 "AnyUprightQuadOSCControls.swift",
-                "AnyUprightQuadOSCParameterWriter.swift"
+                "AnyUprightQuadOSCParameterWriter.swift",
+                "AnyUprightQuadParameters.swift"
             ]
         )
         let uprightEffects = try pluginSwiftSources(
@@ -117,8 +118,14 @@ struct AuditFeatureSurface {
         try require(effects, "retainedDetectSourceQuadButtonViews.append(view)", "Source Quad retains every Swift custom parameter view it returns")
         try require(effects, "createView(forParameterID", "Source Quad creates the custom detection button view")
         try require(effects, "NSButton(title: \"Detect Edge and Corner\"", "Source Quad detection is exposed as a momentary button")
-        try require(effects, "VNDetectRectanglesRequest()", "Source Quad uses Vision rectangle detection")
-        try require(effects, "sourceQuadOffsets(forSourceQuad:", "Source Quad detection writes existing quad offsets")
+        try require(effects, "detectSupportedLineSegments", "Source Quad detects independent edge primitives instead of rectangle candidates")
+        try require(effects, "Score Threshold", "Source Quad exposes a normalized detection-score threshold")
+        try require(effects, "writeQuadSourceDetectionPrimitives", "Source Quad detection writes primitive slots instead of moving the current quad")
+        try require(effects, "quadSourceDetectionEdges", "Source Quad OSC reads detected edge primitives")
+        try require(effects, "quadSourceDetectionCorners", "Source Quad OSC reads detected corner primitives")
+        try require(effects, "sourceDetectionOverlaySegments", "Source Quad OSC draws detected edge/corner overlays")
+        try reject(effects, "VNDetectRectanglesRequest()", "Source Quad detection overlay should not be limited to closed rectangle observations")
+        try reject(effects, "writeDetectedSourceQuadOffsets", "Source Quad detection should not directly move the existing quad")
         try require(effects, "override var fixedQuadMode: AUQuadTransformMode", "Quad filters choose fixed modes")
         try require(effects, "class AnyUprightQuadOutputCornersOSCPlugIn: AnyUprightQuadManualOSCPlugIn", "Outer Corners exposes its own onscreen control")
         try require(effects, "parameterFlags: hiddenFlags()", "Quad fixed mode parameter is hidden from the inspector")
@@ -172,6 +179,12 @@ struct AuditFeatureSurface {
     private static func require(_ haystack: String, _ needle: String, _ label: String) throws {
         guard haystack.contains(needle) else {
             throw FeatureSurfaceAuditFailure.failed("\(label): missing \(needle)")
+        }
+    }
+
+    private static func reject(_ haystack: String, _ needle: String, _ label: String) throws {
+        guard !haystack.contains(needle) else {
+            throw FeatureSurfaceAuditFailure.failed("\(label): found \(needle)")
         }
     }
 

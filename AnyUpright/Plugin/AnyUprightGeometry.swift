@@ -446,12 +446,73 @@ enum AnyUprightGeometry {
         )
     }
 
+    static func normalizedObjectPoint(fromImagePoint point: AUPoint, size: AUSize) -> AUPoint {
+        let width = max(size.width, 1.0)
+        let height = max(size.height, 1.0)
+        return AUPoint(
+            x: min(1.0, max(0.0, point.x / width)),
+            y: min(1.0, max(0.0, 1.0 - point.y / height))
+        )
+    }
+
+    static func normalizedObjectQuad(fromImageQuad quad: AUQuad, size: AUSize) -> AUQuad {
+        AUQuad(
+            topLeft: normalizedObjectPoint(fromImagePoint: quad.topLeft, size: size),
+            topRight: normalizedObjectPoint(fromImagePoint: quad.topRight, size: size),
+            bottomRight: normalizedObjectPoint(fromImagePoint: quad.bottomRight, size: size),
+            bottomLeft: normalizedObjectPoint(fromImagePoint: quad.bottomLeft, size: size)
+        )
+    }
+
+    static func normalizedObjectLine(fromImageLine line: AULineSegment, size: AUSize) -> AULineSegment {
+        AULineSegment(
+            start: normalizedObjectPoint(fromImagePoint: line.start, size: size),
+            end: normalizedObjectPoint(fromImagePoint: line.end, size: size)
+        )
+    }
+
+    static func intersection(of first: AULineSegment, and second: AULineSegment) -> AUPoint? {
+        let x1 = first.start.x
+        let y1 = first.start.y
+        let x2 = first.end.x
+        let y2 = first.end.y
+        let x3 = second.start.x
+        let y3 = second.start.y
+        let x4 = second.end.x
+        let y4 = second.end.y
+        let denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        guard abs(denominator) > 0.000001 else {
+            return nil
+        }
+
+        let firstCross = x1 * y2 - y1 * x2
+        let secondCross = x3 * y4 - y3 * x4
+        return AUPoint(
+            x: (firstCross * (x3 - x4) - (x1 - x2) * secondCross) / denominator,
+            y: (firstCross * (y3 - y4) - (y1 - y2) * secondCross) / denominator
+        )
+    }
+
+    static func normalizedScores(_ scores: [Double]) -> [Double] {
+        let maximum = scores.reduce(0.0) { partial, score in
+            max(partial, score.isFinite ? score : 0.0)
+        }
+        return scores.map { score in
+            normalizedScore(score, maximum: maximum)
+        }
+    }
+
+    static func normalizedScore(_ score: Double, maximum: Double) -> Double {
+        guard score.isFinite, maximum.isFinite, maximum > 0.0 else {
+            return 0.0
+        }
+
+        return min(1.0, max(0.0, score / maximum))
+    }
+
     static func sourceQuadOffsets(forSourceQuad quad: AUQuad, size: AUSize) -> AUCornerOffsets {
         func objectPoint(fromImagePoint point: AUPoint) -> AUPoint {
-            AUPoint(
-                x: point.x / max(size.width, 1.0),
-                y: 1.0 - point.y / max(size.height, 1.0)
-            )
+            normalizedObjectPoint(fromImagePoint: point, size: size)
         }
 
         return AUCornerOffsets(

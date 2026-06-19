@@ -27,11 +27,24 @@ struct AULineDetectionOptions {
     var nonMaximumRhoRadius: Int = 8
 }
 
+struct AUDetectedLineSegment {
+    var line: AULineSegment
+    var score: Double
+    var votes: Int
+    var orientation: AUReferenceOrientation
+}
+
 enum AnyUprightLineDetection {
     private struct EdgePoint {
         var x: Int
         var y: Int
         var lineAngleRadians: Double
+    }
+
+    private struct HoughPeak {
+        var angleRadians: Double
+        var rho: Double
+        var votes: Int
     }
 
     static func detectLineSegments(in image: AUGrayscaleImage, options: AULineDetectionOptions) -> [AULineSegment] {
@@ -44,6 +57,41 @@ enum AnyUprightLineDetection {
             return []
         }
 
+        return selectedHoughPeaks(from: edges, image: image, options: options).compactMap { peak in
+            clippedLine(angleRadians: peak.angleRadians, rho: peak.rho, width: image.width, height: image.height)
+        }
+    }
+
+    static func detectSupportedLineSegments(in image: AUGrayscaleImage, options: AULineDetectionOptions) -> [AUDetectedLineSegment] {
+        guard image.width >= 3, image.height >= 3, image.pixels.count == image.width * image.height else {
+            return []
+        }
+
+        let edges = sobelEdges(in: image, threshold: options.edgeThreshold)
+        guard !edges.isEmpty else {
+            return []
+        }
+
+        return selectedHoughPeaks(from: edges, image: image, options: options).compactMap { peak in
+            guard let line = supportedLineSegment(
+                for: peak,
+                edges: edges,
+                image: image,
+                options: options
+            ) else {
+                return nil
+            }
+
+            return AUDetectedLineSegment(
+                line: line,
+                score: line.length * Double(peak.votes),
+                votes: peak.votes,
+                orientation: options.orientation
+            )
+        }
+    }
+
+    private static func selectedHoughPeaks(from edges: [EdgePoint], image: AUGrayscaleImage, options: AULineDetectionOptions) -> [HoughPeak] {
         let lineAngles = sampledLineAngles(for: options.orientation, maxDeviationRadians: options.maxDeviationRadians, step: options.thetaStepRadians)
         guard !lineAngles.isEmpty else {
             return []
@@ -53,12 +101,12 @@ enum AnyUprightLineDetection {
         let rhoMin = -diagonal
         let rhoCount = Int(ceil((diagonal * 2.0) / options.rhoStep)) + 1
         var accumulator = Array(repeating: 0, count: lineAngles.count * rhoCount)
+        let angleTolerance = max(options.thetaStepRadians * 3.0, .pi / 18.0)
 
         for edge in edges {
             let x = Double(edge.x)
             let y = Double(edge.y)
             for (thetaIndex, angle) in lineAngles.enumerated() {
-                let angleTolerance = max(options.thetaStepRadians * 3.0, .pi / 18.0)
                 guard angleDistance(edge.lineAngleRadians, angle) <= angleTolerance else {
                     continue
                 }
@@ -101,11 +149,90 @@ enum AnyUprightLineDetection {
             }
         }
 
-        return selected.compactMap { peak in
-            let angle = lineAngles[peak.thetaIndex]
-            let rho = rhoMin + Double(peak.rhoIndex) * options.rhoStep
-            return clippedLine(angleRadians: angle, rho: rho, width: image.width, height: image.height)
+        return selected.map { peak in
+            HoughPeak(
+                angleRadians: lineAngles[peak.thetaIndex],
+                rho: rhoMin + Double(peak.rhoIndex) * options.rhoStep,
+                votes: peak.votes
+            )
         }
+    }
+
+    private static func supportedLineSegment(
+        for peak: HoughPeak,
+        edges: [EdgePoint],
+        image: AUGrayscaleImage,
+        options: AULineDetectionOptions
+    ) -> AULineSegment? {
+        let directionX = cos(peak.angleRadians)
+        let directionY = sin(peak.angleRadians)
+        let normalX = -sin(peak.angleRadians)
+        let normalY = cos(peak.angleRadians)
+        let angleTolerance = max(options.thetaStepRadians * 3.0, .pi / 18.0)
+        let rhoTolerance = max(options.rhoStep * 1.5, 2.0)
+        let maximumSupportGap = max(6.0, Double(min(image.width, image.height)) * 0.025)
+        let support = edges.compactMap { edge -> Double? in
+            guard angleDistance(edge.lineAngleRadians, peak.angleRadians) <= angleTolerance else {
+                return nil
+            }
+
+            let x = Double(edge.x)
+            let y = Double(edge.y)
+            let rho = x * normalX + y * normalY
+            guard abs(rho - peak.rho) <= rhoTolerance else {
+                return nil
+            }
+
+            return x * directionX + y * directionY
+        }.sorted()
+
+        guard support.count >= 2 else {
+            return nil
+        }
+
+        var bestStart = support[0]
+        var bestEnd = support[0]
+        var runStart = support[0]
+        var runEnd = support[0]
+        for value in support.dropFirst() {
+            if value - runEnd <= maximumSupportGap {
+                runEnd = value
+            } else {
+                if runEnd - runStart > bestEnd - bestStart {
+                    bestStart = runStart
+                    bestEnd = runEnd
+                }
+                runStart = value
+                runEnd = value
+            }
+        }
+        if runEnd - runStart > bestEnd - bestStart {
+            bestStart = runStart
+            bestEnd = runEnd
+        }
+
+        guard bestEnd - bestStart >= max(8.0, Double(min(image.width, image.height)) * 0.03) else {
+            return nil
+        }
+
+        func point(at projection: Double) -> AUPoint {
+            AUPoint(
+                x: directionX * projection + normalX * peak.rho,
+                y: directionY * projection + normalY * peak.rho
+            )
+        }
+
+        return AULineSegment(
+            start: clamped(point(at: bestStart), width: image.width, height: image.height),
+            end: clamped(point(at: bestEnd), width: image.width, height: image.height)
+        )
+    }
+
+    private static func clamped(_ point: AUPoint, width: Int, height: Int) -> AUPoint {
+        AUPoint(
+            x: min(max(point.x, 0.0), Double(max(0, width - 1))),
+            y: min(max(point.y, 0.0), Double(max(0, height - 1)))
+        )
     }
 
     private static func sobelEdges(in image: AUGrayscaleImage, threshold: Double) -> [EdgePoint] {

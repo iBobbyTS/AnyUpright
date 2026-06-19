@@ -7,7 +7,6 @@ import Foundation
 import AppKit
 import CoreImage
 import IOSurface
-import Vision
 
 class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
     var fixedQuadMode: AUQuadTransformMode {
@@ -32,6 +31,7 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
                 defaultValue: true,
                 parameterFlags: defaultFlags()
             )
+            addQuadSourceDetectionScoreThreshold(paramAPI, parameterFlags: defaultFlags())
         } else {
             paramAPI.addToggleButton(
                 withName: "Edit Mode",
@@ -46,6 +46,10 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
         addCornerParameters(paramAPI, title: "Top Right", groupID: QuadGroup.topRight.rawValue, percentX: .topRightPercentX, percentY: .topRightPercentY, pixelX: .topRightPixelX, pixelY: .topRightPixelY, groupFlags: cornerGroupFlags)
         addCornerParameters(paramAPI, title: "Bottom Right", groupID: QuadGroup.bottomRight.rawValue, percentX: .bottomRightPercentX, percentY: .bottomRightPercentY, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
         addCornerParameters(paramAPI, title: "Bottom Left", groupID: QuadGroup.bottomLeft.rawValue, percentX: .bottomLeftPercentX, percentY: .bottomLeftPercentY, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
+
+        if showsSourceEditMode {
+            addQuadSourceDetectionPrimitiveParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), hiddenFlags: hiddenFlags())
+        }
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
@@ -113,6 +117,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustom
     private static var retainedDetectSourceQuadButtonViews: [AnyUprightDetectSourceQuadButtonView] = []
 
     private let analysisLock = NSLock()
+    private let analysisContext = CIContext(options: nil)
     private var analysisState = QuadAnalysisScratchState()
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
@@ -180,10 +185,14 @@ class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustom
 
     private func startSourceQuadDetection(at time: CMTime) {
         analysisLock.lock()
+        analysisState.hasPendingSourceQuadDetection = true
+        analysisState.detectedSourcePrimitives = QuadDetectedSourcePrimitives()
         analysisState.requestedAnalysisTime = time.isValid && time.isNumeric ? time : currentParameterTime()
         analysisLock.unlock()
+        quadAnalysisDebugLog("start requested=\(analysisState.requestedAnalysisTime)")
 
         guard let analysisAPI = _apiManager.api(for: FxAnalysisAPI.self) as? FxAnalysisAPI else {
+            quadAnalysisDebugLog("start missing FxAnalysisAPI")
             return
         }
 
@@ -199,151 +208,181 @@ class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustom
 
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
         analysisLock.lock()
-        analysisState.detectedSourceQuad = nil
+        analysisState.detectedSourcePrimitives = QuadDetectedSourcePrimitives()
+        analysisState.detectedSourceSize = AUSize(width: 1.0, height: 1.0)
         analysisState.detectedSourceQuadTime = analysisRange.start
         analysisLock.unlock()
     }
 
     func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
         analysisLock.lock()
-        let alreadyDetected = analysisState.detectedSourceQuad != nil
+        let alreadyDetected = !analysisState.detectedSourcePrimitives.edges.isEmpty || !analysisState.detectedSourcePrimitives.corners.isEmpty
         analysisLock.unlock()
 
         if alreadyDetected {
             return
         }
 
-        guard let image = AnyUprightAnalysisImage.ciImage(from: frame) else {
+        guard let image = AnyUprightAnalysisImage.grayscaleImage(from: frame, maxDimension: 540, context: analysisContext) else {
+            quadAnalysisDebugLog("analyze no grayscale frame")
             return
         }
-
-        let bounds = frame.imagePixelBounds
-        let size = AUSize(
-            width: Double(max(1, bounds.right - bounds.left)),
-            height: Double(max(1, bounds.top - bounds.bottom))
-        )
-        guard let quad = detectedSourceQuad(in: image, size: size) else {
-            return
-        }
+        let size = AUSize(width: Double(image.width), height: Double(image.height))
+        let primitives = detectedSourcePrimitives(in: image)
+        quadAnalysisDebugLog("analyze image=\(image.width)x\(image.height) edges=\(primitives.edges.count) corners=\(primitives.corners.count)")
 
         analysisLock.lock()
-        analysisState.detectedSourceQuad = QuadDetectedSourceQuad(quad: quad, size: size)
+        analysisState.detectedSourcePrimitives = primitives
+        analysisState.detectedSourceSize = size
         analysisState.detectedSourceQuadTime = frameTime
         analysisLock.unlock()
     }
 
     func cleanupAnalysis() throws {
         analysisLock.lock()
-        let detected = analysisState.detectedSourceQuad
+        let pending = analysisState.hasPendingSourceQuadDetection
+        let primitives = analysisState.detectedSourcePrimitives
+        let detectedSize = analysisState.detectedSourceSize
         let detectedTime = analysisState.detectedSourceQuadTime
         let requestedTime = analysisState.requestedAnalysisTime
+        analysisState.hasPendingSourceQuadDetection = false
         analysisLock.unlock()
 
         let writeTime = parameterWriteTime(preferred: requestedTime, fallback: detectedTime)
-        guard let detected,
+        guard pending,
               let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
             return
         }
 
-        let offsets = AnyUprightGeometry.sourceQuadOffsets(forSourceQuad: detected.quad, size: detected.size)
         performParameterAction {
             settingAPI.setBoolValue(true, toParameter: QuadParam.showCornerAdjuster.rawValue, at: writeTime)
-            writeDetectedSourceQuadOffsets(offsets, settingAPI: settingAPI, time: writeTime)
+            writeQuadSourceDetectionPrimitives(primitives, size: detectedSize, settingAPI: settingAPI, time: writeTime)
         }
+        quadAnalysisDebugLog("cleanup pending=\(pending) writeTime=\(writeTime) edges=\(primitives.edges.count) corners=\(primitives.corners.count)")
     }
 
-    private func detectedSourceQuad(in image: CIImage, size: AUSize) -> AUQuad? {
-        let request = VNDetectRectanglesRequest()
-        request.maximumObservations = 6
-        request.minimumConfidence = 0.45
-        request.minimumSize = 0.05
-        request.quadratureTolerance = 45.0
-
-        let handler = VNImageRequestHandler(ciImage: image, options: [:])
-        do {
-            try handler.perform([request])
-        } catch {
-            return nil
+    private func detectedSourcePrimitives(in image: AUGrayscaleImage) -> QuadDetectedSourcePrimitives {
+        let vertical = detectedSourceEdges(in: image, orientation: .vertical)
+        let horizontal = detectedSourceEdges(in: image, orientation: .horizontal)
+        let selectedEdges = Array((vertical + horizontal)
+            .sorted { $0.score > $1.score }
+            .prefix(AnyUprightQuadSourceDetectionEdges.slotCount))
+        let maxEdgeScore = selectedEdges.reduce(0.0) { max($0, $1.score) }
+        let normalizedEdges = selectedEdges.map { edge in
+            QuadDetectedSourceEdge(
+                line: edge.line,
+                score: AnyUprightGeometry.normalizedScore(edge.score, maximum: maxEdgeScore)
+            )
+        }
+        let corners = detectedSourceCorners(from: selectedEdges, size: AUSize(width: Double(image.width), height: Double(image.height)))
+        let maxCornerScore = corners.reduce(0.0) { max($0, $1.score) }
+        let normalizedCorners = corners.map { corner in
+            QuadDetectedSourceCorner(
+                point: corner.point,
+                score: AnyUprightGeometry.normalizedScore(corner.score, maximum: maxCornerScore)
+            )
         }
 
-        var best: (quad: AUQuad, score: Double)?
-        for observation in request.results ?? [] {
-            let quad = sourceQuad(from: observation, size: size)
-            guard isUsableDetectedSourceQuad(quad, size: size) else {
+        return QuadDetectedSourcePrimitives(edges: normalizedEdges, corners: normalizedCorners)
+    }
+
+    private func detectedSourceEdges(in image: AUGrayscaleImage, orientation: AUReferenceOrientation) -> [AUDetectedLineSegment] {
+        let minimumLength: Double
+        let voteThreshold: Int
+        switch orientation {
+        case .horizontal:
+            minimumLength = max(16.0, Double(image.width) * 0.08)
+            voteThreshold = max(16, image.width / 12)
+        case .vertical:
+            minimumLength = max(16.0, Double(image.height) * 0.08)
+            voteThreshold = max(16, image.height / 12)
+        }
+
+        return AnyUprightLineDetection.detectSupportedLineSegments(
+            in: image,
+            options: AULineDetectionOptions(
+                orientation: orientation,
+                maxDeviationRadians: .pi / 5.0,
+                edgeThreshold: 36.0,
+                voteThreshold: voteThreshold,
+                maxLines: max(12, AnyUprightQuadSourceDetectionEdges.slotCount / 2),
+                nonMaximumThetaRadius: 3,
+                nonMaximumRhoRadius: 6
+            )
+        )
+        .filter { $0.line.length >= minimumLength }
+    }
+
+    private func detectedSourceCorners(from edges: [AUDetectedLineSegment], size: AUSize) -> [QuadDetectedSourceCorner] {
+        let vertical = edges.filter { $0.orientation == .vertical }
+        let horizontal = edges.filter { $0.orientation == .horizontal }
+        let tolerance = max(10.0, min(size.width, size.height) * 0.035)
+        let mergeRadius = max(6.0, min(size.width, size.height) * 0.018)
+        var rawCorners: [QuadDetectedSourceCorner] = []
+
+        for verticalEdge in vertical {
+            for horizontalEdge in horizontal {
+                guard let point = AnyUprightGeometry.intersection(of: verticalEdge.line, and: horizontalEdge.line),
+                      point.x >= 0.0,
+                      point.x <= size.width - 1.0,
+                      point.y >= 0.0,
+                      point.y <= size.height - 1.0 else {
+                    continue
+                }
+
+                let verticalDistance = verticalEdge.line.distance(to: point)
+                let horizontalDistance = horizontalEdge.line.distance(to: point)
+                let distance = max(verticalDistance, horizontalDistance)
+                guard distance <= tolerance else {
+                    continue
+                }
+
+                let proximity = max(0.25, 1.0 - distance / tolerance)
+                rawCorners.append(QuadDetectedSourceCorner(
+                    point: point,
+                    score: (verticalEdge.score + horizontalEdge.score) * 0.5 * proximity
+                ))
+            }
+        }
+
+        var selected: [QuadDetectedSourceCorner] = []
+        for corner in rawCorners.sorted(by: { $0.score > $1.score }) {
+            let duplicate = selected.contains { existing in
+                hypot(existing.point.x - corner.point.x, existing.point.y - corner.point.y) <= mergeRadius
+            }
+            if duplicate {
                 continue
             }
 
-            let score = detectedSourceQuadScore(quad, confidence: Double(observation.confidence))
-            if best == nil || score > best!.score {
-                best = (quad, score)
+            selected.append(corner)
+            if selected.count >= AnyUprightQuadSourceDetectionCorners.slotCount {
+                break
             }
         }
 
-        return best?.quad
+        return selected
     }
 
-    private func sourceQuad(from observation: VNRectangleObservation, size: AUSize) -> AUQuad {
-        let normalized = AUQuad(
-            topLeft: normalizedPoint(observation.topLeft),
-            topRight: normalizedPoint(observation.topRight),
-            bottomRight: normalizedPoint(observation.bottomRight),
-            bottomLeft: normalizedPoint(observation.bottomLeft)
-        )
-        return AnyUprightGeometry.imageQuad(fromNormalizedLowerLeftQuad: normalized, size: size)
-    }
-
-    private func normalizedPoint(_ point: CGPoint) -> AUPoint {
-        AUPoint(
-            x: min(1.0, max(0.0, Double(point.x))),
-            y: min(1.0, max(0.0, Double(point.y)))
-        )
-    }
-
-    private func detectedSourceQuadScore(_ quad: AUQuad, confidence: Double) -> Double {
-        polygonArea(quad) * max(0.0, confidence)
-    }
-
-    private func isUsableDetectedSourceQuad(_ quad: AUQuad, size: AUSize) -> Bool {
-        let points = [quad.topLeft, quad.topRight, quad.bottomRight, quad.bottomLeft]
-        guard points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else {
-            return false
+    private func quadAnalysisDebugLog(_ message: String) {
+        let flagPath = "/tmp/AnyUprightQuadOSC.debug"
+        guard FileManager.default.fileExists(atPath: flagPath) else {
+            return
         }
 
-        let frameArea = max(1.0, size.width * size.height)
-        return polygonArea(quad) / frameArea >= 0.01
-    }
-
-    private func polygonArea(_ quad: AUQuad) -> Double {
-        let points = [quad.topLeft, quad.topRight, quad.bottomRight, quad.bottomLeft]
-        var area = 0.0
-        for index in 0..<points.count {
-            let current = points[index]
-            let next = points[(index + 1) % points.count]
-            area += current.x * next.y - next.x * current.y
+        let logPath = "/tmp/AnyUprightQuadOSC.log"
+        let line = "[\(Date().timeIntervalSince1970)] analysis \(message)\n"
+        guard let data = line.data(using: .utf8) else {
+            return
         }
-        return abs(area) / 2.0
-    }
 
-    private func writeDetectedSourceQuadOffsets(_ offsets: AUCornerOffsets, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
-        writeDetectedSourceCorner(percent: offsets.topLeftPercent, percentX: .topLeftPercentX, percentY: .topLeftPercentY, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY, settingAPI: settingAPI, time: time)
-        writeDetectedSourceCorner(percent: offsets.topRightPercent, percentX: .topRightPercentX, percentY: .topRightPercentY, pixelX: .topRightPixelX, pixelY: .topRightPixelY, settingAPI: settingAPI, time: time)
-        writeDetectedSourceCorner(percent: offsets.bottomRightPercent, percentX: .bottomRightPercentX, percentY: .bottomRightPercentY, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, settingAPI: settingAPI, time: time)
-        writeDetectedSourceCorner(percent: offsets.bottomLeftPercent, percentX: .bottomLeftPercentX, percentY: .bottomLeftPercentY, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, settingAPI: settingAPI, time: time)
-    }
-
-    private func writeDetectedSourceCorner(
-        percent: AUPoint,
-        percentX: QuadParam,
-        percentY: QuadParam,
-        pixelX: QuadParam,
-        pixelY: QuadParam,
-        settingAPI: FxParameterSettingAPI_v5,
-        time: CMTime
-    ) {
-        settingAPI.setFloatValue(percent.x, toParameter: percentX.rawValue, at: time)
-        settingAPI.setFloatValue(percent.y, toParameter: percentY.rawValue, at: time)
-        settingAPI.setFloatValue(0.0, toParameter: pixelX.rawValue, at: time)
-        settingAPI.setFloatValue(0.0, toParameter: pixelY.rawValue, at: time)
+        if FileManager.default.fileExists(atPath: logPath),
+           let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            _ = try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: URL(fileURLWithPath: logPath))
+        }
     }
 }
 

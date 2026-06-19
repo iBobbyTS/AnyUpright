@@ -29,6 +29,7 @@ enum QuadParam: UInt32 {
     case bottomLeftPixelX = 214
     case bottomLeftPixelY = 215
     case detectSourceQuad = 216
+    case detectionScoreThreshold = 217
 }
 
 enum QuadGroup: UInt32, CaseIterable {
@@ -36,6 +37,79 @@ enum QuadGroup: UInt32, CaseIterable {
     case topRight = 221
     case bottomRight = 222
     case bottomLeft = 223
+    case sourceDetectionEdges = 384
+    case sourceDetectionCorners = 385
+}
+
+struct QuadSourceDetectionEdgeSpec {
+    var visible: UInt32
+    var startX: UInt32
+    var startY: UInt32
+    var endX: UInt32
+    var endY: UInt32
+    var score: UInt32
+}
+
+struct QuadSourceDetectionCornerSpec {
+    var visible: UInt32
+    var x: UInt32
+    var y: UInt32
+    var score: UInt32
+}
+
+struct QuadSourceDetectionEdge {
+    var spec: QuadSourceDetectionEdgeSpec
+    var line: AULineSegment
+    var score: Double
+}
+
+struct QuadSourceDetectionCorner {
+    var spec: QuadSourceDetectionCornerSpec
+    var point: AUPoint
+    var score: Double
+}
+
+struct QuadDetectedSourceEdge {
+    var line: AULineSegment
+    var score: Double
+}
+
+struct QuadDetectedSourceCorner {
+    var point: AUPoint
+    var score: Double
+}
+
+struct QuadDetectedSourcePrimitives {
+    var edges: [QuadDetectedSourceEdge] = []
+    var corners: [QuadDetectedSourceCorner] = []
+}
+
+enum AnyUprightQuadSourceDetectionEdges {
+    static let slotCount = 24
+    static let specs: [QuadSourceDetectionEdgeSpec] = (0..<slotCount).map { index in
+        let base = UInt32(400 + index * 6)
+        return QuadSourceDetectionEdgeSpec(
+            visible: base,
+            startX: base + 1,
+            startY: base + 2,
+            endX: base + 3,
+            endY: base + 4,
+            score: base + 5
+        )
+    }
+}
+
+enum AnyUprightQuadSourceDetectionCorners {
+    static let slotCount = 48
+    static let specs: [QuadSourceDetectionCornerSpec] = (0..<slotCount).map { index in
+        let base = UInt32(600 + index * 4)
+        return QuadSourceDetectionCornerSpec(
+            visible: base,
+            x: base + 1,
+            y: base + 2,
+            score: base + 3
+        )
+    }
 }
 
 func quadFloatParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ param: QuadParam, _ time: CMTime) -> Float {
@@ -118,6 +192,185 @@ func quadCornerOffsets(from state: AnyUprightParameterState) -> AUCornerOffsets 
         bottomRightPixels: AUPoint(x: Double(state.bottomRightPixelX), y: Double(state.bottomRightPixelY)),
         bottomLeftPixels: AUPoint(x: Double(state.bottomLeftPixelX), y: Double(state.bottomLeftPixelY))
     )
+}
+
+func quadDetectionScoreThreshold(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> Double {
+    guard let paramAPI else {
+        return 0.5
+    }
+
+    let value = quadFloatParam(paramAPI, .detectionScoreThreshold, time)
+    return min(1.0, max(0.0, Double(value)))
+}
+
+func quadSourceDetectionEdges(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> [QuadSourceDetectionEdge] {
+    guard let paramAPI else {
+        return []
+    }
+
+    return AnyUprightQuadSourceDetectionEdges.specs.compactMap { spec in
+        var visible = ObjCBool(false)
+        paramAPI.getBoolValue(&visible, fromParameter: spec.visible, at: time)
+        guard visible.boolValue else {
+            return nil
+        }
+
+        return QuadSourceDetectionEdge(
+            spec: spec,
+            line: AULineSegment(
+                start: AUPoint(
+                    x: quadFloatParam(paramAPI, spec.startX, time),
+                    y: quadFloatParam(paramAPI, spec.startY, time)
+                ),
+                end: AUPoint(
+                    x: quadFloatParam(paramAPI, spec.endX, time),
+                    y: quadFloatParam(paramAPI, spec.endY, time)
+                )
+            ),
+            score: quadFloatParam(paramAPI, spec.score, time)
+        )
+    }
+}
+
+func quadSourceDetectionCorners(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> [QuadSourceDetectionCorner] {
+    guard let paramAPI else {
+        return []
+    }
+
+    return AnyUprightQuadSourceDetectionCorners.specs.compactMap { spec in
+        var visible = ObjCBool(false)
+        paramAPI.getBoolValue(&visible, fromParameter: spec.visible, at: time)
+        guard visible.boolValue else {
+            return nil
+        }
+
+        return QuadSourceDetectionCorner(
+            spec: spec,
+            point: AUPoint(
+                x: quadFloatParam(paramAPI, spec.x, time),
+                y: quadFloatParam(paramAPI, spec.y, time)
+            ),
+            score: quadFloatParam(paramAPI, spec.score, time)
+        )
+    }
+}
+
+func quadFloatParam(_ paramAPI: FxParameterRetrievalAPI_v6, _ parameterID: UInt32, _ time: CMTime) -> Double {
+    var value = 0.0
+    paramAPI.getFloatValue(&value, fromParameter: parameterID, at: time)
+    return value
+}
+
+func addQuadSourceDetectionScoreThreshold(_ paramAPI: FxParameterCreationAPI_v5, parameterFlags: FxParameterFlags) {
+    paramAPI.addFloatSlider(
+        withName: "Score Threshold",
+        parameterID: QuadParam.detectionScoreThreshold.rawValue,
+        defaultValue: 0.0,
+        parameterMin: 0.0,
+        parameterMax: 1.0,
+        sliderMin: 0.0,
+        sliderMax: 1.0,
+        delta: 0.01,
+        parameterFlags: parameterFlags
+    )
+}
+
+func addQuadSourceDetectionPrimitiveParameters(_ paramAPI: FxParameterCreationAPI_v5, collapsedFlags: FxParameterFlags, hiddenFlags: FxParameterFlags) {
+    paramAPI.startParameterSubGroup("Detected Edges", parameterID: QuadGroup.sourceDetectionEdges.rawValue, parameterFlags: collapsedFlags)
+    for (index, spec) in AnyUprightQuadSourceDetectionEdges.specs.enumerated() {
+        let title = "Detected Edge \(index + 1)"
+        paramAPI.addToggleButton(withName: "\(title) Visible", parameterID: spec.visible, defaultValue: false, parameterFlags: hiddenFlags)
+        addQuadHiddenUnitSlider(paramAPI, name: "\(title) Start X", id: spec.startX, flags: hiddenFlags)
+        addQuadHiddenUnitSlider(paramAPI, name: "\(title) Start Y", id: spec.startY, flags: hiddenFlags)
+        addQuadHiddenUnitSlider(paramAPI, name: "\(title) End X", id: spec.endX, flags: hiddenFlags)
+        addQuadHiddenUnitSlider(paramAPI, name: "\(title) End Y", id: spec.endY, flags: hiddenFlags)
+        addQuadHiddenScoreSlider(paramAPI, name: "\(title) Score", id: spec.score, flags: hiddenFlags)
+    }
+    paramAPI.endParameterSubGroup()
+
+    paramAPI.startParameterSubGroup("Detected Corners", parameterID: QuadGroup.sourceDetectionCorners.rawValue, parameterFlags: collapsedFlags)
+    for (index, spec) in AnyUprightQuadSourceDetectionCorners.specs.enumerated() {
+        let title = "Detected Corner \(index + 1)"
+        paramAPI.addToggleButton(withName: "\(title) Visible", parameterID: spec.visible, defaultValue: false, parameterFlags: hiddenFlags)
+        addQuadHiddenUnitSlider(paramAPI, name: "\(title) X", id: spec.x, flags: hiddenFlags)
+        addQuadHiddenUnitSlider(paramAPI, name: "\(title) Y", id: spec.y, flags: hiddenFlags)
+        addQuadHiddenScoreSlider(paramAPI, name: "\(title) Score", id: spec.score, flags: hiddenFlags)
+    }
+    paramAPI.endParameterSubGroup()
+}
+
+private func addQuadHiddenUnitSlider(_ paramAPI: FxParameterCreationAPI_v5, name: String, id: UInt32, flags: FxParameterFlags) {
+    paramAPI.addFloatSlider(
+        withName: name,
+        parameterID: id,
+        defaultValue: 0.0,
+        parameterMin: 0.0,
+        parameterMax: 1.0,
+        sliderMin: 0.0,
+        sliderMax: 1.0,
+        delta: 0.001,
+        parameterFlags: flags
+    )
+}
+
+private func addQuadHiddenScoreSlider(_ paramAPI: FxParameterCreationAPI_v5, name: String, id: UInt32, flags: FxParameterFlags) {
+    paramAPI.addFloatSlider(
+        withName: name,
+        parameterID: id,
+        defaultValue: 0.0,
+        parameterMin: 0.0,
+        parameterMax: 1.0,
+        sliderMin: 0.0,
+        sliderMax: 1.0,
+        delta: 0.01,
+        parameterFlags: flags
+    )
+}
+
+func writeQuadSourceDetectionPrimitives(_ primitives: QuadDetectedSourcePrimitives, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    for (index, spec) in AnyUprightQuadSourceDetectionEdges.specs.enumerated() {
+        guard index < primitives.edges.count else {
+            clearQuadSourceDetectionEdge(spec, settingAPI: settingAPI, time: time)
+            continue
+        }
+
+        let objectLine = AnyUprightGeometry.normalizedObjectLine(fromImageLine: primitives.edges[index].line, size: size)
+        settingAPI.setBoolValue(true, toParameter: spec.visible, at: time)
+        settingAPI.setFloatValue(objectLine.start.x, toParameter: spec.startX, at: time)
+        settingAPI.setFloatValue(objectLine.start.y, toParameter: spec.startY, at: time)
+        settingAPI.setFloatValue(objectLine.end.x, toParameter: spec.endX, at: time)
+        settingAPI.setFloatValue(objectLine.end.y, toParameter: spec.endY, at: time)
+        settingAPI.setFloatValue(primitives.edges[index].score, toParameter: spec.score, at: time)
+    }
+
+    for (index, spec) in AnyUprightQuadSourceDetectionCorners.specs.enumerated() {
+        guard index < primitives.corners.count else {
+            clearQuadSourceDetectionCorner(spec, settingAPI: settingAPI, time: time)
+            continue
+        }
+
+        let objectPoint = AnyUprightGeometry.normalizedObjectPoint(fromImagePoint: primitives.corners[index].point, size: size)
+        settingAPI.setBoolValue(true, toParameter: spec.visible, at: time)
+        settingAPI.setFloatValue(objectPoint.x, toParameter: spec.x, at: time)
+        settingAPI.setFloatValue(objectPoint.y, toParameter: spec.y, at: time)
+        settingAPI.setFloatValue(primitives.corners[index].score, toParameter: spec.score, at: time)
+    }
+}
+
+private func clearQuadSourceDetectionEdge(_ spec: QuadSourceDetectionEdgeSpec, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    settingAPI.setBoolValue(false, toParameter: spec.visible, at: time)
+    settingAPI.setFloatValue(0.0, toParameter: spec.startX, at: time)
+    settingAPI.setFloatValue(0.0, toParameter: spec.startY, at: time)
+    settingAPI.setFloatValue(0.0, toParameter: spec.endX, at: time)
+    settingAPI.setFloatValue(0.0, toParameter: spec.endY, at: time)
+    settingAPI.setFloatValue(0.0, toParameter: spec.score, at: time)
+}
+
+private func clearQuadSourceDetectionCorner(_ spec: QuadSourceDetectionCornerSpec, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    settingAPI.setBoolValue(false, toParameter: spec.visible, at: time)
+    settingAPI.setFloatValue(0.0, toParameter: spec.x, at: time)
+    settingAPI.setFloatValue(0.0, toParameter: spec.y, at: time)
+    settingAPI.setFloatValue(0.0, toParameter: spec.score, at: time)
 }
 
 func quadObjectPoints(from state: AnyUprightParameterState, size: AUSize, mode: AUQuadTransformMode) -> AUQuad {

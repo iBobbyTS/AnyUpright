@@ -40,7 +40,8 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
     @objc(drawOSCWithWidth:height:activePart:destinationImage:atTime:)
     func drawOSC(withWidth width: Int, height: Int, activePart: Int, destinationImage: FxImageTile, at time: CMTime) {
-        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
+        let paramAPI = parameterRetrievalAPI()
+        let state = quadParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedQuadMode)
         let mode = quadMode(from: state)
         guard shouldEnableQuadOSCControls(from: state, mode: mode) else {
             overlayRenderer.clear(destinationImage: destinationImage)
@@ -79,8 +80,17 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             canvasFrame: canvasFrame
         )
 
+        let detectedEdges = quadSourceDetectionEdges(at: time, paramAPI: paramAPI)
+        let detectedCorners = quadSourceDetectionCorners(at: time, paramAPI: paramAPI)
+        let detectionThreshold = quadDetectionScoreThreshold(at: time, paramAPI: paramAPI)
+        let detectionSegments = sourceDetectionOverlaySegments(
+            edges: detectedEdges,
+            corners: detectedCorners,
+            threshold: detectionThreshold
+        )
+        debugLog("draw-source seq=\(debugSequence) detection edges=\(detectedEdges.count) corners=\(detectedCorners.count) threshold=\(detectionThreshold) segments=\(detectionSegments.count)")
         overlayRenderer.renderStyledSegments(
-            sourceQuadOverlaySegments(for: displayPart, quad: quad),
+            sourceQuadOverlaySegments(for: displayPart, quad: quad) + detectionSegments,
             handles: handles,
             activePart: displayPart.rawValue,
             destinationImage: destinationImage,
@@ -442,6 +452,15 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         return style
     }
 
+    private func sourceDetectionOverlayStyle(lineThickness: Double = 2.0) -> AUOSCOverlayStyle {
+        var style = AUOSCOverlayStyle()
+        style.lineColor = SIMD4<Float>(0.15, 0.95, 0.35, 0.95)
+        style.shadowColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.72)
+        style.lineThickness = lineThickness
+        style.handleRadius = 0.0
+        return style
+    }
+
     private func sourceQuadOverlaySegments(for part: QuadOSCPart, quad: [AUPoint]) -> [AUOSCStyledSegment] {
         guard quad.count == 4 else {
             return []
@@ -476,6 +495,49 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         default:
             return base
         }
+    }
+
+    private func sourceDetectionOverlaySegments(edges: [QuadSourceDetectionEdge], corners: [QuadSourceDetectionCorner], threshold: Double) -> [AUOSCStyledSegment] {
+        let clampedThreshold = min(1.0, max(0.0, threshold))
+        var segments: [AUOSCStyledSegment] = []
+        let edgeStyle = sourceDetectionOverlayStyle(lineThickness: 2.5)
+        let crossStyle = sourceDetectionOverlayStyle(lineThickness: 2.0)
+
+        for edge in edges where edge.score >= clampedThreshold {
+            segments.append(AUOSCStyledSegment(
+                start: sourceDetectionCanvasPoint(from: edge.line.start),
+                end: sourceDetectionCanvasPoint(from: edge.line.end),
+                style: edgeStyle
+            ))
+        }
+
+        for corner in corners where corner.score >= clampedThreshold {
+            appendDetectionCornerCross(
+                at: sourceDetectionCanvasPoint(from: corner.point),
+                style: crossStyle,
+                to: &segments
+            )
+        }
+
+        return segments
+    }
+
+    private func sourceDetectionCanvasPoint(from objectPoint: AUPoint) -> AUPoint {
+        canvasPoint(fromObjectPoint: AnyUprightGeometry.verticallyFlippedObjectPoint(objectPoint))
+    }
+
+    private func appendDetectionCornerCross(at point: AUPoint, style: AUOSCOverlayStyle, to segments: inout [AUOSCStyledSegment]) {
+        let radius = 8.0
+        segments.append(AUOSCStyledSegment(
+            start: AUPoint(x: point.x - radius, y: point.y - radius),
+            end: AUPoint(x: point.x + radius, y: point.y + radius),
+            style: style
+        ))
+        segments.append(AUOSCStyledSegment(
+            start: AUPoint(x: point.x - radius, y: point.y + radius),
+            end: AUPoint(x: point.x + radius, y: point.y - radius),
+            style: style
+        ))
     }
 
 }

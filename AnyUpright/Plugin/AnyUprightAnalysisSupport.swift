@@ -48,13 +48,10 @@ struct UprightAnalysisScratchState {
     var requestedAnalysisTime = CMTime.zero
 }
 
-struct QuadDetectedSourceQuad {
-    var quad: AUQuad
-    var size: AUSize
-}
-
 struct QuadAnalysisScratchState {
-    var detectedSourceQuad: QuadDetectedSourceQuad?
+    var hasPendingSourceQuadDetection = false
+    var detectedSourcePrimitives = QuadDetectedSourcePrimitives()
+    var detectedSourceSize = AUSize(width: 1.0, height: 1.0)
     var detectedSourceQuadTime = CMTime.zero
     var requestedAnalysisTime = CMTime.zero
 }

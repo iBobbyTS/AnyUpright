@@ -10,6 +10,27 @@ import IOSurface
 import Vision
 
 extension AnyUprightQuadManualOSCPlugIn {
+    func setSourceQuad(_ quad: AUQuad, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+        let offsets = AnyUprightGeometry.sourceQuadOffsets(forSourceQuad: quad, size: size)
+        writeSourceCorner(.topLeft, percent: offsets.topLeftPercent, settingAPI: settingAPI, time: time)
+        writeSourceCorner(.topRight, percent: offsets.topRightPercent, settingAPI: settingAPI, time: time)
+        writeSourceCorner(.bottomRight, percent: offsets.bottomRightPercent, settingAPI: settingAPI, time: time)
+        writeSourceCorner(.bottomLeft, percent: offsets.bottomLeftPercent, settingAPI: settingAPI, time: time)
+        debugLog(
+            String(
+                format: "set-source-quad tl=(%.2f,%.2f) tr=(%.2f,%.2f) br=(%.2f,%.2f) bl=(%.2f,%.2f)",
+                quad.topLeft.x,
+                quad.topLeft.y,
+                quad.topRight.x,
+                quad.topRight.y,
+                quad.bottomRight.x,
+                quad.bottomRight.y,
+                quad.bottomLeft.x,
+                quad.bottomLeft.y
+            )
+        )
+    }
+
     func setCorner(_ point: AUPoint, part: QuadOSCPart, mode: AUQuadTransformMode, offsets: AUCornerOffsets, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         guard let ids = parameterIDs(forCornerPart: part) else {
             return
@@ -128,6 +149,14 @@ extension AnyUprightQuadManualOSCPlugIn {
         case .bottomLeft:
             return (.bottomLeftPercentX, .bottomLeftPercentY, .bottomLeftPixelX, .bottomLeftPixelY)
         }
+    }
+
+    private func writeSourceCorner(_ corner: AUQuadCorner, percent: AUPoint, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+        let ids = parameterIDs(for: corner)
+        settingAPI.setFloatValue(percent.x, toParameter: ids.percentX.rawValue, at: time)
+        settingAPI.setFloatValue(percent.y, toParameter: ids.percentY.rawValue, at: time)
+        settingAPI.setFloatValue(0.0, toParameter: ids.pixelX.rawValue, at: time)
+        settingAPI.setFloatValue(0.0, toParameter: ids.pixelY.rawValue, at: time)
     }
 
     func percentOffset(for corner: AUQuadCorner, in offsets: AUCornerOffsets) -> AUPoint {

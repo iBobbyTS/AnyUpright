@@ -31,6 +31,10 @@ struct AnyUprightGeometryTests {
         try testDetectedSourceQuadObjectConversionUsesImageCoordinates()
         try testDetectedSourceLineObjectConversionUsesImageCoordinates()
         try testLineIntersectionFindsDetectedCorner()
+        try testDetectionPointSelectionOrdersSourceQuadCorners()
+        try testDetectionLineSelectionBuildsQuadFromIntersections()
+        try testDetectionLineSelectionRejectsInvalidInputs()
+        try testDetectionSelectionStateFiltersByPrimitiveKind()
         try testDetectionScoresNormalizeToUnitRange()
         try testQuadSourceFullFrameSelectionHasNoDYDrift()
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
@@ -294,6 +298,92 @@ struct AnyUprightGeometryTests {
 
         try assertApprox(point.x, 42.42, "corner x", accuracy: 0.01)
         try assertApprox(point.y, 26.76, "corner y", accuracy: 0.01)
+    }
+
+    static func testDetectionPointSelectionOrdersSourceQuadCorners() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let points = [
+            AUPoint(x: 0.90, y: 0.15),
+            AUPoint(x: 0.20, y: 0.80),
+            AUPoint(x: 0.15, y: 0.10),
+            AUPoint(x: 0.85, y: 0.70)
+        ]
+
+        let quad = try unwrap(AnyUprightGeometry.imageQuad(fromNormalizedObjectPoints: points, size: size), "ordered detection point quad")
+        let offsets = AnyUprightGeometry.sourceQuadOffsets(forSourceQuad: quad, size: size)
+        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+
+        try assertEqual(quad.topLeft, AUPoint(x: 40.0, y: 20.0), "ordered point top-left")
+        try assertEqual(quad.topRight, AUPoint(x: 170.0, y: 30.0), "ordered point top-right")
+        try assertEqual(quad.bottomRight, AUPoint(x: 180.0, y: 85.0), "ordered point bottom-right")
+        try assertEqual(quad.bottomLeft, AUPoint(x: 30.0, y: 90.0), "ordered point bottom-left")
+        try assertEqual(sourceQuad.topLeft, quad.topLeft, "point selection writeback top-left")
+        try assertEqual(sourceQuad.topRight, quad.topRight, "point selection writeback top-right")
+        try assertEqual(sourceQuad.bottomRight, quad.bottomRight, "point selection writeback bottom-right")
+        try assertEqual(sourceQuad.bottomLeft, quad.bottomLeft, "point selection writeback bottom-left")
+    }
+
+    static func testDetectionLineSelectionBuildsQuadFromIntersections() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let imageLines = [
+            AULineSegment(start: AUPoint(x: 35.0, y: 20.0), end: AUPoint(x: 175.0, y: 30.0)),
+            AULineSegment(start: AUPoint(x: 30.0, y: 90.0), end: AUPoint(x: 185.0, y: 85.0)),
+            AULineSegment(start: AUPoint(x: 40.0, y: 18.0), end: AUPoint(x: 30.0, y: 92.0)),
+            AULineSegment(start: AUPoint(x: 170.0, y: 28.0), end: AUPoint(x: 180.0, y: 88.0))
+        ]
+        let objectLines = imageLines.map { AnyUprightGeometry.normalizedObjectLine(fromImageLine: $0, size: size) }
+
+        let quad = try unwrap(AnyUprightGeometry.imageQuad(fromNormalizedObjectLines: objectLines, size: size), "line intersection quad")
+        let offsets = AnyUprightGeometry.sourceQuadOffsets(forSourceQuad: quad, size: size)
+        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+
+        try assertTrue(AnyUprightGeometry.isConvexImageQuad(quad), "line selection should create a convex quad")
+        try assertApprox(sourceQuad.topLeft.x, quad.topLeft.x, "line writeback top-left x")
+        try assertApprox(sourceQuad.topRight.y, quad.topRight.y, "line writeback top-right y")
+        try assertApprox(sourceQuad.bottomRight.x, quad.bottomRight.x, "line writeback bottom-right x")
+        try assertApprox(sourceQuad.bottomLeft.y, quad.bottomLeft.y, "line writeback bottom-left y")
+    }
+
+    static func testDetectionLineSelectionRejectsInvalidInputs() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let parallelLines = [
+            AULineSegment(start: AUPoint(x: 20.0, y: 20.0), end: AUPoint(x: 180.0, y: 20.0)),
+            AULineSegment(start: AUPoint(x: 20.0, y: 40.0), end: AUPoint(x: 180.0, y: 40.0)),
+            AULineSegment(start: AUPoint(x: 20.0, y: 60.0), end: AUPoint(x: 180.0, y: 60.0)),
+            AULineSegment(start: AUPoint(x: 20.0, y: 80.0), end: AUPoint(x: 180.0, y: 80.0))
+        ].map { AnyUprightGeometry.normalizedObjectLine(fromImageLine: $0, size: size) }
+
+        try assertNil(AnyUprightGeometry.imageQuad(fromNormalizedObjectLines: parallelLines, size: size), "four horizontal lines cannot form a quad")
+        try assertNil(AnyUprightGeometry.imageQuad(fromNormalizedObjectLines: Array(parallelLines.prefix(3)), size: size), "three lines cannot form a quad")
+        try assertNil(
+            AnyUprightGeometry.orderedImageQuad(from: [
+                AUPoint(x: 10.0, y: 10.0),
+                AUPoint(x: 10.0, y: 10.0),
+                AUPoint(x: 100.0, y: 100.0),
+                AUPoint(x: 20.0, y: 90.0)
+            ]),
+            "duplicate points cannot form a quad"
+        )
+    }
+
+    static func testDetectionSelectionStateFiltersByPrimitiveKind() throws {
+        var selection = AUQuadDetectionSelectionState()
+        let corner = AUQuadDetectionPrimitiveID(kind: .corner, index: 3)
+        let edge = AUQuadDetectionPrimitiveID(kind: .edge, index: 2)
+
+        selection.toggle(corner)
+        try assertTrue(selection.shouldShowCorner(index: 4), "selecting a point should keep other points visible")
+        try assertTrue(!selection.shouldShowEdge(index: 2), "selecting a point should hide lines")
+        selection.toggle(edge)
+        try assertTrue(selection.selectedEdgeIndexes.isEmpty, "hidden edge selection should be ignored while points are selected")
+        selection.toggle(corner)
+        try assertTrue(selection.isEmpty, "repeating the same point should cancel selection")
+        try assertTrue(selection.shouldShowCorner(index: 4), "empty selection should show points")
+        try assertTrue(selection.shouldShowEdge(index: 2), "empty selection should show lines")
+
+        selection.toggle(edge)
+        try assertTrue(!selection.shouldShowCorner(index: 3), "selecting a line should hide points")
+        try assertTrue(selection.shouldShowEdge(index: 8), "selecting a line should keep other lines visible")
     }
 
     static func testQuadSourceFullFrameSelectionHasNoDYDrift() throws {

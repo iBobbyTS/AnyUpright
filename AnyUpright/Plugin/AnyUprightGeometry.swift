@@ -67,6 +67,10 @@ struct AULineSegment: Equatable {
         hypot(end.x - start.x, end.y - start.y)
     }
 
+    var midpoint: AUPoint {
+        AUPoint(x: (start.x + end.x) / 2.0, y: (start.y + end.y) / 2.0)
+    }
+
     func distance(to point: AUPoint) -> Double {
         let dx = end.x - start.x
         let dy = end.y - start.y
@@ -100,6 +104,84 @@ enum AUQuadCorner {
     case topRight
     case bottomRight
     case bottomLeft
+}
+
+enum AUQuadDetectionPrimitiveKind {
+    case corner
+    case edge
+}
+
+struct AUQuadDetectionPrimitiveID: Equatable {
+    var kind: AUQuadDetectionPrimitiveKind
+    var index: Int
+}
+
+struct AUQuadDetectionSelectionState: Equatable {
+    var selectedCornerIndexes: Set<Int> = []
+    var selectedEdgeIndexes: Set<Int> = []
+    var hover: AUQuadDetectionPrimitiveID?
+
+    var isEmpty: Bool {
+        selectedCornerIndexes.isEmpty && selectedEdgeIndexes.isEmpty
+    }
+
+    var selectsCorners: Bool {
+        !selectedCornerIndexes.isEmpty
+    }
+
+    var selectsEdges: Bool {
+        !selectedEdgeIndexes.isEmpty
+    }
+
+    mutating func clear() {
+        selectedCornerIndexes.removeAll()
+        selectedEdgeIndexes.removeAll()
+        hover = nil
+    }
+
+    mutating func toggle(_ primitive: AUQuadDetectionPrimitiveID) {
+        switch primitive.kind {
+        case .corner:
+            guard selectedEdgeIndexes.isEmpty else {
+                return
+            }
+            if selectedCornerIndexes.contains(primitive.index) {
+                selectedCornerIndexes.remove(primitive.index)
+            } else {
+                selectedCornerIndexes.insert(primitive.index)
+            }
+        case .edge:
+            guard selectedCornerIndexes.isEmpty else {
+                return
+            }
+            if selectedEdgeIndexes.contains(primitive.index) {
+                selectedEdgeIndexes.remove(primitive.index)
+            } else {
+                selectedEdgeIndexes.insert(primitive.index)
+            }
+        }
+    }
+
+    func shouldShowCorner(index: Int) -> Bool {
+        !selectsEdges
+    }
+
+    func shouldShowEdge(index: Int) -> Bool {
+        !selectsCorners
+    }
+
+    func isSelected(_ primitive: AUQuadDetectionPrimitiveID) -> Bool {
+        switch primitive.kind {
+        case .corner:
+            return selectedCornerIndexes.contains(primitive.index)
+        case .edge:
+            return selectedEdgeIndexes.contains(primitive.index)
+        }
+    }
+
+    func isActive(_ primitive: AUQuadDetectionPrimitiveID) -> Bool {
+        hover == primitive || isSelected(primitive)
+    }
 }
 
 struct AULineCandidate: Equatable {
@@ -437,6 +519,17 @@ enum AnyUprightGeometry {
         )
     }
 
+    static func imagePoint(fromNormalizedObjectPoint point: AUPoint, size: AUSize) -> AUPoint {
+        imagePoint(fromNormalizedLowerLeftPoint: point, size: size)
+    }
+
+    static func imageLine(fromNormalizedObjectLine line: AULineSegment, size: AUSize) -> AULineSegment {
+        AULineSegment(
+            start: imagePoint(fromNormalizedObjectPoint: line.start, size: size),
+            end: imagePoint(fromNormalizedObjectPoint: line.end, size: size)
+        )
+    }
+
     static func imageQuad(fromNormalizedLowerLeftQuad quad: AUQuad, size: AUSize) -> AUQuad {
         AUQuad(
             topLeft: imagePoint(fromNormalizedLowerLeftPoint: quad.topLeft, size: size),
@@ -446,6 +539,75 @@ enum AnyUprightGeometry {
         )
     }
 
+    static func orderedImageQuad(from points: [AUPoint]) -> AUQuad? {
+        guard points.count == 4, points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else {
+            return nil
+        }
+
+        let topLeftIndex = points.indices.min { lhs, rhs in
+            (points[lhs].x + points[lhs].y) < (points[rhs].x + points[rhs].y)
+        }
+        let bottomRightIndex = points.indices.max { lhs, rhs in
+            (points[lhs].x + points[lhs].y) < (points[rhs].x + points[rhs].y)
+        }
+        let topRightIndex = points.indices.max { lhs, rhs in
+            (points[lhs].x - points[lhs].y) < (points[rhs].x - points[rhs].y)
+        }
+        let bottomLeftIndex = points.indices.max { lhs, rhs in
+            (points[lhs].y - points[lhs].x) < (points[rhs].y - points[rhs].x)
+        }
+
+        guard let topLeftIndex,
+              let topRightIndex,
+              let bottomRightIndex,
+              let bottomLeftIndex else {
+            return nil
+        }
+
+        let uniqueIndexes = Set([topLeftIndex, topRightIndex, bottomRightIndex, bottomLeftIndex])
+        guard uniqueIndexes.count == 4 else {
+            return nil
+        }
+
+        let quad = AUQuad(
+            topLeft: points[topLeftIndex],
+            topRight: points[topRightIndex],
+            bottomRight: points[bottomRightIndex],
+            bottomLeft: points[bottomLeftIndex]
+        )
+        return isConvexImageQuad(quad) ? quad : nil
+    }
+
+    static func imageQuad(fromNormalizedObjectPoints points: [AUPoint], size: AUSize) -> AUQuad? {
+        orderedImageQuad(from: points.map { imagePoint(fromNormalizedObjectPoint: $0, size: size) })
+    }
+
+    static func imageQuad(fromNormalizedObjectLines lines: [AULineSegment], size: AUSize) -> AUQuad? {
+        guard lines.count == 4 else {
+            return nil
+        }
+
+        let imageLines = lines.map { imageLine(fromNormalizedObjectLine: $0, size: size) }
+        let horizontal = imageLines.filter { abs($0.end.y - $0.start.y) <= abs($0.end.x - $0.start.x) }
+            .sorted { $0.midpoint.y < $1.midpoint.y }
+        let vertical = imageLines.filter { abs($0.end.y - $0.start.y) > abs($0.end.x - $0.start.x) }
+            .sorted { $0.midpoint.x < $1.midpoint.x }
+
+        guard horizontal.count == 2, vertical.count == 2 else {
+            return nil
+        }
+
+        guard let topLeft = intersection(of: horizontal[0], and: vertical[0]),
+              let topRight = intersection(of: horizontal[0], and: vertical[1]),
+              let bottomRight = intersection(of: horizontal[1], and: vertical[1]),
+              let bottomLeft = intersection(of: horizontal[1], and: vertical[0]) else {
+            return nil
+        }
+
+        let quad = AUQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft)
+        return isConvexImageQuad(quad) ? quad : nil
+    }
+
     static func normalizedObjectPoint(fromImagePoint point: AUPoint, size: AUSize) -> AUPoint {
         let width = max(size.width, 1.0)
         let height = max(size.height, 1.0)
@@ -453,6 +615,47 @@ enum AnyUprightGeometry {
             x: min(1.0, max(0.0, point.x / width)),
             y: min(1.0, max(0.0, 1.0 - point.y / height))
         )
+    }
+
+    static func isConvexImageQuad(_ quad: AUQuad) -> Bool {
+        let points = [quad.topLeft, quad.topRight, quad.bottomRight, quad.bottomLeft]
+        guard points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else {
+            return false
+        }
+
+        var previousSign = 0.0
+        for index in points.indices {
+            let current = points[index]
+            let next = points[(index + 1) % points.count]
+            let afterNext = points[(index + 2) % points.count]
+            let cross = (next.x - current.x) * (afterNext.y - next.y) - (next.y - current.y) * (afterNext.x - next.x)
+            guard abs(cross) > 0.000001 else {
+                return false
+            }
+
+            let sign = cross > 0.0 ? 1.0 : -1.0
+            if previousSign == 0.0 {
+                previousSign = sign
+            } else if sign != previousSign {
+                return false
+            }
+        }
+
+        return abs(polygonArea(points)) > 0.000001
+    }
+
+    private static func polygonArea(_ points: [AUPoint]) -> Double {
+        guard points.count >= 3 else {
+            return 0.0
+        }
+
+        var area = 0.0
+        for index in points.indices {
+            let current = points[index]
+            let next = points[(index + 1) % points.count]
+            area += current.x * next.y - next.x * current.y
+        }
+        return area / 2.0
     }
 
     static func normalizedObjectQuad(fromImageQuad quad: AUQuad, size: AUSize) -> AUQuad {

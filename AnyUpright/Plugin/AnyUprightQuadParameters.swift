@@ -30,6 +30,7 @@ enum QuadParam: UInt32 {
     case bottomLeftPixelY = 215
     case detectSourceQuad = 216
     case detectionScoreThreshold = 217
+    case chooseFromDetections = 218
 }
 
 enum QuadGroup: UInt32, CaseIterable {
@@ -58,12 +59,14 @@ struct QuadSourceDetectionCornerSpec {
 }
 
 struct QuadSourceDetectionEdge {
+    var index: Int
     var spec: QuadSourceDetectionEdgeSpec
     var line: AULineSegment
     var score: Double
 }
 
 struct QuadSourceDetectionCorner {
+    var index: Int
     var spec: QuadSourceDetectionCornerSpec
     var point: AUPoint
     var score: Double
@@ -196,11 +199,21 @@ func quadCornerOffsets(from state: AnyUprightParameterState) -> AUCornerOffsets 
 
 func quadDetectionScoreThreshold(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> Double {
     guard let paramAPI else {
-        return 0.5
+        return 1.0
     }
 
     let value = quadFloatParam(paramAPI, .detectionScoreThreshold, time)
     return min(1.0, max(0.0, Double(value)))
+}
+
+func quadChooseFromDetections(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> Bool {
+    guard let paramAPI else {
+        return false
+    }
+
+    var value = ObjCBool(false)
+    paramAPI.getBoolValue(&value, fromParameter: QuadParam.chooseFromDetections.rawValue, at: time)
+    return value.boolValue
 }
 
 func quadSourceDetectionEdges(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> [QuadSourceDetectionEdge] {
@@ -208,7 +221,7 @@ func quadSourceDetectionEdges(at time: CMTime, paramAPI: FxParameterRetrievalAPI
         return []
     }
 
-    return AnyUprightQuadSourceDetectionEdges.specs.compactMap { spec in
+    return AnyUprightQuadSourceDetectionEdges.specs.enumerated().compactMap { index, spec in
         var visible = ObjCBool(false)
         paramAPI.getBoolValue(&visible, fromParameter: spec.visible, at: time)
         guard visible.boolValue else {
@@ -216,6 +229,7 @@ func quadSourceDetectionEdges(at time: CMTime, paramAPI: FxParameterRetrievalAPI
         }
 
         return QuadSourceDetectionEdge(
+            index: index,
             spec: spec,
             line: AULineSegment(
                 start: AUPoint(
@@ -237,7 +251,7 @@ func quadSourceDetectionCorners(at time: CMTime, paramAPI: FxParameterRetrievalA
         return []
     }
 
-    return AnyUprightQuadSourceDetectionCorners.specs.compactMap { spec in
+    return AnyUprightQuadSourceDetectionCorners.specs.enumerated().compactMap { index, spec in
         var visible = ObjCBool(false)
         paramAPI.getBoolValue(&visible, fromParameter: spec.visible, at: time)
         guard visible.boolValue else {
@@ -245,6 +259,7 @@ func quadSourceDetectionCorners(at time: CMTime, paramAPI: FxParameterRetrievalA
         }
 
         return QuadSourceDetectionCorner(
+            index: index,
             spec: spec,
             point: AUPoint(
                 x: quadFloatParam(paramAPI, spec.x, time),
@@ -265,12 +280,21 @@ func addQuadSourceDetectionScoreThreshold(_ paramAPI: FxParameterCreationAPI_v5,
     paramAPI.addFloatSlider(
         withName: "Score Threshold",
         parameterID: QuadParam.detectionScoreThreshold.rawValue,
-        defaultValue: 0.0,
+        defaultValue: 1.0,
         parameterMin: 0.0,
         parameterMax: 1.0,
         sliderMin: 0.0,
         sliderMax: 1.0,
         delta: 0.01,
+        parameterFlags: parameterFlags
+    )
+}
+
+func addQuadChooseFromDetections(_ paramAPI: FxParameterCreationAPI_v5, parameterFlags: FxParameterFlags) {
+    paramAPI.addToggleButton(
+        withName: "Choose from detections",
+        parameterID: QuadParam.chooseFromDetections.rawValue,
+        defaultValue: false,
         parameterFlags: parameterFlags
     )
 }

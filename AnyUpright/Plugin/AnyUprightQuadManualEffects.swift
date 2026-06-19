@@ -31,6 +31,7 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
                 defaultValue: true,
                 parameterFlags: defaultFlags()
             )
+            addQuadChooseFromDetections(paramAPI, parameterFlags: defaultFlags())
             addQuadSourceDetectionScoreThreshold(paramAPI, parameterFlags: defaultFlags())
         } else {
             paramAPI.addToggleButton(
@@ -39,6 +40,7 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
                 defaultValue: false,
                 parameterFlags: hiddenFlags()
             )
+            addQuadChooseFromDetections(paramAPI, parameterFlags: hiddenFlags())
         }
 
         let cornerGroupFlags = showsCornerParameters ? collapsedFlags() : hiddenCollapsedFlags()

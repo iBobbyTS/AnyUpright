@@ -86,6 +86,7 @@
 			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
+				<string>FxAnalyzer</string>
 			</array>
 			<key>uuid</key>
 			<string>9BB4C7D9-9384-4C8F-927D-4F716DA78B14</string>

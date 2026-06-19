@@ -54,7 +54,7 @@ struct ValidateFxPlugManifest {
                 displayNameKey: "AnyUpright::Source Quad Name",
                 descriptionKey: "AnyUpright::Source Quad Description",
                 uuid: "9BB4C7D9-9384-4C8F-927D-4F716DA78B14",
-                protocols: ["FxFilter"],
+                protocols: ["FxFilter", "FxAnalyzer"],
                 localizedDisplayName: "AnyUpright Source Quad",
                 localizedDescription: "Select a source quadrilateral and stretch it to the full frame."
             ),

@@ -48,6 +48,17 @@ struct UprightAnalysisScratchState {
     var requestedAnalysisTime = CMTime.zero
 }
 
+struct QuadDetectedSourceQuad {
+    var quad: AUQuad
+    var size: AUSize
+}
+
+struct QuadAnalysisScratchState {
+    var detectedSourceQuad: QuadDetectedSourceQuad?
+    var detectedSourceQuadTime = CMTime.zero
+    var requestedAnalysisTime = CMTime.zero
+}
+
 enum AnyUprightAnalysisImage {
     static func ciImage(from frame: FxImageTile) -> CIImage? {
         guard let ioSurface = frame.ioSurface else {

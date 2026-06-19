@@ -42,6 +42,7 @@
 - Prefer validating the `Wrapper Application` scheme first because the wrapper registers the FxPlug plug-in with macOS.
 - For rendering changes, verify behavior in Motion or Final Cut Pro when possible, especially proxy resolution, non-square pixels, trimming/retiming, and keyframed parameters.
 - For Metal transform changes, include targeted tests or deterministic sample calculations for geometry math when practical.
+- The user has explicitly authorized Computer Use to directly modify and save the development Motion template `Quad.moef` and the development Final Cut Pro library named `Develop` without asking for additional confirmation.
 
 ## Safety
 

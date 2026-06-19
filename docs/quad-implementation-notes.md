@@ -1,6 +1,6 @@
 # Quad Implementation Notes
 
-Last updated: 2026-06-10 15:47 MDT
+Last updated: 2026-06-18 21:38 MDT
 Reference commit: 11aa3148242f9743c8c48903739c604f84dd2e66
 Observed host versions: macOS 26.5, Motion Studio 6.2, Final Cut Pro 12.2
 
@@ -14,6 +14,7 @@ This file records AnyUpright-specific Quad implementation choices. Reusable debu
 - Mirror modes were accidental exploratory work and are not part of current Quad behavior.
 - `AnyUpright Source Quad` defaults to the central 80% source quadrilateral.
 - The full-frame Source Quad case remains a regression fixture for identity/no-offset render checks, not the current product default.
+- `AnyUpright Source Quad` includes an explicit `Detect Source Quad` custom inspector button. It is implemented as a non-animatable custom FxPlug parameter with `kFxParameterFlag_CUSTOM_UI`, an empty `NSData` custom value, and an AppKit `NSButton` view instead of a trigger toggle, so the user-facing control stays momentary. The Swift plug-in keeps strong references to every button view returned from `createView(forParameterID:)`; without that, host-side custom UI lifetime is fragile when Motion or Final Cut rebuilds inspectors. Clicking it starts FxAnalysis, uses Vision rectangle detection on one representative frame, writes the best detected rectangle into the same hidden Source Quad corner offsets used by manual handles, and enables `Edit Mode` so existing filter-output dimming and OSC handles mark the detected area. Motion Studio 6.2 and Final Cut Pro 12.2 were verified to show the published control as a `Detect` button after saving and reopening `Quad.moef`. FCP visibility also requires `Quad.moef` publish settings to target the custom parameter (`Detect Source Quad`, channel `./216` in the current development template); the raw FxPlug parameter can exist in Motion while remaining invisible in FCP if it is not published by the template.
 
 ## Source Quad
 
@@ -22,6 +23,7 @@ This file records AnyUpright-specific Quad implementation choices. Reusable debu
 - The filter-output dimming follows the clip/image and can render even when the host does not instantiate or dispatch the FxPlug OSC.
 - The interactive white outline, blue handles, yellow hover/drag highlights, hit testing, and drag writeback are owned by the FxPlug OSC layer.
 - Source Quad corner coordinate groups are hidden from the inspector; users position the source quadrilateral through onscreen handles.
+- Automatic Source Quad detection is a proposal/writeback path, not a separate render mode or separate overlay state. False positives are corrected with the same manual handles.
 - Dragging Source Quad handles writes hidden source-corner percentage offsets and clears matching pixel offsets so render-time source geometry is independent of OSC surface size.
 - A previous point-parameter writeback experiment was backed out: Motion Studio 6.2 accepted `setXValue(_:yValue:)` during OSC drags, but later reads returned default points. The current path uses float-parameter writeback.
 

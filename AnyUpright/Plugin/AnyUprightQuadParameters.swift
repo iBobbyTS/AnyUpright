@@ -28,6 +28,7 @@ enum QuadParam: UInt32 {
     case bottomLeftPercentY = 213
     case bottomLeftPixelX = 214
     case bottomLeftPixelY = 215
+    case detectSourceQuad = 216
 }
 
 enum QuadGroup: UInt32, CaseIterable {

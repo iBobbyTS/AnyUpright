@@ -78,7 +78,7 @@ struct AuditFeatureSurface {
 
         let expected = [
             FeaturePluginExpectation(className: "AnyUprightHorizonManualPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
-            FeaturePluginExpectation(className: "AnyUprightQuadManualPlugIn", protocols: ["FxFilter"]),
+            FeaturePluginExpectation(className: "AnyUprightQuadManualPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
             FeaturePluginExpectation(className: "AnyUprightQuadOutputCornersPlugIn", protocols: ["FxFilter"]),
             FeaturePluginExpectation(className: "AnyUprightQuadManualOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]),
             FeaturePluginExpectation(className: "AnyUprightQuadOutputCornersOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["81C621CF-4119-46E9-BC04-47A1539A8B54"]),
@@ -108,6 +108,17 @@ struct AuditFeatureSurface {
     private static func auditQuad(_ effects: String, geometry: String, overlay: String, metal: String) throws {
         try require(effects, "class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn", "Source Quad is registered as its own filter")
         try require(effects, "class AnyUprightQuadOutputCornersPlugIn: AnyUprightQuadModePlugIn", "Outer Corners is registered as its own filter")
+        try require(effects, "FxAnalyzer", "Source Quad supports explicit frame analysis")
+        try require(effects, "Detect Source Quad", "Source Quad exposes explicit source-quadrilateral detection")
+        try require(effects, "addCustomParameter", "Source Quad detection uses a custom parameter for button UI")
+        try require(effects, "kFxParameterFlag_CUSTOM_UI", "Source Quad detection replaces the standard parameter UI with a button view")
+        try require(effects, "FxCustomParameterViewHost_v2", "Source Quad provides a custom inspector view for its detection button")
+        try require(effects, "defaultValue: NSData()", "Source Quad custom button uses data-backed custom value storage")
+        try require(effects, "detectSourceQuadButtonViews.append(view)", "Source Quad retains every Swift custom parameter view it returns")
+        try require(effects, "createView(forParameterID", "Source Quad creates the custom detection button view")
+        try require(effects, "NSButton(title: \"Detect\"", "Source Quad detection is exposed as a momentary button")
+        try require(effects, "VNDetectRectanglesRequest()", "Source Quad uses Vision rectangle detection")
+        try require(effects, "sourceQuadOffsets(forSourceQuad:", "Source Quad detection writes existing quad offsets")
         try require(effects, "override var fixedQuadMode: AUQuadTransformMode", "Quad filters choose fixed modes")
         try require(effects, "class AnyUprightQuadOutputCornersOSCPlugIn: AnyUprightQuadManualOSCPlugIn", "Outer Corners exposes its own onscreen control")
         try require(effects, "parameterFlags: hiddenFlags()", "Quad fixed mode parameter is hidden from the inspector")

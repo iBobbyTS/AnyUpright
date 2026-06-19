@@ -430,6 +430,38 @@ enum AnyUprightGeometry {
         quad(from: offsets, base: sourceQuadDefault(size), size: size)
     }
 
+    static func imagePoint(fromNormalizedLowerLeftPoint point: AUPoint, size: AUSize) -> AUPoint {
+        AUPoint(
+            x: point.x * size.width,
+            y: (1.0 - point.y) * size.height
+        )
+    }
+
+    static func imageQuad(fromNormalizedLowerLeftQuad quad: AUQuad, size: AUSize) -> AUQuad {
+        AUQuad(
+            topLeft: imagePoint(fromNormalizedLowerLeftPoint: quad.topLeft, size: size),
+            topRight: imagePoint(fromNormalizedLowerLeftPoint: quad.topRight, size: size),
+            bottomRight: imagePoint(fromNormalizedLowerLeftPoint: quad.bottomRight, size: size),
+            bottomLeft: imagePoint(fromNormalizedLowerLeftPoint: quad.bottomLeft, size: size)
+        )
+    }
+
+    static func sourceQuadOffsets(forSourceQuad quad: AUQuad, size: AUSize) -> AUCornerOffsets {
+        func objectPoint(fromImagePoint point: AUPoint) -> AUPoint {
+            AUPoint(
+                x: point.x / max(size.width, 1.0),
+                y: 1.0 - point.y / max(size.height, 1.0)
+            )
+        }
+
+        return AUCornerOffsets(
+            topLeftPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: quad.topLeft), corner: .topLeft),
+            topRightPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: quad.topRight), corner: .topRight),
+            bottomRightPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: quad.bottomRight), corner: .bottomRight),
+            bottomLeftPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: quad.bottomLeft), corner: .bottomLeft)
+        )
+    }
+
     private static func quad(from offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUQuad {
         func apply(_ base: AUPoint, percent: AUPoint, pixels: AUPoint) -> AUPoint {
             AUPoint(

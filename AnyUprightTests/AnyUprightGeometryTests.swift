@@ -27,6 +27,7 @@ struct AnyUprightGeometryTests {
         try testQuadOutputCornersKeepTheirNamedPositions()
         try testQuadSourceDefaultsToCentralEightyPercent()
         try testQuadSourceObjectDragPreservesCentralBase()
+        try testDetectedSourceQuadOffsetsUseImageCoordinates()
         try testQuadSourceFullFrameSelectionHasNoDYDrift()
         try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
         try testQuadSourceOSCPixelDragDoesNotFlipYAgain()
@@ -207,6 +208,34 @@ struct AnyUprightGeometryTests {
         try assertEqual(percent, AUPoint(x: 0.10, y: -0.10), "source dragged top-left percent offset")
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "source dragged top-left object point")
         try assertEqual(sourceQuad.topLeft, AUPoint(x: 40.0, y: 20.0), "source dragged top-left source point")
+    }
+
+    static func testDetectedSourceQuadOffsetsUseImageCoordinates() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let normalizedLowerLeftQuad = AUQuad(
+            topLeft: AUPoint(x: 0.20, y: 0.80),
+            topRight: AUPoint(x: 0.85, y: 0.70),
+            bottomRight: AUPoint(x: 0.90, y: 0.15),
+            bottomLeft: AUPoint(x: 0.15, y: 0.10)
+        )
+        let detectedSourceQuad = AnyUprightGeometry.imageQuad(
+            fromNormalizedLowerLeftQuad: normalizedLowerLeftQuad,
+            size: size
+        )
+        let offsets = AnyUprightGeometry.sourceQuadOffsets(forSourceQuad: detectedSourceQuad, size: size)
+        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+
+        try assertEqual(detectedSourceQuad.topLeft, AUPoint(x: 40.0, y: 20.0), "detected top-left image point")
+        try assertEqual(detectedSourceQuad.topRight, AUPoint(x: 170.0, y: 30.0), "detected top-right image point")
+        try assertEqual(detectedSourceQuad.bottomRight, AUPoint(x: 180.0, y: 85.0), "detected bottom-right image point")
+        try assertEqual(detectedSourceQuad.bottomLeft, AUPoint(x: 30.0, y: 90.0), "detected bottom-left image point")
+        try assertEqual(sourceQuad.topLeft, detectedSourceQuad.topLeft, "source quad top-left writeback")
+        try assertEqual(sourceQuad.topRight, detectedSourceQuad.topRight, "source quad top-right writeback")
+        try assertEqual(sourceQuad.bottomRight, detectedSourceQuad.bottomRight, "source quad bottom-right writeback")
+        try assertEqual(sourceQuad.bottomLeft, detectedSourceQuad.bottomLeft, "source quad bottom-left writeback")
+        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "object top-left after detection")
+        try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.15, y: 0.10), "object bottom-left after detection")
     }
 
     static func testQuadSourceFullFrameSelectionHasNoDYDrift() throws {

@@ -258,6 +258,7 @@ class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustom
 
         performParameterAction {
             settingAPI.setBoolValue(true, toParameter: QuadParam.showCornerAdjuster.rawValue, at: writeTime)
+            settingAPI.setBoolValue(true, toParameter: QuadParam.chooseFromDetections.rawValue, at: writeTime)
             writeQuadSourceDetectionPrimitives(primitives, size: detectedSize, settingAPI: settingAPI, time: writeTime)
         }
         quadAnalysisDebugLog("cleanup pending=\(pending) writeTime=\(writeTime) edges=\(primitives.edges.count) corners=\(primitives.corners.count)")

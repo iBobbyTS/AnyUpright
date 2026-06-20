@@ -93,15 +93,18 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let detectedEdges = quadSourceDetectionEdges(at: time, paramAPI: paramAPI)
         let detectedCorners = quadSourceDetectionCorners(at: time, paramAPI: paramAPI)
         let detectionThreshold = quadDetectionScoreThreshold(at: time, paramAPI: paramAPI)
-        let selection = chooseFromDetections
-            ? pruneDetectionSelection(edges: detectedEdges, corners: detectedCorners, threshold: detectionThreshold, forceUpdate: nil)
-            : AUQuadDetectionSelectionState()
-        let detectionSegments = sourceDetectionOverlaySegments(
-            edges: detectedEdges,
-            corners: detectedCorners,
-            threshold: detectionThreshold,
-            selection: selection
-        )
+        let detectionSegments: [AUOSCStyledSegment]
+        if chooseFromDetections {
+            let selection = pruneDetectionSelection(edges: detectedEdges, corners: detectedCorners, threshold: detectionThreshold, forceUpdate: nil)
+            detectionSegments = sourceDetectionOverlaySegments(
+                edges: detectedEdges,
+                corners: detectedCorners,
+                threshold: detectionThreshold,
+                selection: selection
+            )
+        } else {
+            detectionSegments = []
+        }
         debugLog("draw-source seq=\(debugSequence) detection choose=\(chooseFromDetections) edges=\(detectedEdges.count) corners=\(detectedCorners.count) threshold=\(detectionThreshold) segments=\(detectionSegments.count)")
         overlayRenderer.renderStyledSegments(
             detectionSegments + sourceQuadOverlaySegments(for: displayPart, quad: quad),

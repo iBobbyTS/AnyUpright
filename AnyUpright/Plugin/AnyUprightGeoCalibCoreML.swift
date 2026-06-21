@@ -105,6 +105,11 @@ struct AUGeoCalibCoreMLNeuralInferenceSession {
         )
     }
 
+    func warmUp() throws {
+        let zeros = Array(repeating: Float(0), count: product(inputShape))
+        _ = try run(inputRGB: zeros, inputShape: inputShape)
+    }
+
     private static func multiArrayShape(_ description: MLFeatureDescription, name: String) throws -> [Int] {
         guard description.type == .multiArray,
               let constraint = description.multiArrayConstraint else {

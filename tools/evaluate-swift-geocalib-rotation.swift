@@ -20,6 +20,7 @@ private struct SwiftGeoCalibEvaluationOptions {
     var metalLibrary: URL?
     var coreMLModel: URL?
     var coreMLComputeUnits = "all"
+    var warmUpNeural = false
     var maxImages: Int?
     var offset = 0
     var maxAnalysisDimension = 1920
@@ -138,6 +139,9 @@ struct SwiftGeoCalibRotationEvaluator {
             }
             neuralSession = .metal(session)
         }
+        if options.warmUpNeural {
+            try neuralSession.warmUp()
+        }
 
         let context = CIContext(options: nil)
         let predictionsFile = try openPredictionsFile(predictionsURL, appending: options.resume && !existingPredictions.isEmpty)
@@ -233,6 +237,8 @@ struct SwiftGeoCalibRotationEvaluator {
                 options.coreMLModel = resolvedURL(try requireValue())
             case "--coreml-compute-units":
                 options.coreMLComputeUnits = try requireValue()
+            case "--warmup-neural":
+                options.warmUpNeural = true
             case "--max-images":
                 options.maxImages = try parsePositiveInt(try requireValue(), label: arg)
             case "--offset":
@@ -285,6 +291,15 @@ private enum EvaluationNeuralSession {
                 neuralOutput: neuralOutput,
                 verifierEstimates: verifierEstimates
             )
+        }
+    }
+
+    func warmUp() throws {
+        switch self {
+        case .metal:
+            return
+        case .coreML(let session):
+            try session.warmUp()
         }
     }
 }
@@ -906,6 +921,7 @@ private func printUsageAndExit() -> Never {
           --metal-library PATH           Prebuilt default.metallib
           --coreml-model PATH            Core ML neural-forward .mlpackage/.mlmodel/.mlmodelc
           --coreml-compute-units NAME    all, cpuOnly, cpuAndGPU, cpuAndNeuralEngine
+          --warmup-neural                Run an untimed neural warm-up before per-image evaluation
           --max-images N                 Evaluate only the first N rows after --offset
           --offset N                     Skip first N rows
           --max-analysis-dimension N     Long-edge cap before GeoCalib preprocessing

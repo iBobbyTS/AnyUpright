@@ -8,6 +8,7 @@
 
 import CoreGraphics
 import CoreImage
+import CoreML
 import Dispatch
 import Foundation
 
@@ -17,6 +18,8 @@ private struct SwiftGeoCalibEvaluationOptions {
     var runtimeBundle = URL(fileURLWithPath: "AnyUpright/Plugin/GeoCalibRuntime")
     var metalSource = URL(fileURLWithPath: "AnyUpright/Plugin/AnyUprightGeoCalib.metal")
     var metalLibrary: URL?
+    var coreMLModel: URL?
+    var coreMLComputeUnits = "all"
     var maxImages: Int?
     var offset = 0
     var maxAnalysisDimension = 1920
@@ -111,18 +114,29 @@ struct SwiftGeoCalibRotationEvaluator {
             throw EvaluationFailure.failed("no dataset records to evaluate")
         }
 
-        let runtimeBundle = try AUGeoCalibRuntimeBundle(rootURL: options.runtimeBundle)
-        let session: AUGeoCalibNeuralInferenceSession
-        if let metalLibrary = options.metalLibrary {
-            session = try AUGeoCalibNeuralInferenceSession(
-                runtimeBundle: runtimeBundle,
-                metalLibraryURL: metalLibrary
+        let neuralSession: EvaluationNeuralSession
+        if let coreMLModel = options.coreMLModel {
+            neuralSession = .coreML(
+                try AUGeoCalibCoreMLNeuralInferenceSession(
+                    modelURL: coreMLModel,
+                    computeUnits: try coreMLComputeUnits(named: options.coreMLComputeUnits)
+                )
             )
         } else {
-            session = try AUGeoCalibNeuralInferenceSession(
-                runtimeBundle: runtimeBundle,
-                metalSource: options.metalSource
-            )
+            let runtimeBundle = try AUGeoCalibRuntimeBundle(rootURL: options.runtimeBundle)
+            let session: AUGeoCalibNeuralInferenceSession
+            if let metalLibrary = options.metalLibrary {
+                session = try AUGeoCalibNeuralInferenceSession(
+                    runtimeBundle: runtimeBundle,
+                    metalLibraryURL: metalLibrary
+                )
+            } else {
+                session = try AUGeoCalibNeuralInferenceSession(
+                    runtimeBundle: runtimeBundle,
+                    metalSource: options.metalSource
+                )
+            }
+            neuralSession = .metal(session)
         }
 
         let context = CIContext(options: nil)
@@ -145,7 +159,7 @@ struct SwiftGeoCalibRotationEvaluator {
                 try evaluateRecord(
                     record,
                     options: options,
-                    neuralSession: session,
+                    neuralSession: neuralSession,
                     context: context
                 )
             }
@@ -215,6 +229,10 @@ struct SwiftGeoCalibRotationEvaluator {
                 options.metalSource = resolvedURL(try requireValue())
             case "--metal-library":
                 options.metalLibrary = resolvedURL(try requireValue())
+            case "--coreml-model":
+                options.coreMLModel = resolvedURL(try requireValue())
+            case "--coreml-compute-units":
+                options.coreMLComputeUnits = try requireValue()
             case "--max-images":
                 options.maxImages = try parsePositiveInt(try requireValue(), label: arg)
             case "--offset":
@@ -242,10 +260,39 @@ struct SwiftGeoCalibRotationEvaluator {
     }
 }
 
+private enum EvaluationNeuralSession {
+    case metal(AUGeoCalibNeuralInferenceSession)
+    case coreML(AUGeoCalibCoreMLNeuralInferenceSession)
+
+    func detect(
+        preprocessedImage: AUGeoCalibPreprocessedImage,
+        verifierEstimates: [AUGeoCalibHorizonVerifierEstimate]
+    ) throws -> AUGeoCalibHorizonDetectionResult {
+        switch self {
+        case .metal(let session):
+            return try AUGeoCalibHorizonDetector.detect(
+                preprocessedImage: preprocessedImage,
+                neuralSession: session,
+                verifierEstimates: verifierEstimates
+            )
+        case .coreML(let session):
+            let neuralOutput = try session.run(
+                inputRGB: preprocessedImage.inputRGBNCHW,
+                inputShape: preprocessedImage.inputShape
+            )
+            return try AUGeoCalibHorizonDetector.detect(
+                preprocessedImage: preprocessedImage,
+                neuralOutput: neuralOutput,
+                verifierEstimates: verifierEstimates
+            )
+        }
+    }
+}
+
 private func evaluateRecord(
     _ record: DatasetRecord,
     options: SwiftGeoCalibEvaluationOptions,
-    neuralSession: AUGeoCalibNeuralInferenceSession,
+    neuralSession: EvaluationNeuralSession,
     context: CIContext
 ) throws -> PredictionRecord {
     let imageURL = options.dataset.appendingPathComponent("images").appendingPathComponent(record.filename)
@@ -279,9 +326,8 @@ private func evaluateRecord(
     let verifierTime = elapsedMilliseconds(since: verifierStart)
 
     let detectStart = nowNanos()
-    let result = try AUGeoCalibHorizonDetector.detect(
+    let result = try neuralSession.detect(
         preprocessedImage: preprocessed,
-        neuralSession: neuralSession,
         verifierEstimates: verifiers
     )
     let detectTime = elapsedMilliseconds(since: detectStart)
@@ -829,6 +875,23 @@ private func parseNonNegativeInt(_ value: String, label: String) throws -> Int {
     return intValue
 }
 
+private func coreMLComputeUnits(named name: String) throws -> MLComputeUnits {
+    switch name {
+    case "all":
+        return .all
+    case "cpuOnly":
+        return .cpuOnly
+    case "cpuAndGPU":
+        return .cpuAndGPU
+    case "cpuAndNeuralEngine":
+        return .cpuAndNeuralEngine
+    default:
+        throw EvaluationFailure.failed(
+            "--coreml-compute-units must be one of all, cpuOnly, cpuAndGPU, cpuAndNeuralEngine"
+        )
+    }
+}
+
 private func printUsageAndExit() -> Never {
     print(
         """
@@ -841,6 +904,8 @@ private func printUsageAndExit() -> Never {
           --runtime-bundle PATH          AnyUpright GeoCalibRuntime directory
           --metal-source PATH            Metal source file, used when --metal-library is omitted
           --metal-library PATH           Prebuilt default.metallib
+          --coreml-model PATH            Core ML neural-forward .mlpackage/.mlmodel/.mlmodelc
+          --coreml-compute-units NAME    all, cpuOnly, cpuAndGPU, cpuAndNeuralEngine
           --max-images N                 Evaluate only the first N rows after --offset
           --offset N                     Skip first N rows
           --max-analysis-dimension N     Long-edge cap before GeoCalib preprocessing

@@ -357,6 +357,20 @@ enum AUGeoCalibHorizonDetector {
         )
     }
 
+    static func detect(
+        preprocessedImage: AUGeoCalibPreprocessedImage,
+        neuralOutput: AUGeoCalibNeuralOutput,
+        verifierEstimates: [AUGeoCalibHorizonVerifierEstimate] = [],
+        configuration: AUGeoCalibHorizonDetectorConfiguration = AUGeoCalibHorizonDetectorConfiguration()
+    ) throws -> AUGeoCalibHorizonDetectionResult {
+        try optimizeAndGate(
+            neuralOutput: neuralOutput,
+            scales: preprocessedImage.scales,
+            verifierEstimates: verifierEstimates,
+            configuration: configuration
+        )
+    }
+
     static func gate(
         rollRadians: Double,
         rollUncertaintyRadians: Double,

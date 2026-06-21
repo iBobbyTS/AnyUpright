@@ -9,6 +9,7 @@ xcrun swiftc -O \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightGeometry.swift" \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightLineDetection.swift" \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightGeoCalibNeuralPrototype.swift" \
+  "$REPO_ROOT/AnyUpright/Plugin/AnyUprightGeoCalibCoreML.swift" \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightGeoCalibRuntimeBundle.swift" \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightGeoCalibOptimizer.swift" \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightGeoCalibHorizonDetector.swift" \

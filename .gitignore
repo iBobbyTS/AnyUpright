@@ -15,3 +15,6 @@ build/
 
 # Local agent work
 .agent-work/
+
+# Model weights
+AnyUpright/Plugin/GeoCalibRuntime/

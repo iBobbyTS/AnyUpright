@@ -56,6 +56,12 @@ struct QuadAnalysisScratchState {
     var requestedAnalysisTime = CMTime.zero
 }
 
+struct AURGBFloatImage {
+    var width: Int
+    var height: Int
+    var pixelsNCHW: [Float]
+}
+
 enum AnyUprightAnalysisImage {
     static func ciImage(from frame: FxImageTile) -> CIImage? {
         guard let ioSurface = frame.ioSurface else {
@@ -99,5 +105,45 @@ enum AnyUprightAnalysisImage {
         }
 
         return AUGrayscaleImage(width: width, height: height, pixels: gray)
+    }
+
+    static func rgbFloatImage(from frame: FxImageTile, maxDimension: Int? = nil, context: CIContext) -> AURGBFloatImage? {
+        guard let sourceImage = ciImage(from: frame) else {
+            return nil
+        }
+
+        let bounds = frame.imagePixelBounds
+        let sourceWidth = max(1, Int(bounds.right - bounds.left))
+        let sourceHeight = max(1, Int(bounds.top - bounds.bottom))
+        let scale: Double
+        if let maxDimension {
+            scale = min(1.0, Double(maxDimension) / Double(max(sourceWidth, sourceHeight)))
+        } else {
+            scale = 1.0
+        }
+        let width = max(1, Int(round(Double(sourceWidth) * scale)))
+        let height = max(1, Int(round(Double(sourceHeight) * scale)))
+        let image = sourceImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        var rgba = Array(repeating: UInt8(0), count: width * height * 4)
+
+        context.render(
+            image,
+            toBitmap: &rgba,
+            rowBytes: width * 4,
+            bounds: CGRect(x: 0, y: 0, width: width, height: height),
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+
+        var rgb = Array(repeating: Float(0), count: width * height * 3)
+        let planeSize = width * height
+        for index in 0..<planeSize {
+            let base = index * 4
+            rgb[index] = Float(rgba[base]) / 255.0
+            rgb[planeSize + index] = Float(rgba[base + 1]) / 255.0
+            rgb[2 * planeSize + index] = Float(rgba[base + 2]) / 255.0
+        }
+
+        return AURGBFloatImage(width: width, height: height, pixelsNCHW: rgb)
     }
 }

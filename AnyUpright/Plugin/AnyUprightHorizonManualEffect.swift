@@ -18,9 +18,14 @@ enum HorizonParam: UInt32 {
 
 @objc(AnyUprightHorizonManualPlugIn)
 class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
+    private static let geoCalibAnalysisMaxDimension = 1920
+
     private let analysisLock = NSLock()
     private let analysisContext = CIContext(options: nil)
     private var analysisState = HorizonAnalysisScratchState()
+    private var geoCalibRuntimeBundle: AUGeoCalibRuntimeBundle?
+    private var geoCalibRuntimeLoadAttempted = false
+    private var geoCalibMetalLibraryURL: URL?
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         paramAPI.addPushButton(
@@ -65,9 +70,12 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     @objc private func analyzeHorizon() {
         analysisLock.lock()
         analysisState.requestedAnalysisTime = currentParameterTime()
+        let requestedTime = analysisState.requestedAnalysisTime
         analysisLock.unlock()
+        horizonAnalysisDebugLog("start requested=\(requestedTime)")
 
         guard let analysisAPI = _apiManager.api(for: FxAnalysisAPI.self) as? FxAnalysisAPI else {
+            horizonAnalysisDebugLog("start missing FxAnalysisAPI")
             return
         }
 
@@ -86,6 +94,7 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         analysisState.detectedRotationRadians = nil
         analysisState.detectedRotationTime = analysisRange.start
         analysisLock.unlock()
+        horizonAnalysisDebugLog("setup rangeStart=\(analysisRange.start) duration=\(analysisRange.duration) frameDuration=\(frameDuration)")
     }
 
     func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
@@ -94,29 +103,46 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         analysisLock.unlock()
 
         if alreadyDetected {
+            horizonAnalysisDebugLog("analyze skipped alreadyDetected frameTime=\(frameTime)")
             return
         }
 
-        guard let image = AnyUprightAnalysisImage.ciImage(from: frame) else {
-            return
-        }
-
-        let request = VNDetectHorizonRequest()
-        let handler = VNImageRequestHandler(ciImage: image, options: [:])
         var rotationRadians: Double?
+        let bounds = frame.imagePixelBounds
+        horizonAnalysisDebugLog("analyze begin frameTime=\(frameTime) bounds=\(bounds)")
 
-        do {
-            try handler.perform([request])
-
-            if let observation = request.results?.first as? VNHorizonObservation {
-                let bounds = frame.imagePixelBounds
-                let width = max(1, Int(bounds.right - bounds.left))
-                let height = max(1, Int(bounds.top - bounds.bottom))
-                let transform = observation.transform(forImageWidth: width, height: height)
-                rotationRadians = atan2(Double(transform.b), Double(transform.a))
+        switch analyzeGeoCalibHorizon(frame) {
+        case .accepted(let correctionRadians):
+            rotationRadians = correctionRadians
+            horizonAnalysisDebugLog(String(format: "analyze geocalib accepted correctionDeg=%.6f", correctionRadians * 180 / Double.pi))
+        case .rejected:
+            horizonAnalysisDebugLog("analyze geocalib rejected")
+            return
+        case .unavailable:
+            horizonAnalysisDebugLog("analyze geocalib unavailable; trying fallback detectors")
+            guard let image = AnyUprightAnalysisImage.ciImage(from: frame) else {
+                horizonAnalysisDebugLog("analyze fallback no CIImage")
+                return
             }
-        } catch {
-            rotationRadians = nil
+
+            let request = VNDetectHorizonRequest()
+            let handler = VNImageRequestHandler(ciImage: image, options: [:])
+
+            do {
+                try handler.perform([request])
+
+                if let observation = request.results?.first as? VNHorizonObservation {
+                    let bounds = frame.imagePixelBounds
+                    let width = max(1, Int(bounds.right - bounds.left))
+                    let height = max(1, Int(bounds.top - bounds.bottom))
+                    let transform = observation.transform(forImageWidth: width, height: height)
+                    rotationRadians = atan2(Double(transform.b), Double(transform.a))
+                    horizonAnalysisDebugLog(String(format: "analyze vision fallback correctionDeg=%.6f", (rotationRadians ?? 0.0) * 180 / Double.pi))
+                }
+            } catch {
+                horizonAnalysisDebugLog("analyze vision fallback error=\(String(describing: error))")
+                rotationRadians = nil
+            }
         }
 
         if rotationRadians == nil,
@@ -131,9 +157,11 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 )
             )
             rotationRadians = AnyUprightGeometry.dominantHorizonCorrectionRadians(from: lines)
+            horizonAnalysisDebugLog(String(format: "analyze hough fallback lines=%d correctionDeg=%.6f", lines.count, (rotationRadians ?? 0.0) * 180 / Double.pi))
         }
 
         guard let rotationRadians else {
+            horizonAnalysisDebugLog("analyze no rotation detected")
             return
         }
 
@@ -141,6 +169,7 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         analysisState.detectedRotationRadians = rotationRadians
         analysisState.detectedRotationTime = frameTime
         analysisLock.unlock()
+        horizonAnalysisDebugLog(String(format: "analyze stored correctionDeg=%.6f frameTime=%@", rotationRadians * 180 / Double.pi, String(describing: frameTime)))
     }
 
     func cleanupAnalysis() throws {
@@ -152,13 +181,132 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
         let writeTime = parameterWriteTime(preferred: requestedTime, fallback: rotationTime)
         guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
+            horizonAnalysisDebugLog("cleanup missing FxParameterSettingAPI")
             return
         }
 
         guard let rotationRadians else {
+            horizonAnalysisDebugLog("cleanup no rotation requestedTime=\(requestedTime) rotationTime=\(rotationTime)")
             return
         }
 
-        _ = settingAPI.setFloatValue(rotationRadians, toParameter: HorizonParam.rotation.rawValue, at: writeTime)
+        let result = settingAPI.setFloatValue(rotationRadians, toParameter: HorizonParam.rotation.rawValue, at: writeTime)
+        horizonAnalysisDebugLog(String(format: "cleanup wrote correctionDeg=%.6f writeTime=%@ result=%@", rotationRadians * 180 / Double.pi, String(describing: writeTime), String(describing: result)))
+    }
+
+    private enum GeoCalibHorizonAnalysisOutcome {
+        case accepted(Double)
+        case rejected
+        case unavailable
+    }
+
+    private func analyzeGeoCalibHorizon(_ frame: FxImageTile) -> GeoCalibHorizonAnalysisOutcome {
+        guard let runtimeBundle = loadGeoCalibRuntimeBundle() else {
+            horizonAnalysisDebugLog("geocalib unavailable: runtime bundle failed to load")
+            return .unavailable
+        }
+        guard let metalLibraryURL = geoCalibMetalLibraryURL else {
+            horizonAnalysisDebugLog("geocalib unavailable: missing metallib URL")
+            return .unavailable
+        }
+        guard let rgbImage = AnyUprightAnalysisImage.rgbFloatImage(
+            from: frame,
+            maxDimension: Self.geoCalibAnalysisMaxDimension,
+            context: analysisContext
+        ) else {
+            horizonAnalysisDebugLog("geocalib unavailable: unable to render RGB frame")
+            return .unavailable
+        }
+        horizonAnalysisDebugLog("geocalib input rgb=\(rgbImage.width)x\(rgbImage.height) metal=\(metalLibraryURL.path)")
+
+        do {
+            let preprocessed = try AUGeoCalibImagePreprocessor.preprocessRGB(
+                rgbImage.pixelsNCHW,
+                width: rgbImage.width,
+                height: rgbImage.height
+            )
+            var verifiers: [AUGeoCalibHorizonVerifierEstimate] = []
+            if let grayscaleImage = AnyUprightAnalysisImage.grayscaleImage(from: frame, maxDimension: 640, context: analysisContext) {
+                verifiers.append(AUGeoCalibHorizonVerifiers.axisHough(in: grayscaleImage))
+                verifiers.append(AUGeoCalibHorizonVerifiers.gradientAxis(in: grayscaleImage))
+            }
+            let result = try AUGeoCalibHorizonDetector.detect(
+                preprocessedImage: preprocessed,
+                runtimeBundle: runtimeBundle,
+                metalLibraryURL: metalLibraryURL,
+                verifierEstimates: verifiers
+            )
+            let verifierSummary = result.verifierDiffs.map { diff -> String in
+                if let radians = diff.differenceRadians {
+                    return "\(diff.name)=\(radians * 180 / Double.pi)deg"
+                }
+                return "\(diff.name)=nil"
+            }.joined(separator: ", ")
+            horizonAnalysisDebugLog(String(
+                format: "geocalib result accepted=%@ rollDeg=%.6f correctionDeg=%.6f uncDeg=%.6f reasons=%@ verifiers=%@",
+                result.accepted ? "true" : "false",
+                result.rollRadians * 180 / Double.pi,
+                result.correctionRadians * 180 / Double.pi,
+                result.rollUncertaintyRadians * 180 / Double.pi,
+                result.rejectionReasons.joined(separator: ","),
+                verifierSummary
+            ))
+            return result.accepted ? .accepted(result.correctionRadians) : .rejected
+        } catch {
+            horizonAnalysisDebugLog("geocalib unavailable: error=\(String(describing: error))")
+            return .unavailable
+        }
+    }
+
+    private func loadGeoCalibRuntimeBundle() -> AUGeoCalibRuntimeBundle? {
+        if geoCalibRuntimeLoadAttempted {
+            return geoCalibRuntimeBundle
+        }
+        geoCalibRuntimeLoadAttempted = true
+
+        let bundle = Bundle(for: AnyUprightHorizonManualPlugIn.self)
+        guard let resourceURL = bundle.resourceURL else {
+            horizonAnalysisDebugLog("geocalib load missing resourceURL bundle=\(bundle.bundlePath)")
+            return nil
+        }
+        let metalURL = resourceURL.appendingPathComponent("default.metallib")
+        guard FileManager.default.fileExists(atPath: metalURL.path) else {
+            horizonAnalysisDebugLog("geocalib load missing metallib path=\(metalURL.path)")
+            return nil
+        }
+
+        geoCalibMetalLibraryURL = metalURL
+        do {
+            geoCalibRuntimeBundle = try AUGeoCalibRuntimeBundle(rootURL: resourceURL)
+            horizonAnalysisDebugLog("geocalib load ok resourceURL=\(resourceURL.path)")
+        } catch {
+            horizonAnalysisDebugLog("geocalib load failed resourceURL=\(resourceURL.path) error=\(String(describing: error))")
+            geoCalibRuntimeBundle = nil
+        }
+        return geoCalibRuntimeBundle
+    }
+
+    private func horizonAnalysisDebugLog(_ message: String) {
+        #if DEBUG
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightGeoCalib.debug") else {
+            return
+        }
+        let logPath = "/tmp/anyupright-geocalib-debug.log"
+        let timestamp = String(format: "%.3f", Date().timeIntervalSince1970)
+        guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
+            return
+        }
+
+        if FileManager.default.fileExists(atPath: logPath),
+           let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+            try? handle.close()
+        } else {
+            try? data.write(to: URL(fileURLWithPath: logPath))
+        }
+        #else
+        _ = message
+        #endif
     }
 }

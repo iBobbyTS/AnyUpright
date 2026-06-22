@@ -1,9 +1,9 @@
 /* Localized versions of Info.plist keys */
 
-"AnyUpright::Horizon Manual Name" = "AnyUpright Horizon Manual";
-"AnyUpright::Source Quad Name" = "AnyUpright Source Quad";
-"AnyUpright::Outer Corners Name" = "AnyUpright Outer Corners";
-"AnyUpright::Source Quad OSC Name" = "AnyUpright Source Quad Controls";
-"AnyUpright::Outer Corners OSC Name" = "AnyUpright Outer Corners Controls";
-"AnyUpright::Upright Manual Name" = "AnyUpright Upright Manual";
-"AnyUpright::Upright Manual OSC Name" = "AnyUpright Upright Manual Controls";
+"AnyUpright::Horizon Name" = "AnyUpright Horizon";
+"AnyUpright::Inner Stretch Name" = "AnyUpright Inner Stretch";
+"AnyUpright::Outer Stretch Name" = "AnyUpright Outer Stretch";
+"AnyUpright::Inner Stretch OSC Name" = "AnyUpright Inner Stretch Controls";
+"AnyUpright::Outer Stretch OSC Name" = "AnyUpright Outer Stretch Controls";
+"AnyUpright::Upright Name" = "AnyUpright Upright";
+"AnyUpright::Upright OSC Name" = "AnyUpright Upright Controls";

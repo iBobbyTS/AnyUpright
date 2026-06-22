@@ -9,8 +9,8 @@ import CoreImage
 import IOSurface
 import Vision
 
-@objc(AnyUprightUprightManualOSCPlugIn)
-class AnyUprightUprightManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
+@objc(AnyUprightUprightOSCPlugIn)
+class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     private let overlayRenderer = AnyUprightOSCOverlayRenderer()
 
     @objc(drawingCoordinates)

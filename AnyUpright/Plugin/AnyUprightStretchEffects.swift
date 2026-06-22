@@ -1,5 +1,5 @@
 //
-//  AnyUprightQuadManualEffects.swift
+//  AnyUprightStretchEffects.swift
 //  AnyUpright
 //
 
@@ -62,7 +62,7 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
             withName: "Mode",
             parameterID: QuadParam.mode.rawValue,
             defaultValue: UInt32(fixedQuadMode.rawValue),
-            menuEntries: ["Output Corners", "Source Quad"],
+            menuEntries: ["Outer Stretch", "Inner Stretch"],
             parameterFlags: hiddenFlags()
         )
     }
@@ -113,8 +113,8 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
     }
 }
 
-@objc(AnyUprightQuadManualPlugIn)
-class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
+@objc(AnyUprightInnerStretchPlugIn)
+class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
     private let analysisLock = NSLock()
     private let analysisContext = CIContext(options: nil)
     private var analysisState = QuadAnalysisScratchState()
@@ -341,8 +341,8 @@ class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
     }
 }
 
-@objc(AnyUprightQuadOutputCornersPlugIn)
-class AnyUprightQuadOutputCornersPlugIn: AnyUprightQuadModePlugIn {
+@objc(AnyUprightOuterStretchPlugIn)
+class AnyUprightOuterStretchPlugIn: AnyUprightQuadModePlugIn {
     override var fixedQuadMode: AUQuadTransformMode {
         .outputCorners
     }

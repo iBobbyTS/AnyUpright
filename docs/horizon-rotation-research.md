@@ -8,8 +8,8 @@ This note records research for the `AnyUpright Horizon` effect only. It is inten
 | --- | --- | --- | --- |
 | The camera was rolled a little; make the image level. | `AnyUpright Horizon` | `Rotation`, optionally `Fill Frame` | In scope. Estimate roll angle and render a centered affine rotation. |
 | Vertical or horizontal perspective needs correction. | `AnyUpright Upright` | `Vertical Perspective`, `Horizontal Perspective`, optionally `Rotation` | Out of scope for this note. Use separate guide-line and perspective validation. |
-| A screen, sign, page, or facade should be mapped to a rectangle. | `AnyUpright Source Quad` | Source quadrilateral hidden corner offsets | Out of scope for this note. Validate with corner and homography metrics. |
-| The output frame corners should be warped manually. | `AnyUpright Outer Corners` | Output-corner offsets | Out of scope for this note. Validate with destination quad mapping. |
+| A screen, sign, page, or facade should be mapped to a rectangle. | `AnyUpright Inner Stretch` | Source quadrilateral hidden corner offsets | Out of scope for this note. Validate with corner and homography metrics. |
+| The output frame corners should be warped manually. | `AnyUpright Outer Stretch` | Output-corner offsets | Out of scope for this note. Validate with destination quad mapping. |
 
 For the Horizon effect, a detector may internally estimate a horizon line, gravity/up direction, pitch, or FoV if that helps obtain a better roll estimate. The effect should consume only the roll correction and discard the other degrees of freedom.
 

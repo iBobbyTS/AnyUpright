@@ -1,9 +1,9 @@
 /* Localized versions of Info.plist keys */
 
-"AnyUpright::Horizon Manual Description" = "Automatic horizon correction with manual rotation and optional fill.";
-"AnyUpright::Source Quad Description" = "Select a source quadrilateral and stretch it to the full frame.";
-"AnyUpright::Outer Corners Description" = "Drag the outer output corners for manual perspective warping.";
-"AnyUpright::Source Quad OSC Description" = "Onscreen source quadrilateral controls for AnyUpright Source Quad.";
-"AnyUpright::Outer Corners OSC Description" = "Onscreen outer corner controls for AnyUpright Outer Corners.";
-"AnyUpright::Upright Manual Description" = "Lightroom-style manual, guided, automatic, and semi-automatic upright correction.";
-"AnyUpright::Upright Manual OSC Description" = "Onscreen guide and candidate line controls for AnyUpright Upright Manual.";
+"AnyUpright::Horizon Description" = "Automatic horizon correction with manual rotation and optional fill.";
+"AnyUpright::Inner Stretch Description" = "Select a source quadrilateral and stretch it to the full frame.";
+"AnyUpright::Outer Stretch Description" = "Drag the outer output corners for manual perspective warping.";
+"AnyUpright::Inner Stretch OSC Description" = "Onscreen source quadrilateral controls for AnyUpright Inner Stretch.";
+"AnyUpright::Outer Stretch OSC Description" = "Onscreen outer corner controls for AnyUpright Outer Stretch.";
+"AnyUpright::Upright Description" = "Lightroom-style manual, guided, automatic, and semi-automatic upright correction.";
+"AnyUpright::Upright OSC Description" = "Onscreen guide and candidate line controls for AnyUpright Upright.";

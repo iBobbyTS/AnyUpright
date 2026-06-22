@@ -1,5 +1,5 @@
 //
-//  AnyUprightUprightManualEffect.swift
+//  AnyUprightUprightEffect.swift
 //  AnyUpright
 //
 
@@ -9,8 +9,8 @@ import CoreImage
 import IOSurface
 import Vision
 
-@objc(AnyUprightUprightManualPlugIn)
-class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
+@objc(AnyUprightUprightPlugIn)
+class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private let analysisLock = NSLock()
     private let analysisContext = CIContext(options: nil)
     private var analysisState = UprightAnalysisScratchState()

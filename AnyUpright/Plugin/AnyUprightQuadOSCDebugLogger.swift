@@ -9,7 +9,7 @@ import CoreImage
 import IOSurface
 import Vision
 
-extension AnyUprightQuadManualOSCPlugIn {
+extension AnyUprightInnerStretchOSCPlugIn {
     func debugLog(_ message: String) {
         let flagPath = "/tmp/AnyUprightQuadOSC.debug"
         guard FileManager.default.fileExists(atPath: flagPath) else {

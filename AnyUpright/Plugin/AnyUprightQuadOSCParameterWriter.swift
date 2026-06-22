@@ -9,7 +9,7 @@ import CoreImage
 import IOSurface
 import Vision
 
-extension AnyUprightQuadManualOSCPlugIn {
+extension AnyUprightInnerStretchOSCPlugIn {
     func setSourceQuad(_ quad: AUQuad, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         let offsets = AnyUprightGeometry.sourceQuadOffsets(forSourceQuad: quad, size: size)
         writeSourceCorner(.topLeft, percent: offsets.topLeftPercent, settingAPI: settingAPI, time: time)

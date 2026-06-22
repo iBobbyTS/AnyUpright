@@ -844,7 +844,7 @@ struct AnyUprightGeometryTests {
         )
         try assertTrue(
             AnyUprightGeometry.distanceToQuadEdge(from: incorrectlyMappedCanvasPoint, quad: visibleQuad) > 24.0,
-            "mapped point is not near the visible Source Quad control layer"
+            "mapped point is not near the visible Inner Stretch control layer"
         )
         try assertTrue(
             !shouldIncludeMappedSurfaceOSCCandidate(

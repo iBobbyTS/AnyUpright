@@ -57,7 +57,7 @@ struct QuadOSCHitGeometry {
     var usesRawCanvasHitLayer: Bool
 }
 
-extension AnyUprightQuadManualOSCPlugIn {
+extension AnyUprightInnerStretchOSCPlugIn {
     func quadCanvasPoints(from objectPoints: AUQuad) -> AUQuad {
         AUQuad(
             topLeft: canvasPoint(fromObjectPoint: objectPoints.topLeft),
@@ -72,7 +72,7 @@ extension AnyUprightQuadManualOSCPlugIn {
         case .outputCorners:
             return quadCanvasPoints(from: objectPoints)
         case .sourceQuad:
-            // Source Quad's render preview is top-origin image/output geometry; raw Final Cut canvas events need that same visible layer.
+            // Inner Stretch's render preview is top-origin image/output geometry; raw Final Cut canvas events need that same visible layer.
             return quadCanvasPoints(from: AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints))
         }
     }

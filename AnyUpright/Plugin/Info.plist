@@ -57,13 +57,13 @@
 	<array>
 		<dict>
 			<key>className</key>
-			<string>AnyUprightHorizonManualPlugIn</string>
+			<string>AnyUprightHorizonPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Horizon Manual Name</string>
+			<string>AnyUpright::Horizon Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 				<key>infoString</key>
-				<string>AnyUpright::Horizon Manual Description</string>
+				<string>AnyUpright::Horizon Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
@@ -76,13 +76,13 @@
 		</dict>
 		<dict>
 			<key>className</key>
-			<string>AnyUprightQuadManualPlugIn</string>
+			<string>AnyUprightInnerStretchPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Source Quad Name</string>
+			<string>AnyUpright::Inner Stretch Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 				<key>infoString</key>
-				<string>AnyUpright::Source Quad Description</string>
+				<string>AnyUpright::Inner Stretch Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
@@ -95,13 +95,13 @@
 		</dict>
 		<dict>
 			<key>className</key>
-			<string>AnyUprightQuadOutputCornersPlugIn</string>
+			<string>AnyUprightOuterStretchPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Outer Corners Name</string>
+			<string>AnyUpright::Outer Stretch Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 			<key>infoString</key>
-			<string>AnyUpright::Outer Corners Description</string>
+			<string>AnyUpright::Outer Stretch Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
@@ -113,13 +113,13 @@
 		</dict>
 		<dict>
 			<key>className</key>
-			<string>AnyUprightQuadManualOSCPlugIn</string>
+			<string>AnyUprightInnerStretchOSCPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Source Quad OSC Name</string>
+			<string>AnyUpright::Inner Stretch OSC Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 			<key>infoString</key>
-			<string>AnyUpright::Source Quad OSC Description</string>
+			<string>AnyUpright::Inner Stretch OSC Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxOnScreenControl</string>
@@ -135,13 +135,13 @@
 		</dict>
 		<dict>
 			<key>className</key>
-			<string>AnyUprightQuadOutputCornersOSCPlugIn</string>
+			<string>AnyUprightOuterStretchOSCPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Outer Corners OSC Name</string>
+			<string>AnyUpright::Outer Stretch OSC Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 			<key>infoString</key>
-			<string>AnyUpright::Outer Corners OSC Description</string>
+			<string>AnyUpright::Outer Stretch OSC Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxOnScreenControl</string>
@@ -157,13 +157,13 @@
 		</dict>
 		<dict>
 			<key>className</key>
-			<string>AnyUprightUprightManualPlugIn</string>
+			<string>AnyUprightUprightPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Upright Manual Name</string>
+			<string>AnyUpright::Upright Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 			<key>infoString</key>
-			<string>AnyUpright::Upright Manual Description</string>
+			<string>AnyUpright::Upright Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxFilter</string>
@@ -176,13 +176,13 @@
 		</dict>
 		<dict>
 			<key>className</key>
-			<string>AnyUprightUprightManualOSCPlugIn</string>
+			<string>AnyUprightUprightOSCPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Upright Manual OSC Name</string>
+			<string>AnyUpright::Upright OSC Name</string>
 			<key>group</key>
 			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
 			<key>infoString</key>
-			<string>AnyUpright::Upright Manual OSC Description</string>
+			<string>AnyUpright::Upright OSC Description</string>
 			<key>protocolNames</key>
 			<array>
 				<string>FxOnScreenControl</string>

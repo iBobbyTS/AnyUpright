@@ -30,13 +30,13 @@ struct AuditFeatureSurface {
         let horizonEffect = try pluginSwiftSources(
             at: pluginDirectory,
             relativePaths: [
-                "AnyUprightHorizonManualEffect.swift"
+                "AnyUprightHorizonEffect.swift"
             ]
         )
         let quadEffects = try pluginSwiftSources(
             at: pluginDirectory,
             relativePaths: [
-                "AnyUprightQuadManualEffects.swift",
+                "AnyUprightStretchEffects.swift",
                 "AnyUprightQuadOSCControls.swift",
                 "AnyUprightQuadOSCParameterWriter.swift",
                 "AnyUprightQuadParameters.swift"
@@ -45,7 +45,7 @@ struct AuditFeatureSurface {
         let uprightEffects = try pluginSwiftSources(
             at: pluginDirectory,
             relativePaths: [
-                "AnyUprightUprightManualEffect.swift",
+                "AnyUprightUprightEffect.swift",
                 "AnyUprightUprightOSCControls.swift",
                 "AnyUprightUprightParameters.swift"
             ]
@@ -78,13 +78,13 @@ struct AuditFeatureSurface {
         }
 
         let expected = [
-            FeaturePluginExpectation(className: "AnyUprightHorizonManualPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
-            FeaturePluginExpectation(className: "AnyUprightQuadManualPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
-            FeaturePluginExpectation(className: "AnyUprightQuadOutputCornersPlugIn", protocols: ["FxFilter"]),
-            FeaturePluginExpectation(className: "AnyUprightQuadManualOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]),
-            FeaturePluginExpectation(className: "AnyUprightQuadOutputCornersOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["81C621CF-4119-46E9-BC04-47A1539A8B54"]),
-            FeaturePluginExpectation(className: "AnyUprightUprightManualPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
-            FeaturePluginExpectation(className: "AnyUprightUprightManualOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB"])
+            FeaturePluginExpectation(className: "AnyUprightHorizonPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
+            FeaturePluginExpectation(className: "AnyUprightInnerStretchPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
+            FeaturePluginExpectation(className: "AnyUprightOuterStretchPlugIn", protocols: ["FxFilter"]),
+            FeaturePluginExpectation(className: "AnyUprightInnerStretchOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]),
+            FeaturePluginExpectation(className: "AnyUprightOuterStretchOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["81C621CF-4119-46E9-BC04-47A1539A8B54"]),
+            FeaturePluginExpectation(className: "AnyUprightUprightPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
+            FeaturePluginExpectation(className: "AnyUprightUprightOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB"])
         ]
 
         for item in expected {
@@ -107,57 +107,57 @@ struct AuditFeatureSurface {
     }
 
     private static func auditQuad(_ effects: String, geometry: String, overlay: String, metal: String) throws {
-        try require(effects, "class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn", "Source Quad is registered as its own filter")
-        try require(effects, "class AnyUprightQuadOutputCornersPlugIn: AnyUprightQuadModePlugIn", "Outer Corners is registered as its own filter")
-        try require(effects, "FxAnalyzer", "Source Quad supports explicit frame analysis")
-        try require(effects, "Detect Edge and Corner", "Source Quad exposes explicit source-quadrilateral detection")
-        try require(effects, "addPushButton", "Source Quad detection uses a native FxPlug push button")
-        try require(effects, "selector: #selector(detectSourceQuad)", "Source Quad push button dispatches to detection")
-        try reject(effects, "addCustomParameter", "Source Quad detection should not use a custom parameter for button UI")
-        try reject(effects, "kFxParameterFlag_CUSTOM_UI", "Source Quad detection should not replace the standard parameter UI")
-        try reject(effects, "FxCustomParameterViewHost_v2", "Source Quad should not provide a custom inspector view for its detection button")
-        try reject(effects, "defaultValue: NSData()", "Source Quad native button should not use data-backed custom value storage")
-        try reject(effects, "retainedDetectSourceQuadButtonViews", "Source Quad native button should not retain custom parameter views")
-        try reject(effects, "createView(forParameterID", "Source Quad native button should not create a custom detection button view")
-        try reject(effects, "NSButton(title: \"Detect Edge and Corner\"", "Source Quad detection should not expose its own AppKit button")
-        try require(effects, "detectSupportedLineSegments", "Source Quad detects independent edge primitives instead of rectangle candidates")
-        try require(effects, "Score Threshold", "Source Quad exposes a normalized detection-score threshold")
-        try require(effects, "Choose from detections", "Source Quad can switch OSC hit testing from manual handles to detected primitives")
-        try require(effects, "chooseFromDetections", "Source Quad exposes detection-choice mode as a persistent FxPlug parameter")
-        try require(effects, "writeQuadSourceDetectionPrimitives", "Source Quad detection writes primitive slots instead of moving the current quad")
-        try require(effects, "quadSourceDetectionEdges", "Source Quad OSC reads detected edge primitives")
-        try require(effects, "quadSourceDetectionCorners", "Source Quad OSC reads detected corner primitives")
-        try require(effects, "sourceDetectionOverlaySegments", "Source Quad OSC draws detected edge/corner overlays")
-        try require(effects, "toggleDetectionSelection", "Source Quad OSC can select detected edges/corners for writeback")
-        try reject(effects, "VNDetectRectanglesRequest()", "Source Quad detection overlay should not be limited to closed rectangle observations")
-        try reject(effects, "writeDetectedSourceQuadOffsets", "Source Quad detection should not directly move the existing quad")
+        try require(effects, "class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn", "Inner Stretch is registered as its own filter")
+        try require(effects, "class AnyUprightOuterStretchPlugIn: AnyUprightQuadModePlugIn", "Outer Stretch is registered as its own filter")
+        try require(effects, "FxAnalyzer", "Inner Stretch supports explicit frame analysis")
+        try require(effects, "Detect Edge and Corner", "Inner Stretch exposes explicit source-quadrilateral detection")
+        try require(effects, "addPushButton", "Inner Stretch detection uses a native FxPlug push button")
+        try require(effects, "selector: #selector(detectSourceQuad)", "Inner Stretch push button dispatches to detection")
+        try reject(effects, "addCustomParameter", "Inner Stretch detection should not use a custom parameter for button UI")
+        try reject(effects, "kFxParameterFlag_CUSTOM_UI", "Inner Stretch detection should not replace the standard parameter UI")
+        try reject(effects, "FxCustomParameterViewHost_v2", "Inner Stretch should not provide a custom inspector view for its detection button")
+        try reject(effects, "defaultValue: NSData()", "Inner Stretch native button should not use data-backed custom value storage")
+        try reject(effects, "retainedDetectSourceQuadButtonViews", "Inner Stretch native button should not retain custom parameter views")
+        try reject(effects, "createView(forParameterID", "Inner Stretch native button should not create a custom detection button view")
+        try reject(effects, "NSButton(title: \"Detect Edge and Corner\"", "Inner Stretch detection should not expose its own AppKit button")
+        try require(effects, "detectSupportedLineSegments", "Inner Stretch detects independent edge primitives instead of rectangle candidates")
+        try require(effects, "Score Threshold", "Inner Stretch exposes a normalized detection-score threshold")
+        try require(effects, "Choose from detections", "Inner Stretch can switch OSC hit testing from manual handles to detected primitives")
+        try require(effects, "chooseFromDetections", "Inner Stretch exposes detection-choice mode as a persistent FxPlug parameter")
+        try require(effects, "writeQuadSourceDetectionPrimitives", "Inner Stretch detection writes primitive slots instead of moving the current quad")
+        try require(effects, "quadSourceDetectionEdges", "Inner Stretch OSC reads detected edge primitives")
+        try require(effects, "quadSourceDetectionCorners", "Inner Stretch OSC reads detected corner primitives")
+        try require(effects, "sourceDetectionOverlaySegments", "Inner Stretch OSC draws detected edge/corner overlays")
+        try require(effects, "toggleDetectionSelection", "Inner Stretch OSC can select detected edges/corners for writeback")
+        try reject(effects, "VNDetectRectanglesRequest()", "Inner Stretch detection overlay should not be limited to closed rectangle observations")
+        try reject(effects, "writeDetectedSourceQuadOffsets", "Inner Stretch detection should not directly move the existing quad")
         try require(effects, "override var fixedQuadMode: AUQuadTransformMode", "Quad filters choose fixed modes")
-        try require(effects, "class AnyUprightQuadOutputCornersOSCPlugIn: AnyUprightQuadManualOSCPlugIn", "Outer Corners exposes its own onscreen control")
+        try require(effects, "class AnyUprightOuterStretchOSCPlugIn: AnyUprightInnerStretchOSCPlugIn", "Outer Stretch exposes its own onscreen control")
         try require(effects, "parameterFlags: hiddenFlags()", "Quad fixed mode parameter is hidden from the inspector")
         try require(effects, "Edit Mode", "Quad exposes edit mode for source-quad handles without applying the warp")
-        try require(effects, "class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Source Quad exposes onscreen controls as a separate FxPlug class")
-        try require(effects, "renderOutputCornersOSC", "Outer Corners draws host onscreen output-corner controls")
-        try require(effects, "hiddenCollapsedFlags", "Source Quad hides the offset controls while keeping them as persistent state")
-        try require(effects, "sourceCornerPercentOffset", "Source Quad OSC writes hidden source-corner percent offsets")
-        try require(effects, "overlayRenderer.clear", "Quad OSC clears its host overlay surface while the effect render output owns the visible Source Quad adjuster")
+        try require(effects, "class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Inner Stretch exposes onscreen controls as a separate FxPlug class")
+        try require(effects, "renderOutputCornersOSC", "Outer Stretch draws host onscreen output-corner controls")
+        try require(effects, "hiddenCollapsedFlags", "Inner Stretch hides the offset controls while keeping them as persistent state")
+        try require(effects, "sourceCornerPercentOffset", "Inner Stretch OSC writes hidden source-corner percent offsets")
+        try require(effects, "overlayRenderer.clear", "Quad OSC clears its host overlay surface while the effect render output owns the visible Inner Stretch adjuster")
         try require(geometry, "quadOutputToSourceMatrix", "Quad render matrix is centralized in geometry")
-        try require(geometry, "quadSelectionToOutputRectMatrix", "Source Quad edit preview identifies the selected source area")
-        try require(geometry, "sourceQuadDefault", "Source Quad defines its default source quadrilateral")
-        try require(geometry, "sourceQuadInset = 0.10", "Source Quad defaults to the central 80 percent of the source frame")
-        try require(geometry, "sourceQuadObjectPoints", "Source Quad converts persistent offsets into object-space handles")
+        try require(geometry, "quadSelectionToOutputRectMatrix", "Inner Stretch edit preview identifies the selected source area")
+        try require(geometry, "sourceQuadDefault", "Inner Stretch defines its default source quadrilateral")
+        try require(geometry, "sourceQuadInset = 0.10", "Inner Stretch defaults to the central 80 percent of the source frame")
+        try require(geometry, "sourceQuadObjectPoints", "Inner Stretch converts persistent offsets into object-space handles")
         try require(geometry, "imageQuad(fromNormalizedObjectPoints", "Detected corner selections can be ordered into a source quad")
         try require(geometry, "imageQuad(fromNormalizedObjectLines", "Detected edge selections can be intersected into a source quad")
-        try require(geometry, "guard !showCornerAdjuster else", "Source Quad mode can preview handles without warping")
-        try require(geometry, "sourceCornerPercentOffset", "Source Quad OSC writes resolution-independent corner offsets")
-        try require(geometry, "cornerPixelOffset", "Output Corners OSC writes stable corner pixel offsets")
+        try require(geometry, "guard !showCornerAdjuster else", "Inner Stretch mode can preview handles without warping")
+        try require(geometry, "sourceCornerPercentOffset", "Inner Stretch OSC writes resolution-independent corner offsets")
+        try require(geometry, "cornerPixelOffset", "Outer Stretch OSC writes stable corner pixel offsets")
         try require(overlay, "IOSurfaceGetWidth", "OSC renderer uses the destination IOSurface width for canvas overlays")
         try require(overlay, "IOSurfaceGetHeight", "OSC renderer uses the destination IOSurface height for canvas overlays")
         try require(overlay, "width = surfaceWidth", "OSC renderer treats the destination surface as the overlay viewport")
         try require(overlay, "height = surfaceHeight", "OSC renderer treats the destination surface as the overlay viewport")
         try require(overlay, "outputTexture.pixelFormat", "OSC renderer uses the actual Metal texture pixel format")
         try require(overlay, "MTLCreateSystemDefaultDevice", "OSC renderer can fall back when the destination registry ID is unavailable")
-        try require(metal, "AURM_SourceQuadAdjusterPreview", "Source Quad edit overlay is rendered into the effect output")
-        try require(metal, "color.rgb *= 0.70", "Source Quad edit preview dims pixels outside the selected quad")
+        try require(metal, "AURM_SourceQuadAdjusterPreview", "Inner Stretch edit overlay is rendered into the effect output")
+        try require(metal, "color.rgb *= 0.70", "Inner Stretch edit preview dims pixels outside the selected quad")
         try require(metal, "warpState->outputToSource * float3(outputCoordinate, 1.0)", "Quad warps use the primary output-to-source matrix")
     }
 
@@ -170,8 +170,8 @@ struct AuditFeatureSurface {
         try require(effects, "Detect Full Candidates", "Upright exposes semi-auto full detection")
         try require(effects, "Apply Selected Full", "Upright can apply selected semi-auto candidates")
         try require(effects, "Apply Guided Full", "Upright can apply manually drawn guides")
-        try require(effects, "class AnyUprightUprightManualPlugIn: AnyUprightWarpEffect, FxAnalyzer", "Upright filter is separated from its onscreen control")
-        try require(effects, "class AnyUprightUprightManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Upright exposes onscreen controls as a separate FxPlug class")
+        try require(effects, "class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer", "Upright filter is separated from its onscreen control")
+        try require(effects, "class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Upright exposes onscreen controls as a separate FxPlug class")
         try require(effects, "guide4Enabled", "Upright exposes four guide lines")
         try require(effects, "guide4Start", "Upright exposes the fourth guide start handle")
         try require(effects, "guide4End", "Upright exposes the fourth guide end handle")

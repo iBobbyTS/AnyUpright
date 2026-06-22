@@ -1,5 +1,5 @@
 //
-//  AnyUprightHorizonManualEffect.swift
+//  AnyUprightHorizonEffect.swift
 //  AnyUpright
 //
 
@@ -17,8 +17,8 @@ enum HorizonParam: UInt32 {
 }
 
 
-@objc(AnyUprightHorizonManualPlugIn)
-class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
+@objc(AnyUprightHorizonPlugIn)
+class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private static let geoCalibAnalysisMaxDimension = 1920
     private static let geoCalibVerifierMaxDimension = 640
     private static let geoCalibCoreMLModelShapes = AUGeoCalibInputShapeSpec.production
@@ -469,7 +469,7 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         }
         geoCalibCoreMLConfigurationAttempted = true
 
-        let bundle = Bundle(for: AnyUprightHorizonManualPlugIn.self)
+        let bundle = Bundle(for: AnyUprightHorizonPlugIn.self)
         guard let resourceURL = bundle.resourceURL else {
             horizonAnalysisDebugLog("geocalib coreml configure missing resourceURL bundle=\(bundle.bundlePath)")
             return false

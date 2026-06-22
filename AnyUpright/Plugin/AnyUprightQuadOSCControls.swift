@@ -9,8 +9,8 @@ import CoreImage
 import IOSurface
 import Vision
 
-@objc(AnyUprightQuadManualOSCPlugIn)
-class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
+@objc(AnyUprightInnerStretchOSCPlugIn)
+class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     private struct SharedSurfaceState {
         static let lock = NSLock()
         static var surfaceSize = AUSize(width: 1.0, height: 1.0)
@@ -881,8 +881,8 @@ class AnyUprightQuadManualOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
 }
 
-@objc(AnyUprightQuadOutputCornersOSCPlugIn)
-class AnyUprightQuadOutputCornersOSCPlugIn: AnyUprightQuadManualOSCPlugIn {
+@objc(AnyUprightOuterStretchOSCPlugIn)
+class AnyUprightOuterStretchOSCPlugIn: AnyUprightInnerStretchOSCPlugIn {
     override var fixedQuadMode: AUQuadTransformMode {
         .outputCorners
     }

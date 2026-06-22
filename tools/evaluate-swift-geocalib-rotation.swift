@@ -18,7 +18,7 @@ private struct SwiftGeoCalibEvaluationOptions {
     var runtimeBundle = URL(fileURLWithPath: "AnyUpright/Plugin/GeoCalibRuntime")
     var metalSource = URL(fileURLWithPath: "AnyUpright/Plugin/AnyUprightGeoCalib.metal")
     var metalLibrary: URL?
-    var coreMLModel: URL?
+    var coreMLModels: [URL] = []
     var coreMLComputeUnits = "all"
     var warmUpNeural = false
     var maxImages: Int?
@@ -116,11 +116,12 @@ struct SwiftGeoCalibRotationEvaluator {
         }
 
         let neuralSession: EvaluationNeuralSession
-        if let coreMLModel = options.coreMLModel {
+        if !options.coreMLModels.isEmpty {
+            let computeUnits = try coreMLComputeUnits(named: options.coreMLComputeUnits)
             neuralSession = .coreML(
-                try AUGeoCalibCoreMLNeuralInferenceSession(
-                    modelURL: coreMLModel,
-                    computeUnits: try coreMLComputeUnits(named: options.coreMLComputeUnits)
+                try AUGeoCalibCoreMLNeuralInferenceRouter(
+                    modelURLs: options.coreMLModels,
+                    computeUnits: computeUnits
                 )
             )
         } else {
@@ -234,7 +235,7 @@ struct SwiftGeoCalibRotationEvaluator {
             case "--metal-library":
                 options.metalLibrary = resolvedURL(try requireValue())
             case "--coreml-model":
-                options.coreMLModel = resolvedURL(try requireValue())
+                options.coreMLModels.append(resolvedURL(try requireValue()))
             case "--coreml-compute-units":
                 options.coreMLComputeUnits = try requireValue()
             case "--warmup-neural":
@@ -268,7 +269,7 @@ struct SwiftGeoCalibRotationEvaluator {
 
 private enum EvaluationNeuralSession {
     case metal(AUGeoCalibNeuralInferenceSession)
-    case coreML(AUGeoCalibCoreMLNeuralInferenceSession)
+    case coreML(AUGeoCalibCoreMLNeuralInferenceRouter)
 
     func detect(
         preprocessedImage: AUGeoCalibPreprocessedImage,
@@ -281,8 +282,8 @@ private enum EvaluationNeuralSession {
                 neuralSession: session,
                 verifierEstimates: verifierEstimates
             )
-        case .coreML(let session):
-            let neuralOutput = try session.run(
+        case .coreML(let router):
+            let neuralOutput = try router.run(
                 inputRGB: preprocessedImage.inputRGBNCHW,
                 inputShape: preprocessedImage.inputShape
             )
@@ -298,8 +299,8 @@ private enum EvaluationNeuralSession {
         switch self {
         case .metal:
             return
-        case .coreML(let session):
-            try session.warmUp()
+        case .coreML(let router):
+            try router.warmUp()
         }
     }
 }
@@ -919,7 +920,7 @@ private func printUsageAndExit() -> Never {
           --runtime-bundle PATH          AnyUpright GeoCalibRuntime directory
           --metal-source PATH            Metal source file, used when --metal-library is omitted
           --metal-library PATH           Prebuilt default.metallib
-          --coreml-model PATH            Core ML neural-forward .mlpackage/.mlmodel/.mlmodelc
+          --coreml-model PATH            Core ML neural-forward .mlpackage/.mlmodel/.mlmodelc; may be repeated for multiple input shapes
           --coreml-compute-units NAME    all, cpuOnly, cpuAndGPU, cpuAndNeuralEngine
           --warmup-neural                Run an untimed neural warm-up before per-image evaluation
           --max-images N                 Evaluate only the first N rows after --offset

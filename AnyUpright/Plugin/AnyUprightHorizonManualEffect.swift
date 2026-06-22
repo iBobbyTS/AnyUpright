@@ -23,6 +23,8 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private let analysisLock = NSLock()
     private let analysisContext = CIContext(options: nil)
     private var analysisState = HorizonAnalysisScratchState()
+    private var geoCalibCoreMLRouter: AUGeoCalibCoreMLNeuralInferenceRouter?
+    private var geoCalibCoreMLLoadAttempted = false
     private var geoCalibRuntimeBundle: AUGeoCalibRuntimeBundle?
     private var geoCalibRuntimeLoadAttempted = false
     private var geoCalibMetalLibraryURL: URL?
@@ -201,14 +203,6 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     private func analyzeGeoCalibHorizon(_ frame: FxImageTile) -> GeoCalibHorizonAnalysisOutcome {
-        guard let runtimeBundle = loadGeoCalibRuntimeBundle() else {
-            horizonAnalysisDebugLog("geocalib unavailable: runtime bundle failed to load")
-            return .unavailable
-        }
-        guard let metalLibraryURL = geoCalibMetalLibraryURL else {
-            horizonAnalysisDebugLog("geocalib unavailable: missing metallib URL")
-            return .unavailable
-        }
         guard let rgbImage = AnyUprightAnalysisImage.rgbFloatImage(
             from: frame,
             maxDimension: Self.geoCalibAnalysisMaxDimension,
@@ -217,7 +211,7 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             horizonAnalysisDebugLog("geocalib unavailable: unable to render RGB frame")
             return .unavailable
         }
-        horizonAnalysisDebugLog("geocalib input rgb=\(rgbImage.width)x\(rgbImage.height) metal=\(metalLibraryURL.path)")
+        horizonAnalysisDebugLog("geocalib input rgb=\(rgbImage.width)x\(rgbImage.height)")
 
         do {
             let preprocessed = try AUGeoCalibImagePreprocessor.preprocessRGB(
@@ -230,12 +224,34 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 verifiers.append(AUGeoCalibHorizonVerifiers.axisHough(in: grayscaleImage))
                 verifiers.append(AUGeoCalibHorizonVerifiers.gradientAxis(in: grayscaleImage))
             }
-            let result = try AUGeoCalibHorizonDetector.detect(
-                preprocessedImage: preprocessed,
-                runtimeBundle: runtimeBundle,
-                metalLibraryURL: metalLibraryURL,
-                verifierEstimates: verifiers
-            )
+
+            let result: AUGeoCalibHorizonDetectionResult
+            if let coreMLRouter = loadGeoCalibCoreMLRouter() {
+                do {
+                    horizonAnalysisDebugLog("geocalib coreml shape=\(preprocessed.inputShape)")
+                    let neuralOutput = try coreMLRouter.run(
+                        inputRGB: preprocessed.inputRGBNCHW,
+                        inputShape: preprocessed.inputShape
+                    )
+                    result = try AUGeoCalibHorizonDetector.detect(
+                        preprocessedImage: preprocessed,
+                        neuralOutput: neuralOutput,
+                        verifierEstimates: verifiers
+                    )
+                } catch {
+                    horizonAnalysisDebugLog("geocalib coreml failed; trying metal fallback error=\(String(describing: error))")
+                    result = try analyzeGeoCalibHorizonWithMetalFallback(
+                        preprocessed: preprocessed,
+                        verifiers: verifiers
+                    )
+                }
+            } else {
+                result = try analyzeGeoCalibHorizonWithMetalFallback(
+                    preprocessed: preprocessed,
+                    verifiers: verifiers
+                )
+            }
+
             let verifierSummary = result.verifierDiffs.map { diff -> String in
                 if let radians = diff.differenceRadians {
                     return "\(diff.name)=\(radians * 180 / Double.pi)deg"
@@ -256,6 +272,57 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             horizonAnalysisDebugLog("geocalib unavailable: error=\(String(describing: error))")
             return .unavailable
         }
+    }
+
+    private func analyzeGeoCalibHorizonWithMetalFallback(
+        preprocessed: AUGeoCalibPreprocessedImage,
+        verifiers: [AUGeoCalibHorizonVerifierEstimate]
+    ) throws -> AUGeoCalibHorizonDetectionResult {
+        guard let runtimeBundle = loadGeoCalibRuntimeBundle() else {
+            throw AUGeoCalibCoreMLNeuralError.invalidModel("runtime bundle failed to load")
+        }
+        guard let metalLibraryURL = geoCalibMetalLibraryURL else {
+            throw AUGeoCalibCoreMLNeuralError.invalidModel("missing metallib URL")
+        }
+        horizonAnalysisDebugLog("geocalib metal fallback shape=\(preprocessed.inputShape) metal=\(metalLibraryURL.path)")
+        return try AUGeoCalibHorizonDetector.detect(
+            preprocessedImage: preprocessed,
+            runtimeBundle: runtimeBundle,
+            metalLibraryURL: metalLibraryURL,
+            verifierEstimates: verifiers
+        )
+    }
+
+    private func loadGeoCalibCoreMLRouter() -> AUGeoCalibCoreMLNeuralInferenceRouter? {
+        if geoCalibCoreMLLoadAttempted {
+            return geoCalibCoreMLRouter
+        }
+        geoCalibCoreMLLoadAttempted = true
+
+        let bundle = Bundle(for: AnyUprightHorizonManualPlugIn.self)
+        guard let resourceURL = bundle.resourceURL else {
+            horizonAnalysisDebugLog("geocalib coreml load missing resourceURL bundle=\(bundle.bundlePath)")
+            return nil
+        }
+        let modelURLs = [
+            resourceURL.appendingPathComponent("neural_forward_416x320.mlmodelc", isDirectory: true),
+            resourceURL.appendingPathComponent("neural_forward_320x416.mlmodelc", isDirectory: true),
+        ]
+        for modelURL in modelURLs where !FileManager.default.fileExists(atPath: modelURL.path) {
+            horizonAnalysisDebugLog("geocalib coreml load missing model path=\(modelURL.path)")
+            return nil
+        }
+
+        do {
+            let router = try AUGeoCalibCoreMLNeuralInferenceRouter(modelURLs: modelURLs)
+            try router.warmUp()
+            geoCalibCoreMLRouter = router
+            horizonAnalysisDebugLog("geocalib coreml load ok resourceURL=\(resourceURL.path)")
+        } catch {
+            horizonAnalysisDebugLog("geocalib coreml load failed resourceURL=\(resourceURL.path) error=\(String(describing: error))")
+            geoCalibCoreMLRouter = nil
+        }
+        return geoCalibCoreMLRouter
     }
 
     private func loadGeoCalibRuntimeBundle() -> AUGeoCalibRuntimeBundle? {

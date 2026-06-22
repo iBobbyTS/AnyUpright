@@ -89,13 +89,6 @@ enum AUGeoCalibImagePreprocessor {
             )
         }
 
-        let resized = bilinearResize(
-            working,
-            sourceWidth: width,
-            sourceHeight: height,
-            outputWidth: resizedSize.width,
-            outputHeight: resizedSize.height
-        )
         let cropWidth = max(edgeDivisibleBy, (resizedSize.width / edgeDivisibleBy) * edgeDivisibleBy)
         let cropHeight = max(edgeDivisibleBy, (resizedSize.height / edgeDivisibleBy) * edgeDivisibleBy)
         guard cropWidth <= resizedSize.width, cropHeight <= resizedSize.height else {
@@ -104,10 +97,12 @@ enum AUGeoCalibImagePreprocessor {
             )
         }
 
-        let cropped = centerCrop(
-            resized,
-            sourceWidth: resizedSize.width,
-            sourceHeight: resizedSize.height,
+        let cropped = bilinearResizeCenterCrop(
+            working,
+            sourceWidth: width,
+            sourceHeight: height,
+            resizedWidth: resizedSize.width,
+            resizedHeight: resizedSize.height,
             cropWidth: cropWidth,
             cropHeight: cropHeight
         )
@@ -127,6 +122,12 @@ enum AUGeoCalibImagePreprocessor {
             return (Int(Double(targetShortSide) * aspectRatio), targetShortSide)
         }
         return (targetShortSide, Int(Double(targetShortSide) / aspectRatio))
+    }
+
+    private struct ResizeAxisSample {
+        var lower: Int
+        var upper: Int
+        var upperWeight: Float
     }
 
     private static func gaussianBlurForAntialias(
@@ -165,50 +166,54 @@ enum AUGeoCalibImagePreprocessor {
             y += 1
         }
 
-        var channel = 0
-        while channel < 3 {
-            let channelOffset = channel * width * height
-            y = 0
-            while y < height {
-                let rowOffset = channelOffset + y * width
-                x = 0
-                while x < width {
-                    var sum = Float(0)
-                    let indexOffset = x * kernelX.count
-                    var k = 0
-                    while k < kernelX.count {
-                        sum += input[rowOffset + xIndices[indexOffset + k]] * kernelX[k]
-                        k += 1
+        input.withUnsafeBufferPointer { inputBuffer in
+            horizontal.withUnsafeMutableBufferPointer { horizontalBuffer in
+                DispatchQueue.concurrentPerform(iterations: 3) { channel in
+                    let channelOffset = channel * width * height
+                    var y = 0
+                    while y < height {
+                        let rowOffset = channelOffset + y * width
+                        var x = 0
+                        while x < width {
+                            var sum = Float(0)
+                            let indexOffset = x * kernelX.count
+                            var k = 0
+                            while k < kernelX.count {
+                                sum += inputBuffer[rowOffset + xIndices[indexOffset + k]] * kernelX[k]
+                                k += 1
+                            }
+                            horizontalBuffer[rowOffset + x] = sum
+                            x += 1
+                        }
+                        y += 1
                     }
-                    horizontal[rowOffset + x] = sum
-                    x += 1
                 }
-                y += 1
             }
-            channel += 1
         }
 
-        channel = 0
-        while channel < 3 {
-            let channelOffset = channel * width * height
-            y = 0
-            while y < height {
-                let rowOffset = channelOffset + y * width
-                let indexOffset = y * kernelY.count
-                x = 0
-                while x < width {
-                    var sum = Float(0)
-                    var k = 0
-                    while k < kernelY.count {
-                        sum += horizontal[channelOffset + yIndices[indexOffset + k] * width + x] * kernelY[k]
-                        k += 1
+        horizontal.withUnsafeBufferPointer { horizontalBuffer in
+            output.withUnsafeMutableBufferPointer { outputBuffer in
+                DispatchQueue.concurrentPerform(iterations: 3) { channel in
+                    let channelOffset = channel * width * height
+                    var y = 0
+                    while y < height {
+                        let rowOffset = channelOffset + y * width
+                        let indexOffset = y * kernelY.count
+                        var x = 0
+                        while x < width {
+                            var sum = Float(0)
+                            var k = 0
+                            while k < kernelY.count {
+                                sum += horizontalBuffer[channelOffset + yIndices[indexOffset + k] * width + x] * kernelY[k]
+                                k += 1
+                            }
+                            outputBuffer[rowOffset + x] = sum
+                            x += 1
+                        }
+                        y += 1
                     }
-                    output[rowOffset + x] = sum
-                    x += 1
                 }
-                y += 1
             }
-            channel += 1
         }
         return output
     }
@@ -233,66 +238,79 @@ enum AUGeoCalibImagePreprocessor {
         return values.map { Float($0 / sum) }
     }
 
-    private static func bilinearResize(
+    private static func bilinearResizeCenterCrop(
         _ input: [Float],
         sourceWidth: Int,
         sourceHeight: Int,
-        outputWidth: Int,
-        outputHeight: Int
+        resizedWidth: Int,
+        resizedHeight: Int,
+        cropWidth: Int,
+        cropHeight: Int
     ) -> [Float] {
-        var output = Array(repeating: Float(0), count: 3 * outputWidth * outputHeight)
-        let scaleX = Double(sourceWidth) / Double(outputWidth)
-        let scaleY = Double(sourceHeight) / Double(outputHeight)
+        let cropLeft = (resizedWidth - cropWidth + 1) / 2
+        let cropTop = (resizedHeight - cropHeight + 1) / 2
+        let xSamples = resizeAxisSamples(
+            sourceSize: sourceWidth,
+            resizedSize: resizedWidth,
+            cropStart: cropLeft,
+            cropSize: cropWidth
+        )
+        let ySamples = resizeAxisSamples(
+            sourceSize: sourceHeight,
+            resizedSize: resizedHeight,
+            cropStart: cropTop,
+            cropSize: cropHeight
+        )
+        var output = Array(repeating: Float(0), count: 3 * cropWidth * cropHeight)
 
-        for channel in 0..<3 {
-            let sourceChannel = channel * sourceWidth * sourceHeight
-            let outputChannel = channel * outputWidth * outputHeight
-            for y in 0..<outputHeight {
-                let sourceY = (Double(y) + 0.5) * scaleY - 0.5
-                let floorY = Int(floor(sourceY))
-                let y0 = clamp(floorY, lower: 0, upper: sourceHeight - 1)
-                let y1 = clamp(floorY + 1, lower: 0, upper: sourceHeight - 1)
-                let wy = Float(sourceY - Double(floorY))
-                for x in 0..<outputWidth {
-                    let sourceX = (Double(x) + 0.5) * scaleX - 0.5
-                    let floorX = Int(floor(sourceX))
-                    let x0 = clamp(floorX, lower: 0, upper: sourceWidth - 1)
-                    let x1 = clamp(floorX + 1, lower: 0, upper: sourceWidth - 1)
-                    let wx = Float(sourceX - Double(floorX))
-
-                    let top = input[sourceChannel + y0 * sourceWidth + x0] * (1.0 - wx) +
-                        input[sourceChannel + y0 * sourceWidth + x1] * wx
-                    let bottom = input[sourceChannel + y1 * sourceWidth + x0] * (1.0 - wx) +
-                        input[sourceChannel + y1 * sourceWidth + x1] * wx
-                    output[outputChannel + y * outputWidth + x] = top * (1.0 - wy) + bottom * wy
+        input.withUnsafeBufferPointer { inputBuffer in
+            output.withUnsafeMutableBufferPointer { outputBuffer in
+                DispatchQueue.concurrentPerform(iterations: 3) { channel in
+                    let sourceChannel = channel * sourceWidth * sourceHeight
+                    let outputChannel = channel * cropWidth * cropHeight
+                    for y in 0..<cropHeight {
+                        let ySample = ySamples[y]
+                        let row0 = sourceChannel + ySample.lower * sourceWidth
+                        let row1 = sourceChannel + ySample.upper * sourceWidth
+                        let wy = ySample.upperWeight
+                        let inverseWY = 1.0 - wy
+                        for x in 0..<cropWidth {
+                            let xSample = xSamples[x]
+                            let wx = xSample.upperWeight
+                            let inverseWX = 1.0 - wx
+                            let top = inputBuffer[row0 + xSample.lower] * inverseWX +
+                                inputBuffer[row0 + xSample.upper] * wx
+                            let bottom = inputBuffer[row1 + xSample.lower] * inverseWX +
+                                inputBuffer[row1 + xSample.upper] * wx
+                            outputBuffer[outputChannel + y * cropWidth + x] = top * inverseWY + bottom * wy
+                        }
+                    }
                 }
             }
         }
         return output
     }
 
-    private static func centerCrop(
-        _ input: [Float],
-        sourceWidth: Int,
-        sourceHeight: Int,
-        cropWidth: Int,
-        cropHeight: Int
-    ) -> [Float] {
-        let cropLeft = (sourceWidth - cropWidth + 1) / 2
-        let cropTop = (sourceHeight - cropHeight + 1) / 2
-        var output = Array(repeating: Float(0), count: 3 * cropWidth * cropHeight)
-        for channel in 0..<3 {
-            let sourceChannel = channel * sourceWidth * sourceHeight
-            let outputChannel = channel * cropWidth * cropHeight
-            for y in 0..<cropHeight {
-                let sourceStart = sourceChannel + (cropTop + y) * sourceWidth + cropLeft
-                let outputStart = outputChannel + y * cropWidth
-                for x in 0..<cropWidth {
-                    output[outputStart + x] = input[sourceStart + x]
-                }
-            }
+    private static func resizeAxisSamples(
+        sourceSize: Int,
+        resizedSize: Int,
+        cropStart: Int,
+        cropSize: Int
+    ) -> [ResizeAxisSample] {
+        let scale = Double(sourceSize) / Double(resizedSize)
+        var samples: [ResizeAxisSample] = []
+        samples.reserveCapacity(cropSize)
+        for index in 0..<cropSize {
+            let resizedIndex = cropStart + index
+            let source = (Double(resizedIndex) + 0.5) * scale - 0.5
+            let floorIndex = Int(floor(source))
+            samples.append(ResizeAxisSample(
+                lower: clamp(floorIndex, lower: 0, upper: sourceSize - 1),
+                upper: clamp(floorIndex + 1, lower: 0, upper: sourceSize - 1),
+                upperWeight: Float(source - Double(floorIndex))
+            ))
         }
-        return output
+        return samples
     }
 }
 

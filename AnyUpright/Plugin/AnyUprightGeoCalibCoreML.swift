@@ -23,11 +23,60 @@ enum AUGeoCalibCoreMLNeuralError: Error, CustomStringConvertible {
     }
 }
 
-struct AUGeoCalibCoreMLNeuralInferenceSession {
+struct AUGeoCalibCoreMLNeuralInferenceRouter {
+    private var sessionsByShape: [[Int]: AUGeoCalibCoreMLNeuralInferenceSession] = [:]
+
+    init(modelURLs: [URL], computeUnits: MLComputeUnits = .all) throws {
+        guard !modelURLs.isEmpty else {
+            throw AUGeoCalibCoreMLNeuralError.invalidModel("at least one Core ML model is required")
+        }
+        for modelURL in modelURLs {
+            let session = try AUGeoCalibCoreMLNeuralInferenceSession(
+                modelURL: modelURL,
+                computeUnits: computeUnits
+            )
+            let shape = session.supportedInputShape
+            if sessionsByShape[shape] != nil {
+                throw AUGeoCalibCoreMLNeuralError.invalidModel(
+                    "duplicate Core ML model for input shape \(geoCalibShapeDescription(shape)): \(modelURL.path)"
+                )
+            }
+            sessionsByShape[shape] = session
+        }
+    }
+
+    func run(inputRGB: [Float], inputShape: [Int]) throws -> AUGeoCalibNeuralOutput {
+        guard let session = sessionsByShape[inputShape] else {
+            let supported = sessionsByShape.keys
+                .map(geoCalibShapeDescription)
+                .sorted()
+                .joined(separator: ", ")
+            throw AUGeoCalibCoreMLNeuralError.invalidInput(
+                "no Core ML model for input shape \(geoCalibShapeDescription(inputShape)); supported shapes: \(supported)"
+            )
+        }
+        return try session.run(inputRGB: inputRGB, inputShape: inputShape)
+    }
+
+    func warmUp() throws {
+        for shape in sessionsByShape.keys.sorted(by: { geoCalibShapeDescription($0) < geoCalibShapeDescription($1) }) {
+            try sessionsByShape[shape]?.warmUp()
+        }
+    }
+}
+
+final class AUGeoCalibCoreMLNeuralInferenceSession {
     private let model: MLModel
-    private let inputName: String
     private let inputShape: [Int]
+    private let inputElementCount: Int
+    private let inputArray: MLMultiArray
+    private let inputProvider: MLDictionaryFeatureProvider
     private let outputShapes: [String: [Int]]
+    private let predictionLock = NSLock()
+
+    var supportedInputShape: [Int] {
+        inputShape
+    }
 
     init(modelURL: URL, computeUnits: MLComputeUnits = .all) throws {
         let configuration = MLModelConfiguration()
@@ -46,8 +95,13 @@ struct AUGeoCalibCoreMLNeuralInferenceSession {
             model.modelDescription.inputDescriptionsByName.first else {
             throw AUGeoCalibCoreMLNeuralError.invalidModel("model has no inputs")
         }
-        inputName = input.key
-        inputShape = try Self.multiArrayShape(input.value, name: input.key)
+        let resolvedInputName = input.key
+        let resolvedInputShape = try Self.multiArrayShape(input.value, name: input.key)
+        let resolvedInputElementCount = product(resolvedInputShape)
+        let resolvedInputArray = try Self.makeEmptyContiguousFloat32Array(shape: resolvedInputShape)
+        let resolvedInputProvider = try MLDictionaryFeatureProvider(
+            dictionary: [resolvedInputName: MLFeatureValue(multiArray: resolvedInputArray)]
+        )
 
         var shapes: [String: [Int]] = [:]
         for name in ["up_field", "up_confidence", "latitude_field", "latitude_confidence"] {
@@ -56,6 +110,10 @@ struct AUGeoCalibCoreMLNeuralInferenceSession {
             }
             shapes[name] = try Self.multiArrayShape(description, name: name)
         }
+        inputShape = resolvedInputShape
+        inputElementCount = resolvedInputElementCount
+        inputArray = resolvedInputArray
+        inputProvider = resolvedInputProvider
         outputShapes = shapes
     }
 
@@ -65,17 +123,20 @@ struct AUGeoCalibCoreMLNeuralInferenceSession {
                 "expected input shape \(inputShape), got \(requestedShape)"
             )
         }
-        guard inputRGB.count == product(inputShape) else {
+        guard inputRGB.count == inputElementCount else {
             throw AUGeoCalibCoreMLNeuralError.invalidInput(
-                "expected \(product(inputShape)) floats, got \(inputRGB.count)"
+                "expected \(inputElementCount) floats, got \(inputRGB.count)"
             )
         }
 
-        let inputArray = try Self.makeContiguousFloat32Array(values: inputRGB, shape: inputShape)
-        let provider = try MLDictionaryFeatureProvider(
-            dictionary: [inputName: MLFeatureValue(multiArray: inputArray)]
-        )
-        let output = try model.prediction(from: provider)
+        predictionLock.lock()
+        defer { predictionLock.unlock() }
+
+        let inputPointer = inputArray.dataPointer.bindMemory(to: Float.self, capacity: inputElementCount)
+        inputRGB.withUnsafeBufferPointer { source in
+            inputPointer.update(from: source.baseAddress!, count: inputElementCount)
+        }
+        let output = try model.prediction(from: inputProvider)
 
         let upField = try Self.floatArray(from: output, name: "up_field")
         let upConfidence = try Self.floatArray(from: output, name: "up_confidence")
@@ -121,14 +182,10 @@ struct AUGeoCalibCoreMLNeuralInferenceSession {
         return constraint.shape.map { $0.intValue }
     }
 
-    private static func makeContiguousFloat32Array(values: [Float], shape: [Int]) throws -> MLMultiArray {
+    private static func makeEmptyContiguousFloat32Array(shape: [Int]) throws -> MLMultiArray {
         let array = try MLMultiArray(shape: shape.map { NSNumber(value: $0) }, dataType: .float32)
         guard contiguousShape(array) == shape else {
             throw AUGeoCalibCoreMLNeuralError.invalidInput("Core ML allocated non-contiguous input array")
-        }
-        let pointer = array.dataPointer.bindMemory(to: Float.self, capacity: values.count)
-        values.withUnsafeBufferPointer { source in
-            pointer.update(from: source.baseAddress!, count: values.count)
         }
         return array
     }
@@ -180,4 +237,8 @@ struct AUGeoCalibCoreMLNeuralInferenceSession {
         append(axis: 0, offset: 0)
         return output
     }
+}
+
+private func geoCalibShapeDescription(_ shape: [Int]) -> String {
+    shape.map(String.init).joined(separator: "x")
 }

@@ -4,7 +4,6 @@
 //
 
 import Foundation
-import AppKit
 import CoreImage
 import IOSurface
 
@@ -115,23 +114,17 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
 }
 
 @objc(AnyUprightQuadManualPlugIn)
-class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustomParameterViewHost_v2 {
-    private static var retainedDetectSourceQuadButtonViews: [AnyUprightDetectSourceQuadButtonView] = []
-
+class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
     private let analysisLock = NSLock()
     private let analysisContext = CIContext(options: nil)
     private var analysisState = QuadAnalysisScratchState()
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
-        paramAPI.addCustomParameter(
-            withName: "Detect Source Quad",
+        paramAPI.addPushButton(
+            withName: "Detect Edge and Corner",
             parameterID: QuadParam.detectSourceQuad.rawValue,
-            defaultValue: NSData(),
-            parameterFlags: FxParameterFlags(
-                kFxParameterFlag_NOT_ANIMATABLE |
-                kFxParameterFlag_CUSTOM_UI |
-                kFxParameterFlag_USE_FULL_VIEW_WIDTH
-            )
+            selector: #selector(detectSourceQuad),
+            parameterFlags: defaultFlags()
         )
         try super.addEffectParameters(paramAPI)
     }
@@ -140,49 +133,8 @@ class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustom
         .sourceQuad
     }
 
-    @objc(classForCustomParameterID:)
-    func classForCustomParameterID(_ parameterID: UInt32) -> AnyClass {
-        guard parameterID == QuadParam.detectSourceQuad.rawValue else {
-            return NSObject.self
-        }
-
-        return NSData.self
-    }
-
-    @objc(classesForCustomParameterID:)
-    func classesForCustomParameterID(_ parameterID: UInt32) -> NSSet {
-        guard parameterID == QuadParam.detectSourceQuad.rawValue else {
-            return NSSet(object: NSObject.self)
-        }
-
-        return NSSet(object: NSData.self)
-    }
-
-    @objc(createViewForParameterID:)
-    func createView(forParameterID parameterID: UInt32) -> NSView? {
-        guard parameterID == QuadParam.detectSourceQuad.rawValue else {
-            return nil
-        }
-
-        let view = AnyUprightDetectSourceQuadButtonView(plugin: self)
-        // FxPlug hosts can release the plug-in object while custom inspector NSViews
-        // are still unwinding, so keep returned views alive for the XPC lifetime.
-        Self.retainedDetectSourceQuadButtonViews.append(view)
-        return view
-    }
-
-    func detectSourceQuadFromButton(_ sender: AnyObject) {
-        guard let actionAPI = _apiManager.api(for: FxCustomParameterActionAPI_v4.self) as? FxCustomParameterActionAPI_v4 else {
-            startSourceQuadDetection(at: currentParameterTime())
-            return
-        }
-
-        actionAPI.startAction(sender)
-        defer {
-            actionAPI.endAction(sender)
-        }
-        let time = actionAPI.currentTime()
-        startSourceQuadDetection(at: time)
+    @objc private func detectSourceQuad() {
+        startSourceQuadDetection(at: currentParameterTime())
     }
 
     private func startSourceQuadDetection(at time: CMTime) {
@@ -386,58 +338,6 @@ class AnyUprightQuadManualPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer, FxCustom
         } else {
             try? data.write(to: URL(fileURLWithPath: logPath))
         }
-    }
-}
-
-private final class AnyUprightDetectSourceQuadButtonView: NSView {
-    private static let rowContentWidth: CGFloat = 300.0
-    private static let buttonSize = NSSize(width: 220.0, height: 26.0)
-    private static let buttonXOffset: CGFloat = 20.0
-
-    private weak var plugin: AnyUprightQuadManualPlugIn?
-    private let button: NSButton
-
-    init(plugin: AnyUprightQuadManualPlugIn) {
-        self.plugin = plugin
-        self.button = NSButton(title: "Detect Edge and Corner", target: nil, action: nil)
-        super.init(frame: NSRect(x: 0.0, y: 0.0, width: Self.rowContentWidth, height: 32.0))
-
-        button.bezelStyle = .rounded
-        button.setButtonType(.momentaryPushIn)
-        button.target = self
-        button.action = #selector(detectSourceQuad)
-        button.setContentCompressionResistancePriority(.required, for: .horizontal)
-
-        addSubview(button)
-        updateButtonFrame()
-    }
-
-    required init?(coder: NSCoder) {
-        nil
-    }
-
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: Self.rowContentWidth, height: 32.0)
-    }
-
-    override func layout() {
-        super.layout()
-        updateButtonFrame()
-    }
-
-    private func updateButtonFrame() {
-        let x = min(max(0.0, Self.buttonXOffset), max(0.0, bounds.width - Self.buttonSize.width))
-        let y = max(0.0, (bounds.height - Self.buttonSize.height) / 2.0)
-        button.frame = NSRect(
-            x: x,
-            y: y,
-            width: Self.buttonSize.width,
-            height: Self.buttonSize.height
-        )
-    }
-
-    @objc private func detectSourceQuad() {
-        plugin?.detectSourceQuadFromButton(self)
     }
 }
 

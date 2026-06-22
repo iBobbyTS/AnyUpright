@@ -2,7 +2,7 @@
 //  evaluate-swift-geocalib-rotation.swift
 //  AnyUpright
 //
-//  Standalone LaMAR2k validator for the project-owned Swift/Metal GeoCalib
+//  Standalone LaMAR2k validator for the project-owned Swift/Core ML GeoCalib
 //  Horizon path.
 //
 
@@ -15,9 +15,6 @@ import Foundation
 private struct SwiftGeoCalibEvaluationOptions {
     var dataset = URL(fileURLWithPath: "/Users/ibobby/Temp/AnyUprightAlgorithmWorkDirectory/data/lamar2k")
     var output = URL(fileURLWithPath: "/Users/ibobby/Temp/AnyUprightAlgorithmWorkDirectory/outputs/swift_geocalib_lamar2k_full")
-    var runtimeBundle = URL(fileURLWithPath: "AnyUpright/Plugin/GeoCalibRuntime")
-    var metalSource = URL(fileURLWithPath: "AnyUpright/Plugin/AnyUprightGeoCalib.metal")
-    var metalLibrary: URL?
     var coreMLModels: [URL] = []
     var coreMLComputeUnits = "all"
     var warmUpNeural = false
@@ -115,31 +112,16 @@ struct SwiftGeoCalibRotationEvaluator {
             throw EvaluationFailure.failed("no dataset records to evaluate")
         }
 
-        let neuralSession: EvaluationNeuralSession
-        if !options.coreMLModels.isEmpty {
-            let computeUnits = try coreMLComputeUnits(named: options.coreMLComputeUnits)
-            neuralSession = .coreML(
-                try AUGeoCalibCoreMLNeuralInferenceRouter(
-                    modelURLs: options.coreMLModels,
-                    computeUnits: computeUnits
-                )
-            )
-        } else {
-            let runtimeBundle = try AUGeoCalibRuntimeBundle(rootURL: options.runtimeBundle)
-            let session: AUGeoCalibNeuralInferenceSession
-            if let metalLibrary = options.metalLibrary {
-                session = try AUGeoCalibNeuralInferenceSession(
-                    runtimeBundle: runtimeBundle,
-                    metalLibraryURL: metalLibrary
-                )
-            } else {
-                session = try AUGeoCalibNeuralInferenceSession(
-                    runtimeBundle: runtimeBundle,
-                    metalSource: options.metalSource
-                )
-            }
-            neuralSession = .metal(session)
+        guard !options.coreMLModels.isEmpty else {
+            throw EvaluationFailure.failed("at least one --coreml-model is required")
         }
+        let computeUnits = try coreMLComputeUnits(named: options.coreMLComputeUnits)
+        let neuralSession = try EvaluationNeuralSession(
+            router: AUGeoCalibCoreMLNeuralInferenceRouter(
+                modelURLs: options.coreMLModels,
+                computeUnits: computeUnits
+            )
+        )
         if options.warmUpNeural {
             try neuralSession.warmUp()
         }
@@ -228,12 +210,6 @@ struct SwiftGeoCalibRotationEvaluator {
                 options.dataset = resolvedURL(try requireValue())
             case "--out":
                 options.output = resolvedURL(try requireValue())
-            case "--runtime-bundle":
-                options.runtimeBundle = resolvedURL(try requireValue())
-            case "--metal-source":
-                options.metalSource = resolvedURL(try requireValue())
-            case "--metal-library":
-                options.metalLibrary = resolvedURL(try requireValue())
             case "--coreml-model":
                 options.coreMLModels.append(resolvedURL(try requireValue()))
             case "--coreml-compute-units":
@@ -267,41 +243,33 @@ struct SwiftGeoCalibRotationEvaluator {
     }
 }
 
-private enum EvaluationNeuralSession {
-    case metal(AUGeoCalibNeuralInferenceSession)
-    case coreML(AUGeoCalibCoreMLNeuralInferenceRouter)
+private struct EvaluationNeuralSession {
+    var router: AUGeoCalibCoreMLNeuralInferenceRouter
 
     func detect(
         preprocessedImage: AUGeoCalibPreprocessedImage,
         verifierEstimates: [AUGeoCalibHorizonVerifierEstimate]
     ) throws -> AUGeoCalibHorizonDetectionResult {
-        switch self {
-        case .metal(let session):
-            return try AUGeoCalibHorizonDetector.detect(
-                preprocessedImage: preprocessedImage,
-                neuralSession: session,
-                verifierEstimates: verifierEstimates
-            )
-        case .coreML(let router):
-            let neuralOutput = try router.run(
-                inputRGB: preprocessedImage.inputRGBNCHW,
-                inputShape: preprocessedImage.inputShape
-            )
-            return try AUGeoCalibHorizonDetector.detect(
-                preprocessedImage: preprocessedImage,
-                neuralOutput: neuralOutput,
-                verifierEstimates: verifierEstimates
-            )
+        let neuralOutput = try router.run(
+            inputRGB: preprocessedImage.inputRGBNCHW,
+            inputShape: preprocessedImage.inputShape
+        )
+        return try AUGeoCalibHorizonDetector.detect(
+            preprocessedImage: preprocessedImage,
+            neuralOutput: neuralOutput,
+            verifierEstimates: verifierEstimates
+        )
+    }
+
+    func closestInputShape(width: Int, height: Int) throws -> [Int] {
+        let specs = router.supportedInputShapes.map {
+            AUGeoCalibInputShapeSpec(label: "\($0[3]):\($0[2])", inputShape: $0)
         }
+        return try AUGeoCalibInputShapeSpec.closest(toWidth: width, height: height, in: specs).inputShape
     }
 
     func warmUp() throws {
-        switch self {
-        case .metal:
-            return
-        case .coreML(let router):
-            try router.warmUp()
-        }
+        try router.warmUp()
     }
 }
 
@@ -323,10 +291,12 @@ private func evaluateRecord(
     let loadTime = elapsedMilliseconds(since: loadStart)
 
     let preprocessStart = nowNanos()
+    let targetInputShape = try neuralSession.closestInputShape(width: analysisImage.width, height: analysisImage.height)
     let preprocessed = try AUGeoCalibImagePreprocessor.preprocessRGB(
         analysisImage.rgbNCHW,
         width: analysisImage.width,
-        height: analysisImage.height
+        height: analysisImage.height,
+        targetInputShape: targetInputShape
     )
     let preprocessTime = elapsedMilliseconds(since: preprocessStart)
 
@@ -917,9 +887,6 @@ private func printUsageAndExit() -> Never {
         Options:
           --dataset PATH                 LaMAR2k dataset directory containing images.csv and images/
           --out PATH                     Output directory for predictions.csv, summary.json, summary.md
-          --runtime-bundle PATH          AnyUpright GeoCalibRuntime directory
-          --metal-source PATH            Metal source file, used when --metal-library is omitted
-          --metal-library PATH           Prebuilt default.metallib
           --coreml-model PATH            Core ML neural-forward .mlpackage/.mlmodel/.mlmodelc; may be repeated for multiple input shapes
           --coreml-compute-units NAME    all, cpuOnly, cpuAndGPU, cpuAndNeuralEngine
           --warmup-neural                Run an untimed neural warm-up before per-image evaluation

@@ -65,14 +65,22 @@ struct AnyUprightGeoCalibCoreMLCacheTests {
     private static func testBundledModelShapeSpecs() throws {
         let repoPath = CommandLine.arguments.dropFirst().first ?? "/Users/ibobby/Projects/AnyUpright"
         let modelRoot = URL(fileURLWithPath: repoPath).appendingPathComponent("AnyUpright/Plugin/GeoCalibCoreML")
-        let landscapeSession = try AUGeoCalibCoreMLNeuralInferenceSession(
-            modelURL: modelRoot.appendingPathComponent("neural_forward_320x416.mlmodelc", isDirectory: true)
-        )
-        let portraitSession = try AUGeoCalibCoreMLNeuralInferenceSession(
-            modelURL: modelRoot.appendingPathComponent("neural_forward_416x320.mlmodelc", isDirectory: true)
-        )
+        let expectedModels: [(String, [Int])] = [
+            ("neural_forward_320x416.mlmodelc", [1, 3, 320, 416]),
+            ("neural_forward_416x320.mlmodelc", [1, 3, 416, 320]),
+            ("neural_forward_320x544.mlmodelc", [1, 3, 320, 544]),
+            ("neural_forward_544x320.mlmodelc", [1, 3, 544, 320]),
+            ("neural_forward_320x320.mlmodelc", [1, 3, 320, 320]),
+            ("neural_forward_320x480.mlmodelc", [1, 3, 320, 480]),
+            ("neural_forward_480x320.mlmodelc", [1, 3, 480, 320]),
+            ("neural_forward_320x736.mlmodelc", [1, 3, 320, 736]),
+        ]
 
-        try assertEqual(landscapeSession.supportedInputShape, [1, 3, 320, 416], "landscape model shape")
-        try assertEqual(portraitSession.supportedInputShape, [1, 3, 416, 320], "portrait model shape")
+        for (modelName, expectedShape) in expectedModels {
+            let session = try AUGeoCalibCoreMLNeuralInferenceSession(
+                modelURL: modelRoot.appendingPathComponent(modelName, isDirectory: true)
+            )
+            try assertEqual(session.supportedInputShape, expectedShape, "\(modelName) input shape")
+        }
     }
 }

@@ -21,8 +21,7 @@ enum HorizonParam: UInt32 {
 class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private static let geoCalibAnalysisMaxDimension = 1920
     private static let geoCalibVerifierMaxDimension = 640
-    private static let geoCalibLandscapeInputShape = [1, 3, 320, 416]
-    private static let geoCalibPortraitInputShape = [1, 3, 416, 320]
+    private static let geoCalibCoreMLModelShapes = AUGeoCalibInputShapeSpec.production
     private static let geoCalibLogLock = NSLock()
 
     private let analysisLock = NSLock()
@@ -30,9 +29,6 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private var analysisState = HorizonAnalysisScratchState()
     private var geoCalibCoreMLConfigurationAttempted = false
     private var geoCalibCoreMLConfigurationAvailable = false
-    private var geoCalibRuntimeBundle: AUGeoCalibRuntimeBundle?
-    private var geoCalibRuntimeLoadAttempted = false
-    private var geoCalibMetalLibraryURL: URL?
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         paramAPI.addPushButton(
@@ -83,7 +79,6 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         let requestedTime = analysisState.requestedAnalysisTime
         analysisLock.unlock()
         horizonAnalysisDebugLog("start requested=\(requestedTime)")
-        markGeoCalibCoreMLAnalysisStarted()
 
         guard let analysisAPI = _apiManager.api(for: FxAnalysisAPI.self) as? FxAnalysisAPI else {
             horizonAnalysisDebugLog("start missing FxAnalysisAPI")
@@ -238,6 +233,16 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         var totalMilliseconds: Double
     }
 
+    private struct GeoCalibPreprocessRun {
+        var preprocessed: AUGeoCalibPreprocessedImage
+        var source: String
+        var shapeLabel: String
+        var inputWidth: Int
+        var inputHeight: Int
+        var renderMilliseconds: Double?
+        var preprocessMilliseconds: Double
+    }
+
     private struct GeoCalibVerifierWorkerResult {
         var index: Int
         var estimate: AUGeoCalibHorizonVerifierEstimate
@@ -285,67 +290,43 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
     private func analyzeGeoCalibHorizon(_ frame: FxImageTile) -> GeoCalibHorizonAnalysisOutcome {
         let totalStart = Self.nowNanos()
-        let rgbStart = Self.nowNanos()
-        guard let rgbImage = AnyUprightAnalysisImage.rgbFloatImage(
-            from: frame,
-            maxDimension: Self.geoCalibAnalysisMaxDimension,
-            context: analysisContext
-        ) else {
-            horizonAnalysisDebugLog("geocalib unavailable: unable to render RGB frame")
-            return .unavailable
-        }
-        let rgbMilliseconds = Self.elapsedMilliseconds(since: rgbStart)
-        horizonAnalysisDebugLog(String(format: "geocalib input rgb=%dx%d rgb_ms=%.3f", rgbImage.width, rgbImage.height, rgbMilliseconds))
 
         do {
-            let preprocessStart = Self.nowNanos()
-            let preprocessed = try AUGeoCalibImagePreprocessor.preprocessRGB(
-                rgbImage.pixelsNCHW,
-                width: rgbImage.width,
-                height: rgbImage.height
-            )
-            let preprocessMilliseconds = Self.elapsedMilliseconds(since: preprocessStart)
+            let preprocessRun = try preprocessGeoCalibInput(frame)
+            let preprocessed = preprocessRun.preprocessed
+            horizonAnalysisDebugLog(String(
+                format: "geocalib input source=%@ input=%dx%d selected_ratio=%@ shape=%@ render_ms=%@ preprocess_ms=%.3f",
+                preprocessRun.source,
+                preprocessRun.inputWidth,
+                preprocessRun.inputHeight,
+                preprocessRun.shapeLabel,
+                String(describing: preprocessed.inputShape),
+                Self.formatMilliseconds(preprocessRun.renderMilliseconds),
+                preprocessRun.preprocessMilliseconds
+            ))
 
-            var result: AUGeoCalibHorizonDetectionResult
-            var source = "coreml"
+            let source = "coreml"
             var coreMLRun: AUGeoCalibCoreMLRunResult?
-            var metalDetectMilliseconds: Double?
             var optimizerGateMilliseconds: Double?
-            if configureGeoCalibCoreMLCacheIfAvailable() {
-                do {
-                    horizonAnalysisDebugLog("geocalib coreml shape=\(preprocessed.inputShape)")
-                    let run = try AUGeoCalibCoreMLSharedCache.shared.run(
-                        inputRGB: preprocessed.inputRGBNCHW,
-                        inputShape: preprocessed.inputShape,
-                        logger: Self.horizonAnalysisDebugLog
-                    )
-                    coreMLRun = run
-                    let optimizerStart = Self.nowNanos()
-                    result = try AUGeoCalibHorizonDetector.detect(
-                        preprocessedImage: preprocessed,
-                        neuralOutput: run.output,
-                        verifierEstimates: []
-                    )
-                    optimizerGateMilliseconds = Self.elapsedMilliseconds(since: optimizerStart)
-                } catch {
-                    horizonAnalysisDebugLog("geocalib coreml failed; trying metal fallback error=\(String(describing: error))")
-                    source = "metal_fallback"
-                    let metalStart = Self.nowNanos()
-                    result = try analyzeGeoCalibHorizonWithMetalFallback(
-                        preprocessed: preprocessed,
-                        verifiers: []
-                    )
-                    metalDetectMilliseconds = Self.elapsedMilliseconds(since: metalStart)
-                }
-            } else {
-                source = "metal_fallback"
-                let metalStart = Self.nowNanos()
-                result = try analyzeGeoCalibHorizonWithMetalFallback(
-                    preprocessed: preprocessed,
-                    verifiers: []
-                )
-                metalDetectMilliseconds = Self.elapsedMilliseconds(since: metalStart)
+            guard configureGeoCalibCoreMLCacheIfAvailable() else {
+                horizonAnalysisDebugLog("geocalib coreml unavailable: no configured model resources")
+                return .unavailable
             }
+            markGeoCalibCoreMLAnalysisStarted(inputShape: preprocessed.inputShape)
+            horizonAnalysisDebugLog("geocalib coreml shape=\(preprocessed.inputShape)")
+            let run = try AUGeoCalibCoreMLSharedCache.shared.run(
+                inputRGB: preprocessed.inputRGBNCHW,
+                inputShape: preprocessed.inputShape,
+                logger: Self.horizonAnalysisDebugLog
+            )
+            coreMLRun = run
+            let optimizerStart = Self.nowNanos()
+            var result = try AUGeoCalibHorizonDetector.detect(
+                preprocessedImage: preprocessed,
+                neuralOutput: run.output,
+                verifierEstimates: []
+            )
+            optimizerGateMilliseconds = Self.elapsedMilliseconds(since: optimizerStart)
 
             var verifierRun: GeoCalibVerifierRun?
             var verifierGateMilliseconds: Double?
@@ -373,13 +354,14 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             }.joined(separator: ", ")
             let timingParts = [
                 "source=\(source)",
-                String(format: "rgb_ms=%.3f", rgbMilliseconds),
-                String(format: "preprocess_ms=%.3f", preprocessMilliseconds),
+                "input_source=\(preprocessRun.source)",
+                "input_size=\(preprocessRun.inputWidth)x\(preprocessRun.inputHeight)",
+                "render_ms=\(Self.formatMilliseconds(preprocessRun.renderMilliseconds))",
+                String(format: "preprocess_ms=%.3f", preprocessRun.preprocessMilliseconds),
                 "coreml_cache_hit=\(coreMLRun?.cacheHit == true ? "true" : (coreMLRun == nil ? "nil" : "false"))",
                 "coreml_load_ms=\(Self.formatMilliseconds(coreMLRun?.loadMilliseconds))",
                 "coreml_predict_ms=\(Self.formatMilliseconds(coreMLRun?.predictionMilliseconds))",
                 "coreml_total_ms=\(Self.formatMilliseconds(coreMLRun?.totalMilliseconds))",
-                "metal_detect_ms=\(Self.formatMilliseconds(metalDetectMilliseconds))",
                 "optimizer_gate_ms=\(Self.formatMilliseconds(optimizerGateMilliseconds))",
                 "verifier_total_ms=\(Self.formatMilliseconds(verifierRun?.totalMilliseconds))",
                 "verifier_grayscale_ms=\(Self.formatMilliseconds(verifierRun?.grayscaleMilliseconds))",
@@ -405,22 +387,56 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         }
     }
 
-    private func analyzeGeoCalibHorizonWithMetalFallback(
-        preprocessed: AUGeoCalibPreprocessedImage,
-        verifiers: [AUGeoCalibHorizonVerifierEstimate]
-    ) throws -> AUGeoCalibHorizonDetectionResult {
-        guard let runtimeBundle = loadGeoCalibRuntimeBundle() else {
-            throw AUGeoCalibCoreMLNeuralError.invalidModel("runtime bundle failed to load")
+    private func preprocessGeoCalibInput(_ frame: FxImageTile) throws -> GeoCalibPreprocessRun {
+        let bounds = frame.imagePixelBounds
+        let sourceWidth = max(1, Int(bounds.right - bounds.left))
+        let sourceHeight = max(1, Int(bounds.top - bounds.bottom))
+        let shapeSpec = try Self.geoCalibCoreMLModelShape(forWidth: sourceWidth, height: sourceHeight)
+
+        let directStart = Self.nowNanos()
+        do {
+            let preprocessed = try AUGeoCalibDirectImagePreprocessor.preprocessFrame(
+                frame,
+                targetInputShape: shapeSpec.inputShape
+            )
+            return GeoCalibPreprocessRun(
+                preprocessed: preprocessed,
+                source: "metal_direct",
+                shapeLabel: shapeSpec.label,
+                inputWidth: sourceWidth,
+                inputHeight: sourceHeight,
+                renderMilliseconds: nil,
+                preprocessMilliseconds: Self.elapsedMilliseconds(since: directStart)
+            )
+        } catch {
+            horizonAnalysisDebugLog("geocalib direct preprocess failed; falling back to CI/CPU error=\(String(describing: error))")
         }
-        guard let metalLibraryURL = geoCalibMetalLibraryURL else {
-            throw AUGeoCalibCoreMLNeuralError.invalidModel("missing metallib URL")
+
+        let renderStart = Self.nowNanos()
+        guard let rgbImage = AnyUprightAnalysisImage.rgbFloatImage(
+            from: frame,
+            maxDimension: Self.geoCalibAnalysisMaxDimension,
+            context: analysisContext
+        ) else {
+            throw AUGeoCalibHorizonDetectorError.invalidImage("unable to render RGB frame")
         }
-        horizonAnalysisDebugLog("geocalib metal fallback shape=\(preprocessed.inputShape) metal=\(metalLibraryURL.path)")
-        return try AUGeoCalibHorizonDetector.detect(
-            preprocessedImage: preprocessed,
-            runtimeBundle: runtimeBundle,
-            metalLibraryURL: metalLibraryURL,
-            verifierEstimates: verifiers
+        let renderMilliseconds = Self.elapsedMilliseconds(since: renderStart)
+
+        let preprocessStart = Self.nowNanos()
+        let preprocessed = try AUGeoCalibImagePreprocessor.preprocessRGB(
+            rgbImage.pixelsNCHW,
+            width: rgbImage.width,
+            height: rgbImage.height,
+            targetInputShape: shapeSpec.inputShape
+        )
+        return GeoCalibPreprocessRun(
+            preprocessed: preprocessed,
+            source: "ci_cpu_fallback",
+            shapeLabel: shapeSpec.label,
+            inputWidth: rgbImage.width,
+            inputHeight: rgbImage.height,
+            renderMilliseconds: renderMilliseconds,
+            preprocessMilliseconds: Self.elapsedMilliseconds(since: preprocessStart)
         )
     }
 
@@ -428,17 +444,23 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         guard configureGeoCalibCoreMLCacheIfAvailable() else {
             return
         }
+        let prewarmShape = currentInputShapeForGeoCalibPrewarm()
         AUGeoCalibCoreMLSharedCache.shared.markPluginAdded(
-            prewarmShape: Self.geoCalibLandscapeInputShape,
+            prewarmShape: prewarmShape?.spec.inputShape,
             logger: Self.horizonAnalysisDebugLog
         )
+        if let prewarmShape {
+            horizonAnalysisDebugLog("geocalib coreml prewarm selected input_size=\(prewarmShape.width)x\(prewarmShape.height) ratio=\(prewarmShape.spec.label) shape=\(prewarmShape.spec.inputShape)")
+        } else {
+            horizonAnalysisDebugLog("geocalib coreml prewarm skipped: input size unavailable at plugin add")
+        }
     }
 
-    private func markGeoCalibCoreMLAnalysisStarted() {
+    private func markGeoCalibCoreMLAnalysisStarted(inputShape: [Int]) {
         guard configureGeoCalibCoreMLCacheIfAvailable() else {
             return
         }
-        AUGeoCalibCoreMLSharedCache.shared.markAnalysisStarted(logger: Self.horizonAnalysisDebugLog)
+        AUGeoCalibCoreMLSharedCache.shared.markAnalysisStarted(inputShape: inputShape, logger: Self.horizonAnalysisDebugLog)
     }
 
     private func configureGeoCalibCoreMLCacheIfAvailable() -> Bool {
@@ -452,16 +474,12 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             horizonAnalysisDebugLog("geocalib coreml configure missing resourceURL bundle=\(bundle.bundlePath)")
             return false
         }
-        let modelSpecs = [
+        let modelSpecs = Self.geoCalibCoreMLModelShapes.map { shape in
             AUGeoCalibCoreMLModelSpec(
-                inputShape: Self.geoCalibLandscapeInputShape,
-                modelURL: resourceURL.appendingPathComponent("neural_forward_320x416.mlmodelc", isDirectory: true)
-            ),
-            AUGeoCalibCoreMLModelSpec(
-                inputShape: Self.geoCalibPortraitInputShape,
-                modelURL: resourceURL.appendingPathComponent("neural_forward_416x320.mlmodelc", isDirectory: true)
-            ),
-        ]
+                inputShape: shape.inputShape,
+                modelURL: resourceURL.appendingPathComponent(shape.modelResourceName, isDirectory: true)
+            )
+        }
         for spec in modelSpecs where !FileManager.default.fileExists(atPath: spec.modelURL.path) {
             horizonAnalysisDebugLog("geocalib coreml configure missing model path=\(spec.modelURL.path)")
             return false
@@ -478,32 +496,33 @@ class AnyUprightHorizonManualPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         return geoCalibCoreMLConfigurationAvailable
     }
 
-    private func loadGeoCalibRuntimeBundle() -> AUGeoCalibRuntimeBundle? {
-        if geoCalibRuntimeLoadAttempted {
-            return geoCalibRuntimeBundle
-        }
-        geoCalibRuntimeLoadAttempted = true
+    private struct GeoCalibPrewarmSelection {
+        var width: Int
+        var height: Int
+        var spec: AUGeoCalibInputShapeSpec
+    }
 
-        let bundle = Bundle(for: AnyUprightHorizonManualPlugIn.self)
-        guard let resourceURL = bundle.resourceURL else {
-            horizonAnalysisDebugLog("geocalib load missing resourceURL bundle=\(bundle.bundlePath)")
-            return nil
-        }
-        let metalURL = resourceURL.appendingPathComponent("default.metallib")
-        guard FileManager.default.fileExists(atPath: metalURL.path) else {
-            horizonAnalysisDebugLog("geocalib load missing metallib path=\(metalURL.path)")
+    private func currentInputShapeForGeoCalibPrewarm() -> GeoCalibPrewarmSelection? {
+        guard let oscAPI = _apiManager.api(for: FxOnScreenControlAPI_v4.self) as? FxOnScreenControlAPI_v4 else {
             return nil
         }
 
-        geoCalibMetalLibraryURL = metalURL
-        do {
-            geoCalibRuntimeBundle = try AUGeoCalibRuntimeBundle(rootURL: resourceURL)
-            horizonAnalysisDebugLog("geocalib load ok resourceURL=\(resourceURL.path)")
-        } catch {
-            horizonAnalysisDebugLog("geocalib load failed resourceURL=\(resourceURL.path) error=\(String(describing: error))")
-            geoCalibRuntimeBundle = nil
+        var width: UInt = 0
+        var height: UInt = 0
+        var pixelAspectRatio = 1.0
+        oscAPI.inputWidth(&width, height: &height, pixelAspectRatio: &pixelAspectRatio)
+        if width == 0 || height == 0 {
+            oscAPI.objectWidth(&width, height: &height, pixelAspectRatio: &pixelAspectRatio)
         }
-        return geoCalibRuntimeBundle
+        guard width > 0, height > 0,
+              let spec = try? Self.geoCalibCoreMLModelShape(forWidth: Int(width), height: Int(height)) else {
+            return nil
+        }
+        return GeoCalibPrewarmSelection(width: Int(width), height: Int(height), spec: spec)
+    }
+
+    private static func geoCalibCoreMLModelShape(forWidth width: Int, height: Int) throws -> AUGeoCalibInputShapeSpec {
+        try AUGeoCalibInputShapeSpec.closest(toWidth: width, height: height, in: geoCalibCoreMLModelShapes)
     }
 
     private static func nowNanos() -> UInt64 {

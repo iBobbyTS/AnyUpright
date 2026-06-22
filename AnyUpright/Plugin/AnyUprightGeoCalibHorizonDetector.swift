@@ -61,7 +61,8 @@ enum AUGeoCalibImagePreprocessor {
         width: Int,
         height: Int,
         targetShortSide: Int = 320,
-        edgeDivisibleBy: Int = 32
+        edgeDivisibleBy: Int = 32,
+        targetInputShape: [Int]? = nil
     ) throws -> AUGeoCalibPreprocessedImage {
         guard width > 0, height > 0 else {
             throw AUGeoCalibHorizonDetectorError.invalidImage("source dimensions must be positive")
@@ -75,25 +76,21 @@ enum AUGeoCalibImagePreprocessor {
             )
         }
 
-        let resizedSize = resizedShortSideSize(width: width, height: height, targetShortSide: targetShortSide)
+        let geometry = try AUGeoCalibPreprocessGeometry(
+            sourceWidth: width,
+            sourceHeight: height,
+            targetShortSide: targetShortSide,
+            edgeDivisibleBy: edgeDivisibleBy,
+            targetInputShape: targetInputShape
+        )
         var working = inputRGBNCHW
-        let factorY = Double(height) / Double(resizedSize.height)
-        let factorX = Double(width) / Double(resizedSize.width)
-        if max(factorY, factorX) > 1.0 {
+        if geometry.needsAntialias {
             working = gaussianBlurForAntialias(
                 working,
                 width: width,
                 height: height,
-                sigmaY: max((factorY - 1.0) / 2.0, 0.001),
-                sigmaX: max((factorX - 1.0) / 2.0, 0.001)
-            )
-        }
-
-        let cropWidth = max(edgeDivisibleBy, (resizedSize.width / edgeDivisibleBy) * edgeDivisibleBy)
-        let cropHeight = max(edgeDivisibleBy, (resizedSize.height / edgeDivisibleBy) * edgeDivisibleBy)
-        guard cropWidth <= resizedSize.width, cropHeight <= resizedSize.height else {
-            throw AUGeoCalibHorizonDetectorError.invalidImage(
-                "resized image \(resizedSize.width)x\(resizedSize.height) is too small for \(edgeDivisibleBy)-multiple crop"
+                kernelY: geometry.kernelY,
+                kernelX: geometry.kernelX
             )
         }
 
@@ -101,27 +98,13 @@ enum AUGeoCalibImagePreprocessor {
             working,
             sourceWidth: width,
             sourceHeight: height,
-            resizedWidth: resizedSize.width,
-            resizedHeight: resizedSize.height,
-            cropWidth: cropWidth,
-            cropHeight: cropHeight
+            geometry: geometry
         )
         return AUGeoCalibPreprocessedImage(
             inputRGBNCHW: cropped,
-            inputShape: [1, 3, cropHeight, cropWidth],
-            scales: SIMD2<Float>(
-                Float(resizedSize.width) / Float(width),
-                Float(resizedSize.height) / Float(height)
-            )
+            inputShape: geometry.inputShape,
+            scales: geometry.scales
         )
-    }
-
-    private static func resizedShortSideSize(width: Int, height: Int, targetShortSide: Int) -> (width: Int, height: Int) {
-        let aspectRatio = Double(width) / Double(height)
-        if aspectRatio >= 1.0 {
-            return (Int(Double(targetShortSide) * aspectRatio), targetShortSide)
-        }
-        return (targetShortSide, Int(Double(targetShortSide) / aspectRatio))
     }
 
     private struct ResizeAxisSample {
@@ -134,11 +117,9 @@ enum AUGeoCalibImagePreprocessor {
         _ input: [Float],
         width: Int,
         height: Int,
-        sigmaY: Double,
-        sigmaX: Double
+        kernelY: [Float],
+        kernelX: [Float]
     ) -> [Float] {
-        let kernelY = gaussianKernel(size: antialiasKernelSize(sigmaY), sigma: sigmaY)
-        let kernelX = gaussianKernel(size: antialiasKernelSize(sigmaX), sigma: sigmaX)
         var horizontal = Array(repeating: Float(0), count: input.count)
         var output = Array(repeating: Float(0), count: input.count)
         let radiusX = kernelX.count / 2
@@ -218,63 +199,38 @@ enum AUGeoCalibImagePreprocessor {
         return output
     }
 
-    private static func antialiasKernelSize(_ sigma: Double) -> Int {
-        var size = Int(max(4.0 * sigma, 3.0))
-        if size % 2 == 0 {
-            size += 1
-        }
-        return size
-    }
-
-    private static func gaussianKernel(size: Int, sigma: Double) -> [Float] {
-        let mean = Double(size / 2)
-        var values: [Double] = []
-        values.reserveCapacity(size)
-        for index in 0..<size {
-            let x = Double(index) - mean
-            values.append(exp(-(x * x) / (2.0 * sigma * sigma)))
-        }
-        let sum = values.reduce(0.0, +)
-        return values.map { Float($0 / sum) }
-    }
-
     private static func bilinearResizeCenterCrop(
         _ input: [Float],
         sourceWidth: Int,
         sourceHeight: Int,
-        resizedWidth: Int,
-        resizedHeight: Int,
-        cropWidth: Int,
-        cropHeight: Int
+        geometry: AUGeoCalibPreprocessGeometry
     ) -> [Float] {
-        let cropLeft = (resizedWidth - cropWidth + 1) / 2
-        let cropTop = (resizedHeight - cropHeight + 1) / 2
         let xSamples = resizeAxisSamples(
             sourceSize: sourceWidth,
-            resizedSize: resizedWidth,
-            cropStart: cropLeft,
-            cropSize: cropWidth
+            resizedSize: geometry.resizedWidth,
+            cropStart: geometry.cropLeft,
+            cropSize: geometry.cropWidth
         )
         let ySamples = resizeAxisSamples(
             sourceSize: sourceHeight,
-            resizedSize: resizedHeight,
-            cropStart: cropTop,
-            cropSize: cropHeight
+            resizedSize: geometry.resizedHeight,
+            cropStart: geometry.cropTop,
+            cropSize: geometry.cropHeight
         )
-        var output = Array(repeating: Float(0), count: 3 * cropWidth * cropHeight)
+        var output = Array(repeating: Float(0), count: 3 * geometry.cropWidth * geometry.cropHeight)
 
         input.withUnsafeBufferPointer { inputBuffer in
             output.withUnsafeMutableBufferPointer { outputBuffer in
                 DispatchQueue.concurrentPerform(iterations: 3) { channel in
                     let sourceChannel = channel * sourceWidth * sourceHeight
-                    let outputChannel = channel * cropWidth * cropHeight
-                    for y in 0..<cropHeight {
+                    let outputChannel = channel * geometry.cropWidth * geometry.cropHeight
+                    for y in 0..<geometry.cropHeight {
                         let ySample = ySamples[y]
                         let row0 = sourceChannel + ySample.lower * sourceWidth
                         let row1 = sourceChannel + ySample.upper * sourceWidth
                         let wy = ySample.upperWeight
                         let inverseWY = 1.0 - wy
-                        for x in 0..<cropWidth {
+                        for x in 0..<geometry.cropWidth {
                             let xSample = xSamples[x]
                             let wx = xSample.upperWeight
                             let inverseWX = 1.0 - wx
@@ -282,7 +238,7 @@ enum AUGeoCalibImagePreprocessor {
                                 inputBuffer[row0 + xSample.upper] * wx
                             let bottom = inputBuffer[row1 + xSample.lower] * inverseWX +
                                 inputBuffer[row1 + xSample.upper] * wx
-                            outputBuffer[outputChannel + y * cropWidth + x] = top * inverseWY + bottom * wy
+                            outputBuffer[outputChannel + y * geometry.cropWidth + x] = top * inverseWY + bottom * wy
                         }
                     }
                 }
@@ -315,66 +271,6 @@ enum AUGeoCalibImagePreprocessor {
 }
 
 enum AUGeoCalibHorizonDetector {
-    static func detect(
-        preprocessedImage: AUGeoCalibPreprocessedImage,
-        runtimeBundle: AUGeoCalibRuntimeBundle,
-        metalSource: URL,
-        verifierEstimates: [AUGeoCalibHorizonVerifierEstimate] = [],
-        configuration: AUGeoCalibHorizonDetectorConfiguration = AUGeoCalibHorizonDetectorConfiguration()
-    ) throws -> AUGeoCalibHorizonDetectionResult {
-        let neuralOutput = try AUGeoCalibNeuralInference.run(
-            inputRGB: preprocessedImage.inputRGBNCHW,
-            inputShape: preprocessedImage.inputShape,
-            runtimeBundle: runtimeBundle,
-            metalSource: metalSource
-        )
-        return try optimizeAndGate(
-            neuralOutput: neuralOutput,
-            scales: preprocessedImage.scales,
-            verifierEstimates: verifierEstimates,
-            configuration: configuration
-        )
-    }
-
-    static func detect(
-        preprocessedImage: AUGeoCalibPreprocessedImage,
-        runtimeBundle: AUGeoCalibRuntimeBundle,
-        metalLibraryURL: URL,
-        verifierEstimates: [AUGeoCalibHorizonVerifierEstimate] = [],
-        configuration: AUGeoCalibHorizonDetectorConfiguration = AUGeoCalibHorizonDetectorConfiguration()
-    ) throws -> AUGeoCalibHorizonDetectionResult {
-        let neuralOutput = try AUGeoCalibNeuralInference.run(
-            inputRGB: preprocessedImage.inputRGBNCHW,
-            inputShape: preprocessedImage.inputShape,
-            runtimeBundle: runtimeBundle,
-            metalLibraryURL: metalLibraryURL
-        )
-        return try optimizeAndGate(
-            neuralOutput: neuralOutput,
-            scales: preprocessedImage.scales,
-            verifierEstimates: verifierEstimates,
-            configuration: configuration
-        )
-    }
-
-    static func detect(
-        preprocessedImage: AUGeoCalibPreprocessedImage,
-        neuralSession: AUGeoCalibNeuralInferenceSession,
-        verifierEstimates: [AUGeoCalibHorizonVerifierEstimate] = [],
-        configuration: AUGeoCalibHorizonDetectorConfiguration = AUGeoCalibHorizonDetectorConfiguration()
-    ) throws -> AUGeoCalibHorizonDetectionResult {
-        let neuralOutput = try neuralSession.run(
-            inputRGB: preprocessedImage.inputRGBNCHW,
-            inputShape: preprocessedImage.inputShape
-        )
-        return try optimizeAndGate(
-            neuralOutput: neuralOutput,
-            scales: preprocessedImage.scales,
-            verifierEstimates: verifierEstimates,
-            configuration: configuration
-        )
-    }
-
     static func detect(
         preprocessedImage: AUGeoCalibPreprocessedImage,
         neuralOutput: AUGeoCalibNeuralOutput,

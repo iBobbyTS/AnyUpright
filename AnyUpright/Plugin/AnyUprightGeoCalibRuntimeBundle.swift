@@ -106,15 +106,6 @@ struct AUGeoCalibRuntimeBundle {
     }
 }
 
-struct AUGeoCalibNeuralOutput {
-    var upField: [Float]
-    var upConfidence: [Float]
-    var latitudeField: [Float]
-    var latitudeConfidence: [Float]
-    var fieldShape: [Int]
-    var confidenceShape: [Int]
-}
-
 enum AUGeoCalibNeuralInference {
     static func run(
         inputRGB: [Float],

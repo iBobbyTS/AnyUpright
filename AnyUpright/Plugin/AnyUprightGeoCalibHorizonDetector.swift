@@ -389,6 +389,24 @@ enum AUGeoCalibHorizonDetector {
         )
     }
 
+    static func applyVerifierGate(
+        to result: AUGeoCalibHorizonDetectionResult,
+        verifierEstimates: [AUGeoCalibHorizonVerifierEstimate],
+        configuration: AUGeoCalibHorizonDetectorConfiguration = AUGeoCalibHorizonDetectorConfiguration()
+    ) -> AUGeoCalibHorizonDetectionResult {
+        let decision = gate(
+            rollRadians: result.rollRadians,
+            rollUncertaintyRadians: result.rollUncertaintyRadians,
+            verifierEstimates: verifierEstimates,
+            configuration: configuration
+        )
+        var updated = result
+        updated.accepted = decision.accepted
+        updated.rejectionReasons = decision.reasons
+        updated.verifierDiffs = decision.diffs
+        return updated
+    }
+
     static func gate(
         rollRadians: Double,
         rollUncertaintyRadians: Double,

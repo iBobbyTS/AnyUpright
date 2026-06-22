@@ -36,6 +36,7 @@ struct HorizonAnalysisScratchState {
     var detectedRotationRadians: Double?
     var detectedRotationTime = CMTime.zero
     var requestedAnalysisTime = CMTime.zero
+    var analysisStartNanos: UInt64?
 }
 
 struct UprightAnalysisScratchState {

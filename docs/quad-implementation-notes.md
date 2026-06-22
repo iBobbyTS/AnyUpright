@@ -12,17 +12,17 @@ This file records AnyUpright-specific Quad implementation choices. Reusable debu
 - The older combined Quad effect with a user-visible Mode or Stretch Mode selector is historical context only.
 - Each filter fixes the hidden Quad mode parameter to its intended render semantics.
 - Mirror modes were accidental exploratory work and are not part of current Quad behavior.
-- `AnyUpright Inner Stretch` defaults to the central 80% source quadrilateral.
+- `AnyUpright Inner Stretch` defaults to the central 80% input quadrilateral.
 - The full-frame Inner Stretch case remains a regression fixture for identity/no-offset render checks, not the current product default.
 - `AnyUpright Inner Stretch` includes an explicit `Detect Edge and Corner` native FxPlug push button on parameter channel `./216`. Clicking it starts FxAnalysis and runs independent edge/corner detection on one representative frame, but it does not move the current Inner Stretch. Detected line segments and intersections are written into hidden primitive slots with scores normalized to 0...1, then the plug-in enables `Edit Mode` and `Choose from detections`. `Score Threshold` controls which edge lines and corner crosses are drawn while `Choose from detections` is enabled. `Choose from detections` is a persistent inspector checkbox that temporarily moves OSC display and hit testing from the manual quad to detected primitives. The selection itself is transient OSC state: first selecting a point hides lines, first selecting a line hides points, repeated clicks toggle selections, and four selected points or four selected lines write the Inner Stretch then automatically turn the checkbox off. FCP visibility requires `Quad.moef` publish settings to target the push-button parameter (channel `./216`), choice parameter (channel `./218`), and threshold parameter (channel `./217` in the current development template); the raw FxPlug parameters can exist in Motion while remaining invisible in FCP if they are not published by the template.
 
 ## Inner Stretch
 
 - `Edit Mode` is visible only in `AnyUpright Inner Stretch` and is enabled by default.
-- While `Edit Mode` is enabled, the filter output keeps the image unwarped and dims outside the selected source quadrilateral.
+- While `Edit Mode` is enabled, the filter output keeps the image unwarped and dims outside the selected input quadrilateral.
 - The filter-output dimming follows the clip/image and can render even when the host does not instantiate or dispatch the FxPlug OSC.
 - The interactive white outline, blue handles, yellow hover/drag highlights, hit testing, and drag writeback are owned by the FxPlug OSC layer.
-- Inner Stretch corner coordinate groups are hidden from the inspector; users position the source quadrilateral through onscreen handles.
+- Inner Stretch corner coordinate groups are hidden from the inspector; users position the input quadrilateral through onscreen handles.
 - Automatic Inner Stretch detection fills fixed hidden edge/corner primitive slots, enables `Edit Mode`, and enables `Choose from detections`. While `Choose from detections` is enabled, detected edges draw as green lines and detected corners draw as green crosses when their normalized scores meet `Score Threshold`; the manual quad remains visible but stops receiving hits. Selected detected points/lines can write the Inner Stretch after four same-kind selections, then `Choose from detections` automatically turns off and the green detection overlay hides. False positives are ignored by raising the threshold, not selecting them, or correcting the result afterward with the manual handles.
 - Dragging Inner Stretch handles writes hidden source-corner percentage offsets and clears matching pixel offsets so render-time source geometry is independent of OSC surface size.
 - A previous point-parameter writeback experiment was backed out: Motion Studio 6.2 accepted `setXValue(_:yValue:)` during OSC drags, but later reads returned default points. The current path uses float-parameter writeback.
@@ -43,7 +43,7 @@ This file records AnyUpright-specific Quad implementation choices. Reusable debu
 - Object/canvas conversion goes through `FxOnScreenControlAPI_v4.convertPoint(...)`.
 - Inner Stretch uses preview-aligned raw-canvas geometry for visible OSC drawing and hit testing. The unflipped object/canvas quad is kept only for storage, writeback, and diagnostics.
 - The explicit Inner Stretch storage-to-preview crossing uses `verticallyFlippedObjectQuad` before object-to-canvas conversion.
-- `AnyUprightGeometry.quadObjectPoints`, `sourceQuadObjectPoints`, `sourceCornerPercentOffset`, and `cornerPixelOffset` own the testable corner naming and parameter/object conversion semantics.
+- `AnyUprightGeometry.quadObjectPoints`, `innerStretchObjectPoints`, `sourceCornerPercentOffset`, and `cornerPixelOffset` own the testable corner naming and parameter/object conversion semantics.
 
 ## Render And Overlay Choices
 

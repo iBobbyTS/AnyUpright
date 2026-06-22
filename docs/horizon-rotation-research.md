@@ -1,6 +1,6 @@
 # Horizon Rotation Research Notes
 
-This note records research for the `AnyUpright Horizon` effect only. It is intentionally scoped to roll estimation and centered affine rotation. Plane rectification, four-corner correction, keystone, source quadrilateral selection, camera pitch correction, FoV recovery, and homography validation belong to the Quad or Upright workstreams.
+This note records research for the `AnyUpright Horizon` effect only. It is intentionally scoped to roll estimation and centered affine rotation. Plane rectification, four-corner correction, keystone, input quadrilateral selection, camera pitch correction, FoV recovery, and homography validation belong to the Quad or Upright workstreams.
 
 ## Product Boundary
 

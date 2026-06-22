@@ -71,7 +71,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
         switch mode {
         case .outputCorners:
             return quadCanvasPoints(from: objectPoints)
-        case .sourceQuad:
+        case .innerStretch:
             // Inner Stretch's render preview is top-origin image/output geometry; raw Final Cut canvas events need that same visible layer.
             return quadCanvasPoints(from: AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints))
         }
@@ -99,7 +99,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
             quad: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
             rawCanvasHandles: rawHandles,
             rawCanvasQuad: [rawCanvasPoints.topLeft, rawCanvasPoints.topRight, rawCanvasPoints.bottomRight, rawCanvasPoints.bottomLeft],
-            usesRawCanvasHitLayer: mode == .sourceQuad
+            usesRawCanvasHitLayer: mode == .innerStretch
         )
     }
 
@@ -311,11 +311,11 @@ extension AnyUprightInnerStretchOSCPlugIn {
 
     func dragObjectPoint(from resolution: QuadOSCEventResolution, mode: AUQuadTransformMode, sourceSize: AUSize) -> AUPoint {
         let rawObjectPoint = objectPoint(fromCanvasPoint: resolution.canvasPoint)
-        return sourceQuadDragPoint(from: rawObjectPoint, mode: mode, coordinateMode: resolution.coordinateMode)
+        return innerStretchDragPoint(from: rawObjectPoint, mode: mode, coordinateMode: resolution.coordinateMode)
     }
 
-    func sourceQuadDragPoint(from point: AUPoint, mode: AUQuadTransformMode, coordinateMode: QuadOSCEventCoordinateMode) -> AUPoint {
-        guard mode == .sourceQuad,
+    func innerStretchDragPoint(from point: AUPoint, mode: AUQuadTransformMode, coordinateMode: QuadOSCEventCoordinateMode) -> AUPoint {
+        guard mode == .innerStretch,
               coordinateMode == .rawCanvas else {
             return point
         }

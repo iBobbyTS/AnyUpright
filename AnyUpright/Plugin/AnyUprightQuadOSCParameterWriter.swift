@@ -10,15 +10,15 @@ import IOSurface
 import Vision
 
 extension AnyUprightInnerStretchOSCPlugIn {
-    func setSourceQuad(_ quad: AUQuad, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
-        let offsets = AnyUprightGeometry.sourceQuadOffsets(forSourceQuad: quad, size: size)
+    func setInnerStretch(_ quad: AUQuad, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+        let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: quad, size: size)
         writeSourceCorner(.topLeft, percent: offsets.topLeftPercent, settingAPI: settingAPI, time: time)
         writeSourceCorner(.topRight, percent: offsets.topRightPercent, settingAPI: settingAPI, time: time)
         writeSourceCorner(.bottomRight, percent: offsets.bottomRightPercent, settingAPI: settingAPI, time: time)
         writeSourceCorner(.bottomLeft, percent: offsets.bottomLeftPercent, settingAPI: settingAPI, time: time)
         debugLog(
             String(
-                format: "set-source-quad tl=(%.2f,%.2f) tr=(%.2f,%.2f) br=(%.2f,%.2f) bl=(%.2f,%.2f)",
+                format: "set-inner-stretch tl=(%.2f,%.2f) tr=(%.2f,%.2f) br=(%.2f,%.2f) bl=(%.2f,%.2f)",
                 quad.topLeft.x,
                 quad.topLeft.y,
                 quad.topRight.x,
@@ -57,7 +57,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
             settingAPI.setFloatValue(pixels.x, toParameter: ids.pixelX.rawValue, at: time)
             settingAPI.setFloatValue(pixels.y, toParameter: ids.pixelY.rawValue, at: time)
 
-        case .sourceQuad:
+        case .innerStretch:
             let percent = AnyUprightGeometry.sourceCornerPercentOffset(forObjectPoint: point, corner: ids.corner)
             debugLog(
                 String(
@@ -79,7 +79,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
     func translateCorners(from state: AnyUprightParameterState, pixelDelta: AUPoint, corners: [AUQuadCorner], mode: AUQuadTransformMode, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         let offsets = quadCornerOffsets(from: state)
 
-        if mode == .sourceQuad {
+        if mode == .innerStretch {
             let percentDelta = AUPoint(
                 x: pixelDelta.x / max(size.width, 1.0),
                 y: pixelDelta.y / max(size.height, 1.0)

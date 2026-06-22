@@ -9,7 +9,7 @@
 #import <simd/simd.h>
 
 #define AURM_WarpFullFrame 0
-#define AURM_SourceQuadAdjusterPreview 2
+#define AURM_InnerStretchAdjusterPreview 2
 
 typedef enum AnyUprightVertexInputIndex {
     AUVII_Vertices        = 0,
@@ -49,10 +49,10 @@ typedef struct AnyUprightWarpState {
     vector_float2 imageCoordinateMax;
     vector_float2 inputImageOriginInTexture;
     vector_float2 inputTextureSize;
-    vector_float2 sourceQuadTopLeft;
-    vector_float2 sourceQuadTopRight;
-    vector_float2 sourceQuadBottomRight;
-    vector_float2 sourceQuadBottomLeft;
+    vector_float2 innerStretchTopLeft;
+    vector_float2 innerStretchTopRight;
+    vector_float2 innerStretchBottomRight;
+    vector_float2 innerStretchBottomLeft;
     int renderMode;
     int reserved0;
     int reserved1;

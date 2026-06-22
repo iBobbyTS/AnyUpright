@@ -96,7 +96,7 @@ enum AUReferenceOrientation {
 
 enum AUQuadTransformMode: Int32 {
     case outputCorners = 0
-    case sourceQuad = 1
+    case innerStretch = 1
 }
 
 enum AUQuadCorner {
@@ -470,7 +470,7 @@ func resolveOSCDisplayPart(hostActivePart: Int = 0, hoverPart: Int, dragPart: In
 }
 
 enum AnyUprightGeometry {
-    private static let sourceQuadInset = 0.10
+    private static let innerStretchInset = 0.10
 
     static func outputCoordinateBounds(for tileBounds: AUPixelBounds, imageBounds: AUPixelBounds) -> AUOutputCoordinateBounds {
         AUOutputCoordinateBounds(
@@ -499,17 +499,17 @@ enum AnyUprightGeometry {
         quad(from: offsets, base: AUQuad.fullFrame(size), size: size)
     }
 
-    static func sourceQuadDefault(_ size: AUSize) -> AUQuad {
+    static func innerStretchDefault(_ size: AUSize) -> AUQuad {
         AUQuad(
-            topLeft: AUPoint(x: size.width * sourceQuadInset, y: size.height * sourceQuadInset),
-            topRight: AUPoint(x: size.width * (1.0 - sourceQuadInset), y: size.height * sourceQuadInset),
-            bottomRight: AUPoint(x: size.width * (1.0 - sourceQuadInset), y: size.height * (1.0 - sourceQuadInset)),
-            bottomLeft: AUPoint(x: size.width * sourceQuadInset, y: size.height * (1.0 - sourceQuadInset))
+            topLeft: AUPoint(x: size.width * innerStretchInset, y: size.height * innerStretchInset),
+            topRight: AUPoint(x: size.width * (1.0 - innerStretchInset), y: size.height * innerStretchInset),
+            bottomRight: AUPoint(x: size.width * (1.0 - innerStretchInset), y: size.height * (1.0 - innerStretchInset)),
+            bottomLeft: AUPoint(x: size.width * innerStretchInset, y: size.height * (1.0 - innerStretchInset))
         )
     }
 
-    static func sourceQuad(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
-        quad(from: offsets, base: sourceQuadDefault(size), size: size)
+    static func innerStretch(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
+        quad(from: offsets, base: innerStretchDefault(size), size: size)
     }
 
     static func imagePoint(fromNormalizedLowerLeftPoint point: AUPoint, size: AUSize) -> AUPoint {
@@ -713,7 +713,7 @@ enum AnyUprightGeometry {
         return min(1.0, max(0.0, score / maximum))
     }
 
-    static func sourceQuadOffsets(forSourceQuad quad: AUQuad, size: AUSize) -> AUCornerOffsets {
+    static func innerStretchOffsets(forInnerStretch quad: AUQuad, size: AUSize) -> AUCornerOffsets {
         func objectPoint(fromImagePoint point: AUPoint) -> AUPoint {
             normalizedObjectPoint(fromImagePoint: point, size: size)
         }
@@ -746,8 +746,8 @@ enum AnyUprightGeometry {
         quadObjectPoints(from: offsets, base: fullFrameObjectBase(), size: size)
     }
 
-    static func sourceQuadObjectPoints(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
-        quadObjectPoints(from: offsets, base: sourceQuadObjectBase(), size: size)
+    static func innerStretchObjectPoints(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
+        quadObjectPoints(from: offsets, base: innerStretchObjectBase(), size: size)
     }
 
     static func objectPixelQuad(fromNormalizedObjectQuad quad: AUQuad, size: AUSize) -> AUQuad {
@@ -824,11 +824,11 @@ enum AnyUprightGeometry {
     }
 
     static func sourceCornerPixelOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
-        cornerPixelOffset(forObjectPoint: point, corner: corner, offsets: offsets, base: sourceQuadObjectBase(), size: size)
+        cornerPixelOffset(forObjectPoint: point, corner: corner, offsets: offsets, base: innerStretchObjectBase(), size: size)
     }
 
     static func sourceCornerPercentOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner) -> AUPoint {
-        let base = objectBasePoint(for: corner, in: sourceQuadObjectBase())
+        let base = objectBasePoint(for: corner, in: innerStretchObjectBase())
         return AUPoint(x: point.x - base.x, y: point.y - base.y)
     }
 
@@ -1018,13 +1018,13 @@ enum AnyUprightGeometry {
             let outputQuad = quad(from: offsets, size: outputSize)
             return homography(from: outputQuad, to: AUQuad.fullFrame(sourceSize))
 
-        case .sourceQuad:
+        case .innerStretch:
             guard !showCornerAdjuster else {
                 return homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
             }
 
-            let selectedSourceQuad = sourceQuad(from: offsets, size: sourceSize)
-            return homography(from: AUQuad.fullFrame(outputSize), to: selectedSourceQuad)
+            let selectedInnerStretch = innerStretch(from: offsets, size: sourceSize)
+            return homography(from: AUQuad.fullFrame(outputSize), to: selectedInnerStretch)
         }
     }
 
@@ -1033,21 +1033,21 @@ enum AnyUprightGeometry {
         outputSize: AUSize,
         sourceSize: AUSize
     ) -> simd_float3x3 {
-        let outputQuad = sourceQuadOutputHandles(from: offsets, outputSize: outputSize, sourceSize: sourceSize)
+        let outputQuad = innerStretchOutputHandles(from: offsets, outputSize: outputSize, sourceSize: sourceSize)
         return homography(from: outputQuad, to: AUQuad.fullFrame(outputSize))
     }
 
-    static func sourceQuadOutputHandles(
+    static func innerStretchOutputHandles(
         from offsets: AUCornerOffsets,
         outputSize: AUSize,
         sourceSize: AUSize
     ) -> AUQuad {
-        let selectedSourceQuad = sourceQuad(from: offsets, size: sourceSize)
+        let selectedInnerStretch = innerStretch(from: offsets, size: sourceSize)
         return AUQuad(
-            topLeft: scalePoint(selectedSourceQuad.topLeft, from: sourceSize, to: outputSize),
-            topRight: scalePoint(selectedSourceQuad.topRight, from: sourceSize, to: outputSize),
-            bottomRight: scalePoint(selectedSourceQuad.bottomRight, from: sourceSize, to: outputSize),
-            bottomLeft: scalePoint(selectedSourceQuad.bottomLeft, from: sourceSize, to: outputSize)
+            topLeft: scalePoint(selectedInnerStretch.topLeft, from: sourceSize, to: outputSize),
+            topRight: scalePoint(selectedInnerStretch.topRight, from: sourceSize, to: outputSize),
+            bottomRight: scalePoint(selectedInnerStretch.bottomRight, from: sourceSize, to: outputSize),
+            bottomLeft: scalePoint(selectedInnerStretch.bottomLeft, from: sourceSize, to: outputSize)
         )
     }
 
@@ -1202,12 +1202,12 @@ enum AnyUprightGeometry {
         )
     }
 
-    private static func sourceQuadObjectBase() -> AUQuad {
+    private static func innerStretchObjectBase() -> AUQuad {
         AUQuad(
-            topLeft: AUPoint(x: sourceQuadInset, y: 1.0 - sourceQuadInset),
-            topRight: AUPoint(x: 1.0 - sourceQuadInset, y: 1.0 - sourceQuadInset),
-            bottomRight: AUPoint(x: 1.0 - sourceQuadInset, y: sourceQuadInset),
-            bottomLeft: AUPoint(x: sourceQuadInset, y: sourceQuadInset)
+            topLeft: AUPoint(x: innerStretchInset, y: 1.0 - innerStretchInset),
+            topRight: AUPoint(x: 1.0 - innerStretchInset, y: 1.0 - innerStretchInset),
+            bottomRight: AUPoint(x: 1.0 - innerStretchInset, y: innerStretchInset),
+            bottomLeft: AUPoint(x: innerStretchInset, y: innerStretchInset)
         )
     }
 

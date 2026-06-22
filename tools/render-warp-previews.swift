@@ -69,7 +69,7 @@ struct RenderWarpPreviews {
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
         try renderHorizonPreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
-        try renderQuadSourcePreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
+        try renderQuadInnerStretchPreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
         try renderQuadOutputPreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
         try renderUprightPreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
 
@@ -85,51 +85,51 @@ struct RenderWarpPreviews {
         try saveWarped(image, outputSize: size, outputToSource: matrix, url: outputDirectory.appendingPathComponent("horizon-fill-preview.png"))
     }
 
-    private static func renderQuadSourcePreview(assetDirectory: URL, outputDirectory: URL) throws {
+    private static func renderQuadInnerStretchPreview(assetDirectory: URL, outputDirectory: URL) throws {
         let image = try loadRGBA(assetDirectory.appendingPathComponent("quad-phone-screen.png"))
         let size = AUSize(width: Double(image.width), height: Double(image.height))
-        let sourceQuad = AUQuad(
+        let innerStretch = AUQuad(
             topLeft: AUPoint(x: 520.0, y: 210.0),
             topRight: AUPoint(x: 1390.0, y: 305.0),
             bottomRight: AUPoint(x: 1285.0, y: 890.0),
             bottomLeft: AUPoint(x: 430.0, y: 790.0)
         )
-        let offsets = pixelOffsets(for: sourceQuad, base: AnyUprightGeometry.sourceQuadDefault(size), size: size)
+        let offsets = pixelOffsets(for: innerStretch, base: AnyUprightGeometry.innerStretchDefault(size), size: size)
         let previewMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
-            mode: .sourceQuad,
+            mode: .innerStretch,
             showCornerAdjuster: true,
             outputSize: size,
             sourceSize: size
         )
-        try assertMaps(previewMatrix, AUPoint(x: 321.0, y: 654.0), to: AUPoint(x: 321.0, y: 654.0), label: "source quad edit preview should keep image still")
+        try assertMaps(previewMatrix, AUPoint(x: 321.0, y: 654.0), to: AUPoint(x: 321.0, y: 654.0), label: "inner stretch edit preview should keep image still")
 
         let selectionToRect = AnyUprightGeometry.quadSelectionToOutputRectMatrix(
             from: offsets,
             outputSize: size,
             sourceSize: size
         )
-        try assertTrue(!isInsideSelection(AUPoint(x: 30.0, y: 30.0), selectionToRect: selectionToRect, outputSize: size), "source quad preview outside probe should be outside")
-        try assertTrue(isInsideSelection(sourceQuad.topLeft, selectionToRect: selectionToRect, outputSize: size), "source quad preview inside probe should be inside")
-        try saveSourceQuadAdjusterPreview(
+        try assertTrue(!isInsideSelection(AUPoint(x: 30.0, y: 30.0), selectionToRect: selectionToRect, outputSize: size), "inner stretch preview outside probe should be outside")
+        try assertTrue(isInsideSelection(innerStretch.topLeft, selectionToRect: selectionToRect, outputSize: size), "inner stretch preview inside probe should be inside")
+        try saveInnerStretchAdjusterPreview(
             image,
             outputSize: size,
             selectionToRect: selectionToRect,
-            sourceQuadHandles: sourceQuad,
+            innerStretchHandles: innerStretch,
             outputToSource: previewMatrix,
-            url: outputDirectory.appendingPathComponent("quad-source-adjuster-preview.png")
+            url: outputDirectory.appendingPathComponent("quad-inner-stretch-adjuster-preview.png")
         )
 
         let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
-            mode: .sourceQuad,
+            mode: .innerStretch,
             showCornerAdjuster: false,
             outputSize: size,
             sourceSize: size
         )
-        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: sourceQuad.topLeft, label: "source quad top-left maps to source")
-        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: sourceQuad.bottomRight, label: "source quad bottom-right maps to source")
-        try saveWarped(image, outputSize: size, outputToSource: appliedMatrix, url: outputDirectory.appendingPathComponent("quad-source-apply-preview.png"))
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: innerStretch.topLeft, label: "inner stretch top-left maps to source")
+        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: innerStretch.bottomRight, label: "inner stretch bottom-right maps to source")
+        try saveWarped(image, outputSize: size, outputToSource: appliedMatrix, url: outputDirectory.appendingPathComponent("quad-inner-stretch-apply-preview.png"))
 
     }
 
@@ -207,11 +207,11 @@ struct RenderWarpPreviews {
         try saveRGBA(RGBAImage(width: outputWidth, height: outputHeight, pixels: rgba), url: url)
     }
 
-    private static func saveSourceQuadAdjusterPreview(
+    private static func saveInnerStretchAdjusterPreview(
         _ image: RGBAImage,
         outputSize: AUSize,
         selectionToRect: simd_float3x3,
-        sourceQuadHandles: AUQuad,
+        innerStretchHandles: AUQuad,
         outputToSource: simd_float3x3,
         url: URL
     ) throws {
@@ -230,11 +230,11 @@ struct RenderWarpPreviews {
                     rectPoint.y >= 0.0 &&
                     rectPoint.y <= outputSize.height
 
-                let edgeShadowCoverage = selectionBorderCoverage(outputPoint: outputPoint, handles: sourceQuadHandles, radius: 5.0)
-                let edgeLineCoverage = selectionBorderCoverage(outputPoint: outputPoint, handles: sourceQuadHandles, radius: 3.0)
-                let dimBoundaryCoverage = selectionBorderCoverage(outputPoint: outputPoint, handles: sourceQuadHandles, radius: 1.0)
-                let handleShadowCoverage = selectionHandleCoverage(outputPoint, handles: sourceQuadHandles, radius: 22.0)
-                let handleFillCoverage = selectionHandleCoverage(outputPoint, handles: sourceQuadHandles, radius: 16.0)
+                let edgeShadowCoverage = selectionBorderCoverage(outputPoint: outputPoint, handles: innerStretchHandles, radius: 5.0)
+                let edgeLineCoverage = selectionBorderCoverage(outputPoint: outputPoint, handles: innerStretchHandles, radius: 3.0)
+                let dimBoundaryCoverage = selectionBorderCoverage(outputPoint: outputPoint, handles: innerStretchHandles, radius: 1.0)
+                let handleShadowCoverage = selectionHandleCoverage(outputPoint, handles: innerStretchHandles, radius: 22.0)
+                let handleFillCoverage = selectionHandleCoverage(outputPoint, handles: innerStretchHandles, radius: 16.0)
                 if !inside {
                     color = dimmed(color, factor: 1.0 - 0.30 * (1.0 - dimBoundaryCoverage))
                 }

@@ -16,7 +16,7 @@ enum AnyUprightEffectKind: Int32 {
 struct AnyUprightParameterState {
     var effectKind: Int32 = 0
     var fillFrame: Int32 = 0
-    var quadMode: Int32 = AUQuadTransformMode.sourceQuad.rawValue
+    var quadMode: Int32 = AUQuadTransformMode.innerStretch.rawValue
     var showCornerAdjuster: Int32 = 1
     var rotationRadians: Float = 0.0
     var verticalPerspective: Float = 0.0
@@ -114,7 +114,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
     func sourceTileRect(_ sourceTileRect: UnsafeMutablePointer<FxRect>, sourceImageIndex: UInt, sourceImages: [FxImageTile], destinationTileRect: FxRect, destinationImage: FxImageTile, pluginState: Data?, at renderTime: CMTime) throws {
         let parameterState = state(from: pluginState)
-        let usesIdentityPreview = renderMode(from: parameterState) == Int32(AURM_SourceQuadAdjusterPreview)
+        let usesIdentityPreview = renderMode(from: parameterState) == Int32(AURM_InnerStretchAdjusterPreview)
         let bounds = AnyUprightGeometry.sourceTileBounds(
             for: pixelBounds(from: sourceImages[Int(sourceImageIndex)].imagePixelBounds),
             destinationTileBounds: pixelBounds(from: destinationTileRect),
@@ -281,7 +281,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         )
         let matrix = outputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let selectionToRect = selectionOutputToRectMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
-        let sourceHandles = sourceQuadOutputHandles(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
+        let sourceHandles = innerStretchOutputHandles(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let renderMode = renderMode(from: parameterState)
 
         return AnyUprightWarpState(
@@ -293,10 +293,10 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             imageCoordinateMax: vector_float2(Float(max(0.0, destinationSize.width)), Float(max(0.0, destinationSize.height))),
             inputImageOriginInTexture: vector_float2(Float(inputTextureMapping.imageOriginInTexture.x), Float(inputTextureMapping.imageOriginInTexture.y)),
             inputTextureSize: vector_float2(Float(max(1.0, inputTextureMapping.textureSize.width)), Float(max(1.0, inputTextureMapping.textureSize.height))),
-            sourceQuadTopLeft: vector_float2(Float(sourceHandles.topLeft.x), Float(sourceHandles.topLeft.y)),
-            sourceQuadTopRight: vector_float2(Float(sourceHandles.topRight.x), Float(sourceHandles.topRight.y)),
-            sourceQuadBottomRight: vector_float2(Float(sourceHandles.bottomRight.x), Float(sourceHandles.bottomRight.y)),
-            sourceQuadBottomLeft: vector_float2(Float(sourceHandles.bottomLeft.x), Float(sourceHandles.bottomLeft.y)),
+            innerStretchTopLeft: vector_float2(Float(sourceHandles.topLeft.x), Float(sourceHandles.topLeft.y)),
+            innerStretchTopRight: vector_float2(Float(sourceHandles.topRight.x), Float(sourceHandles.topRight.y)),
+            innerStretchBottomRight: vector_float2(Float(sourceHandles.bottomRight.x), Float(sourceHandles.bottomRight.y)),
+            innerStretchBottomLeft: vector_float2(Float(sourceHandles.bottomLeft.x), Float(sourceHandles.bottomLeft.y)),
             renderMode: renderMode,
             reserved0: 0,
             reserved1: 0,
@@ -345,7 +345,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
     private func selectionOutputToRectMatrix(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {
         guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
-              AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad else {
+              AUQuadTransformMode(rawValue: state.quadMode) == .innerStretch else {
             return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: outputSize)
         }
 
@@ -356,13 +356,13 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         )
     }
 
-    private func sourceQuadOutputHandles(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> AUQuad {
+    private func innerStretchOutputHandles(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> AUQuad {
         guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
-              AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad else {
+              AUQuadTransformMode(rawValue: state.quadMode) == .innerStretch else {
             return AUQuad.fullFrame(outputSize)
         }
 
-        return AnyUprightGeometry.sourceQuadOutputHandles(
+        return AnyUprightGeometry.innerStretchOutputHandles(
             from: cornerOffsets(from: state),
             outputSize: outputSize,
             sourceSize: sourceSize
@@ -371,9 +371,9 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
     private func renderMode(from state: AnyUprightParameterState) -> Int32 {
         if AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
-           AUQuadTransformMode(rawValue: state.quadMode) == .sourceQuad,
+           AUQuadTransformMode(rawValue: state.quadMode) == .innerStretch,
            state.showCornerAdjuster != 0 {
-            return Int32(AURM_SourceQuadAdjusterPreview)
+            return Int32(AURM_InnerStretchAdjusterPreview)
         }
 
         return Int32(AURM_WarpFullFrame)

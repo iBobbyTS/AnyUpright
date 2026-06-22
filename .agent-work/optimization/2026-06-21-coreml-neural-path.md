@@ -247,7 +247,7 @@ Integration:
 - The XPC service bundle now includes two compiled FP32 ML Program models:
   - `neural_forward_416x320.mlmodelc`
   - `neural_forward_320x416.mlmodelc`
-- `AnyUprightHorizonManualPlugIn` now tries Core ML first, selecting the model by preprocessed input shape.
+- `AnyUprightHorizonPlugIn` now tries Core ML first, selecting the model by preprocessed input shape.
 - If Core ML resources or model execution fail, the plugin falls back to the previous project-owned Swift/Metal GeoCalib runtime, then to the older Vision/Hough fallback chain.
 
 Final Cut Pro validation:
@@ -266,7 +266,7 @@ Final Cut Pro validation:
 Motion validation:
 
 - Template opened: `~/Movies/Motion Templates.localized/Effects.localized/AnyUpright/Horizon/Horizon.moef`
-- Important test detail: importing a still into the template as a separate ordinary layer does not replace the template's `Effect Source`; that path triggers the button selector but may not produce analysis frames for the actual image. Applying `AnyUpright Horizon Manual` directly to the imported image layer does exercise the Motion analysis path.
+- Important test detail: importing a still into the template as a separate ordinary layer does not replace the template's `Effect Source`; that path triggers the button selector but may not produce analysis frames for the actual image. Applying `AnyUpright Horizon` directly to the imported image layer does exercise the Motion analysis path.
 - Test image: `/Users/ibobby/Temp/AnyUprightAlgorithmWorkDirectory/data/lamar2k/images/257834199224.jpg`
 - Host frame bounds: `1920x1440`
 - Core ML shape: `[1, 3, 320, 416]`

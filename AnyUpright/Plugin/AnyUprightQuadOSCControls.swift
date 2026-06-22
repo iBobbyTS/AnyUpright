@@ -18,7 +18,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     }
 
     private let overlayRenderer = AnyUprightOSCOverlayRenderer()
-    private let sourceQuadRawCanvasHitPadding = 24.0
+    private let innerStretchRawCanvasHitPadding = 24.0
     private let detectionCornerHitRadius = 18.0
     private let detectionEdgeHitRadius = 14.0
     private let dragStateLock = NSLock()
@@ -34,7 +34,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     }
 
     var fixedQuadMode: AUQuadTransformMode {
-        .sourceQuad
+        .innerStretch
     }
 
     @objc(drawingCoordinates)
@@ -78,7 +78,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             AUOSCHandle(point: quad[2], part: QuadOSCPart.bottomRight.rawValue),
             AUOSCHandle(point: quad[3], part: QuadOSCPart.bottomLeft.rawValue)
         ]
-        debugSourceQuadDrawMapping(
+        debugInnerStretchDrawMapping(
             sequence: debugSequence,
             width: width,
             height: height,
@@ -90,8 +90,8 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             canvasFrame: canvasFrame
         )
 
-        let detectedEdges = quadSourceDetectionEdges(at: time, paramAPI: paramAPI)
-        let detectedCorners = quadSourceDetectionCorners(at: time, paramAPI: paramAPI)
+        let detectedEdges = quadInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
+        let detectedCorners = quadInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
         let detectionThreshold = quadDetectionScoreThreshold(at: time, paramAPI: paramAPI)
         let detectionSegments: [AUOSCStyledSegment]
         if chooseFromDetections {
@@ -107,14 +107,14 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         }
         debugLog("draw-source seq=\(debugSequence) detection choose=\(chooseFromDetections) edges=\(detectedEdges.count) corners=\(detectedCorners.count) threshold=\(detectionThreshold) segments=\(detectionSegments.count)")
         overlayRenderer.renderStyledSegments(
-            detectionSegments + sourceQuadOverlaySegments(for: displayPart, quad: quad),
+            detectionSegments + innerStretchOverlaySegments(for: displayPart, quad: quad),
             handles: handles,
             activePart: displayPart.rawValue,
             destinationImage: destinationImage,
             destinationSize: outputSize,
             canvasFrame: canvasFrame,
             coordinateSpace: .canvasFramePixels,
-            handleStyle: sourceQuadOverlayStyle(),
+            handleStyle: innerStretchOverlayStyle(),
             debugLog: { [weak self] message in
                 self?.debugLog("draw-source seq=\(debugSequence) \(message)")
             }
@@ -136,10 +136,10 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let canvasFrame = objectCanvasFrame()
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
         debugCanvasMetrics(label: "hit", eventPoint: eventPoint, quad: geometry.rawCanvasQuad, canvasFrame: canvasFrame)
-        if mode == .sourceQuad, quadChooseFromDetections(at: time, paramAPI: paramAPI) {
+        if mode == .innerStretch, quadChooseFromDetections(at: time, paramAPI: paramAPI) {
             let threshold = quadDetectionScoreThreshold(at: time, paramAPI: paramAPI)
-            let edges = quadSourceDetectionEdges(at: time, paramAPI: paramAPI)
-            let corners = quadSourceDetectionCorners(at: time, paramAPI: paramAPI)
+            let edges = quadInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
+            let corners = quadInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
             let selection = pruneDetectionSelection(edges: edges, corners: corners, threshold: threshold, forceUpdate: nil)
             let hit = hitTestDetectionPrimitive(
                 forEventPoint: eventPoint,
@@ -162,7 +162,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             rawCanvasQuad: geometry.rawCanvasQuad,
             useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
-            rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
+            rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: nil
         )
         let part = hit?.part.rawValue ?? QuadOSCPart.none.rawValue
@@ -180,12 +180,12 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let canvasFrame = objectCanvasFrame()
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
         if shouldEnableQuadOSCControls(from: state, mode: mode),
-           mode == .sourceQuad,
+           mode == .innerStretch,
            quadChooseFromDetections(at: time, paramAPI: paramAPI) {
             setDragState(nil)
             let threshold = quadDetectionScoreThreshold(at: time, paramAPI: paramAPI)
-            let edges = quadSourceDetectionEdges(at: time, paramAPI: paramAPI)
-            let corners = quadSourceDetectionCorners(at: time, paramAPI: paramAPI)
+            let edges = quadInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
+            let corners = quadInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
             let selection = pruneDetectionSelection(edges: edges, corners: corners, threshold: threshold, forceUpdate: nil)
             guard let hit = hitTestDetectionPrimitive(
                 forEventPoint: eventPoint,
@@ -219,7 +219,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             rawCanvasQuad: geometry.rawCanvasQuad,
             useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
-            rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
+            rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: nil
         )
         let resolvedCanvasPoint = resolvedEvent?.resolution
@@ -227,7 +227,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 fromEventPoint: eventPoint,
                 canvasFrame: canvasFrame,
                 rawCanvasQuad: geometry.rawCanvasQuad,
-                rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
+                rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
                 preferredMode: nil
             )
 
@@ -261,7 +261,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let paramAPI = parameterRetrievalAPI()
         let state = quadParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedQuadMode)
         let mode = quadMode(from: state)
-        if mode == .sourceQuad, quadChooseFromDetections(at: time, paramAPI: paramAPI) {
+        if mode == .innerStretch, quadChooseFromDetections(at: time, paramAPI: paramAPI) {
             setDragState(nil)
             forceUpdate?.pointee = false
             return
@@ -283,7 +283,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             fromEventPoint: eventPoint,
             canvasFrame: objectCanvasFrame(),
             rawCanvasQuad: geometry.rawCanvasQuad,
-            rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
+            rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: storedState?.eventCoordinateMode
         )
         let canvasPoint = resolved.canvasPoint
@@ -493,14 +493,14 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let paramAPI = parameterRetrievalAPI()
         let state = quadParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedQuadMode)
         let mode = quadMode(from: state)
-        return mode == .sourceQuad
+        return mode == .innerStretch
             && shouldEnableQuadOSCControls(from: state, mode: mode)
             && quadChooseFromDetections(at: time, paramAPI: paramAPI)
     }
 
     private func pruneDetectionSelection(
-        edges: [QuadSourceDetectionEdge],
-        corners: [QuadSourceDetectionCorner],
+        edges: [QuadInnerStretchDetectionEdge],
+        corners: [QuadInnerStretchDetectionCorner],
         threshold: Double,
         forceUpdate: UnsafeMutablePointer<ObjCBool>?
     ) -> AUQuadDetectionSelectionState {
@@ -537,7 +537,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let paramAPI = parameterRetrievalAPI()
         let state = quadParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedQuadMode)
         let mode = quadMode(from: state)
-        guard mode == .sourceQuad,
+        guard mode == .innerStretch,
               shouldEnableQuadOSCControls(from: state, mode: mode),
               quadChooseFromDetections(at: time, paramAPI: paramAPI) else {
             clearDetectionSelection(forceUpdate: forceUpdate)
@@ -547,8 +547,8 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let size = objectPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let threshold = quadDetectionScoreThreshold(at: time, paramAPI: paramAPI)
-        let edges = quadSourceDetectionEdges(at: time, paramAPI: paramAPI)
-        let corners = quadSourceDetectionCorners(at: time, paramAPI: paramAPI)
+        let edges = quadInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
+        let corners = quadInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
         let selection = pruneDetectionSelection(edges: edges, corners: corners, threshold: threshold, forceUpdate: forceUpdate)
         let hit = hitTestDetectionPrimitive(
             forEventPoint: eventPoint,
@@ -566,8 +566,8 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
 
     private func hitTestDetectionPrimitive(
         forEventPoint eventPoint: AUPoint,
-        edges: [QuadSourceDetectionEdge],
-        corners: [QuadSourceDetectionCorner],
+        edges: [QuadInnerStretchDetectionEdge],
+        corners: [QuadInnerStretchDetectionCorner],
         threshold: Double,
         selection: AUQuadDetectionSelectionState,
         canvasFrame: [AUPoint],
@@ -578,7 +578,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             fromEventPoint: eventPoint,
             canvasFrame: canvasFrame,
             rawCanvasQuad: rawCanvasQuad,
-            rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
+            rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: preferredMode
         )
         let clampedThreshold = min(1.0, max(0.0, threshold))
@@ -628,8 +628,8 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
 
     private func toggleDetectionSelection(
         _ primitive: AUQuadDetectionPrimitiveID,
-        edges: [QuadSourceDetectionEdge],
-        corners: [QuadSourceDetectionCorner],
+        edges: [QuadInnerStretchDetectionEdge],
+        corners: [QuadInnerStretchDetectionCorner],
         size: AUSize,
         time: CMTime,
         forceUpdate: UnsafeMutablePointer<ObjCBool>?
@@ -653,7 +653,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 return
             }
 
-            setSourceQuad(quad, size: size, settingAPI: settingAPI, time: time)
+            setInnerStretch(quad, size: size, settingAPI: settingAPI, time: time)
             settingAPI.setBoolValue(false, toParameter: QuadParam.chooseFromDetections.rawValue, at: time)
             clearDetectionSelection(forceUpdate: forceUpdate)
             forceUpdate?.pointee = true
@@ -670,7 +670,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 return
             }
 
-            setSourceQuad(quad, size: size, settingAPI: settingAPI, time: time)
+            setInnerStretch(quad, size: size, settingAPI: settingAPI, time: time)
             settingAPI.setBoolValue(false, toParameter: QuadParam.chooseFromDetections.rawValue, at: time)
             clearDetectionSelection(forceUpdate: forceUpdate)
             forceUpdate?.pointee = true
@@ -726,7 +726,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             rawCanvasQuad: geometry.rawCanvasQuad,
             useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
-            rawCanvasHitPadding: sourceQuadRawCanvasHitPadding,
+            rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: currentDragState()?.eventCoordinateMode
         )
         let part = hit?.part ?? .none
@@ -742,7 +742,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         forceUpdate?.pointee = ObjCBool(changed)
     }
 
-    private func sourceQuadOverlayStyle() -> AUOSCOverlayStyle {
+    private func innerStretchOverlayStyle() -> AUOSCOverlayStyle {
         var style = AUOSCOverlayStyle()
         style.lineColor = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
         style.shadowColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.72)
@@ -777,12 +777,12 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         return style
     }
 
-    private func sourceQuadOverlaySegments(for part: QuadOSCPart, quad: [AUPoint]) -> [AUOSCStyledSegment] {
+    private func innerStretchOverlaySegments(for part: QuadOSCPart, quad: [AUPoint]) -> [AUOSCStyledSegment] {
         guard quad.count == 4 else {
             return []
         }
 
-        var baseStyle = sourceQuadOverlayStyle()
+        var baseStyle = innerStretchOverlayStyle()
         baseStyle.handleRadius = 0.0
         let top = AUOSCStyledSegment(start: quad[0], end: quad[1], style: baseStyle)
         let right = AUOSCStyledSegment(start: quad[1], end: quad[2], style: baseStyle)
@@ -814,8 +814,8 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     }
 
     private func sourceDetectionOverlaySegments(
-        edges: [QuadSourceDetectionEdge],
-        corners: [QuadSourceDetectionCorner],
+        edges: [QuadInnerStretchDetectionEdge],
+        corners: [QuadInnerStretchDetectionCorner],
         threshold: Double,
         selection: AUQuadDetectionSelectionState
     ) -> [AUOSCStyledSegment] {

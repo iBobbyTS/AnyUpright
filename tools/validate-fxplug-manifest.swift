@@ -56,7 +56,7 @@ struct ValidateFxPlugManifest {
                 uuid: "9BB4C7D9-9384-4C8F-927D-4F716DA78B14",
                 protocols: ["FxFilter", "FxAnalyzer"],
                 localizedDisplayName: "AnyUpright Inner Stretch",
-                localizedDescription: "Select a source quadrilateral and stretch it to the full frame."
+                localizedDescription: "Select an input quadrilateral and stretch it to the full frame."
             ),
             ExpectedPlugin(
                 className: "AnyUprightOuterStretchPlugIn",
@@ -74,7 +74,7 @@ struct ValidateFxPlugManifest {
                 uuid: "1E97E435-F4A5-4252-8B14-86F44BAD0BF7",
                 protocols: ["FxOnScreenControl"],
                 localizedDisplayName: "AnyUpright Inner Stretch Controls",
-                localizedDescription: "Onscreen source quadrilateral controls for AnyUpright Inner Stretch.",
+                localizedDescription: "Onscreen input quadrilateral controls for AnyUpright Inner Stretch.",
                 supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]
             ),
             ExpectedPlugin(

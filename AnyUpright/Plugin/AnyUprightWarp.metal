@@ -85,7 +85,7 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
                                      min_filter::linear,
                                      address::clamp_to_edge);
 
-    if (warpState->renderMode == AURM_SourceQuadAdjusterPreview) {
+    if (warpState->renderMode == AURM_InnerStretchAdjusterPreview) {
         float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
         float3 sourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
         if (fabs(sourceHomogeneous.z) < 0.000001) {

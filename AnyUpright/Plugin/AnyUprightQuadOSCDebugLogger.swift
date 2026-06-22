@@ -45,7 +45,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
         }
 
         let objectPoint = objectPoint(fromCanvasPoint: resolved.canvasPoint)
-        let dragPoint = sourceQuadDragPoint(from: objectPoint, mode: mode, coordinateMode: resolved.coordinateMode)
+        let dragPoint = innerStretchDragPoint(from: objectPoint, mode: mode, coordinateMode: resolved.coordinateMode)
         let partDescription = part.map { "\($0.rawValue)" } ?? "nil"
         debugLog(
             String(
@@ -174,7 +174,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
         )
     }
 
-    func debugSourceQuadDrawMapping(
+    func debugInnerStretchDrawMapping(
         sequence: Int,
         width: Int,
         height: Int,

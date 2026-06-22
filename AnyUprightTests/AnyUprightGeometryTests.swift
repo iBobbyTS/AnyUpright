@@ -25,26 +25,26 @@ struct AnyUprightGeometryTests {
         try testQuadObjectPointsKeepCanvasCornerDefinitions()
         try testQuadObjectDragPreservesPercentAndWritesPixelOffsets()
         try testQuadOutputCornersKeepTheirNamedPositions()
-        try testQuadSourceDefaultsToCentralEightyPercent()
-        try testQuadSourceObjectDragPreservesCentralBase()
-        try testDetectedSourceQuadOffsetsUseImageCoordinates()
-        try testDetectedSourceQuadObjectConversionUsesImageCoordinates()
+        try testQuadInnerStretchDefaultsToCentralEightyPercent()
+        try testQuadInnerStretchObjectDragPreservesCentralBase()
+        try testDetectedInnerStretchOffsetsUseImageCoordinates()
+        try testDetectedInnerStretchObjectConversionUsesImageCoordinates()
         try testDetectedSourceLineObjectConversionUsesImageCoordinates()
         try testLineIntersectionFindsDetectedCorner()
-        try testDetectionPointSelectionOrdersSourceQuadCorners()
+        try testDetectionPointSelectionOrdersInnerStretchCorners()
         try testDetectionLineSelectionBuildsQuadFromIntersections()
         try testDetectionLineSelectionRejectsInvalidInputs()
         try testDetectionSelectionStateFiltersByPrimitiveKind()
         try testDetectionScoresNormalizeToUnitRange()
-        try testQuadSourceFullFrameSelectionHasNoDYDrift()
-        try testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents()
-        try testQuadSourceOSCPixelDragDoesNotFlipYAgain()
-        try testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting()
-        try testQuadSourceRawCanvasLayerMatchesSourcePreview()
+        try testQuadInnerStretchFullFrameSelectionHasNoDYDrift()
+        try testQuadInnerStretchObjectSpacePixelsMatchFxPlugOSCEvents()
+        try testQuadInnerStretchOSCPixelDragDoesNotFlipYAgain()
+        try testQuadInnerStretchRawCanvasDragFlipsObjectYBeforeWriting()
+        try testQuadInnerStretchRawCanvasLayerMatchesSourcePreview()
         try testDistanceToQuadEdgeUsesOutputPixelSegments()
-        try testQuadSourceAdjusterPreviewAndApplyUseSameSelection()
-        try testQuadSourceOutputHandlesStayInImageSpace()
-        try testQuadSourceOutputHandlesMayLeaveVideoFrame()
+        try testQuadInnerStretchAdjusterPreviewAndApplyUseSameSelection()
+        try testQuadInnerStretchOutputHandlesStayInImageSpace()
+        try testQuadInnerStretchOutputHandlesMayLeaveVideoFrame()
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
         try testCanvasSurfaceMapperKeepsRawCanvasCandidatesDistinct()
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
@@ -59,8 +59,8 @@ struct AnyUprightGeometryTests {
         try testOSCDisplayPartKeepsDragHighlightedWhenHoverStops()
         try testOutputCoordinatesKeepHostTilePaddingImageRelative()
         try testInputTextureCoordinatesRespectHostTilePadding()
-        try testSourceQuadEditPreviewRequestsDestinationTile()
-        try testQuadSourceModeShowsAdjusterBeforeApplyingWarp()
+        try testInnerStretchEditPreviewRequestsDestinationTile()
+        try testQuadInnerStretchModeShowsAdjusterBeforeApplyingWarp()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
         try testUprightVerticalAndHorizontalPerspectiveGenerateCenteredQuads()
         try testUprightPerspectiveKeepsFrameCenterAnchored()
@@ -172,36 +172,36 @@ struct AnyUprightGeometryTests {
         try assertMaps(matrix, outputQuad.bottomLeft, to: AUPoint(x: 0.0, y: size.height))
     }
 
-    static func testQuadSourceDefaultsToCentralEightyPercent() throws {
+    static func testQuadInnerStretchDefaultsToCentralEightyPercent() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         let offsets = AUCornerOffsets()
-        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
-        let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
+        let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
         let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
-            mode: .sourceQuad,
+            mode: .innerStretch,
             showCornerAdjuster: false,
             outputSize: size,
             sourceSize: size
         )
 
-        try assertEqual(sourceQuad.topLeft, AUPoint(x: 20.0, y: 10.0), "source default top-left")
-        try assertEqual(sourceQuad.topRight, AUPoint(x: 180.0, y: 10.0), "source default top-right")
-        try assertEqual(sourceQuad.bottomRight, AUPoint(x: 180.0, y: 90.0), "source default bottom-right")
-        try assertEqual(sourceQuad.bottomLeft, AUPoint(x: 20.0, y: 90.0), "source default bottom-left")
+        try assertEqual(innerStretch.topLeft, AUPoint(x: 20.0, y: 10.0), "source default top-left")
+        try assertEqual(innerStretch.topRight, AUPoint(x: 180.0, y: 10.0), "source default top-right")
+        try assertEqual(innerStretch.bottomRight, AUPoint(x: 180.0, y: 90.0), "source default bottom-right")
+        try assertEqual(innerStretch.bottomLeft, AUPoint(x: 20.0, y: 90.0), "source default bottom-left")
 
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.10, y: 0.90), "source default object top-left")
         try assertEqual(objectPoints.topRight, AUPoint(x: 0.90, y: 0.90), "source default object top-right")
         try assertEqual(objectPoints.bottomRight, AUPoint(x: 0.90, y: 0.10), "source default object bottom-right")
         try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.10, y: 0.10), "source default object bottom-left")
 
-        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: sourceQuad.topLeft)
-        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: sourceQuad.topRight)
-        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: sourceQuad.bottomRight)
-        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: sourceQuad.bottomLeft)
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: innerStretch.topLeft)
+        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: innerStretch.topRight)
+        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: innerStretch.bottomRight)
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: innerStretch.bottomLeft)
     }
 
-    static func testQuadSourceObjectDragPreservesCentralBase() throws {
+    static func testQuadInnerStretchObjectDragPreservesCentralBase() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
 
@@ -211,15 +211,15 @@ struct AnyUprightGeometryTests {
         )
         offsets.topLeftPercent = percent
 
-        let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
-        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
+        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
         try assertEqual(percent, AUPoint(x: 0.10, y: -0.10), "source dragged top-left percent offset")
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "source dragged top-left object point")
-        try assertEqual(sourceQuad.topLeft, AUPoint(x: 40.0, y: 20.0), "source dragged top-left source point")
+        try assertEqual(innerStretch.topLeft, AUPoint(x: 40.0, y: 20.0), "source dragged top-left source point")
     }
 
-    static func testDetectedSourceQuadOffsetsUseImageCoordinates() throws {
+    static func testDetectedInnerStretchOffsetsUseImageCoordinates() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         let normalizedLowerLeftQuad = AUQuad(
             topLeft: AUPoint(x: 0.20, y: 0.80),
@@ -227,27 +227,27 @@ struct AnyUprightGeometryTests {
             bottomRight: AUPoint(x: 0.90, y: 0.15),
             bottomLeft: AUPoint(x: 0.15, y: 0.10)
         )
-        let detectedSourceQuad = AnyUprightGeometry.imageQuad(
+        let detectedInnerStretch = AnyUprightGeometry.imageQuad(
             fromNormalizedLowerLeftQuad: normalizedLowerLeftQuad,
             size: size
         )
-        let offsets = AnyUprightGeometry.sourceQuadOffsets(forSourceQuad: detectedSourceQuad, size: size)
-        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
-        let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+        let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: detectedInnerStretch, size: size)
+        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
+        let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
 
-        try assertEqual(detectedSourceQuad.topLeft, AUPoint(x: 40.0, y: 20.0), "detected top-left image point")
-        try assertEqual(detectedSourceQuad.topRight, AUPoint(x: 170.0, y: 30.0), "detected top-right image point")
-        try assertEqual(detectedSourceQuad.bottomRight, AUPoint(x: 180.0, y: 85.0), "detected bottom-right image point")
-        try assertEqual(detectedSourceQuad.bottomLeft, AUPoint(x: 30.0, y: 90.0), "detected bottom-left image point")
-        try assertEqual(sourceQuad.topLeft, detectedSourceQuad.topLeft, "source quad top-left writeback")
-        try assertEqual(sourceQuad.topRight, detectedSourceQuad.topRight, "source quad top-right writeback")
-        try assertEqual(sourceQuad.bottomRight, detectedSourceQuad.bottomRight, "source quad bottom-right writeback")
-        try assertEqual(sourceQuad.bottomLeft, detectedSourceQuad.bottomLeft, "source quad bottom-left writeback")
+        try assertEqual(detectedInnerStretch.topLeft, AUPoint(x: 40.0, y: 20.0), "detected top-left image point")
+        try assertEqual(detectedInnerStretch.topRight, AUPoint(x: 170.0, y: 30.0), "detected top-right image point")
+        try assertEqual(detectedInnerStretch.bottomRight, AUPoint(x: 180.0, y: 85.0), "detected bottom-right image point")
+        try assertEqual(detectedInnerStretch.bottomLeft, AUPoint(x: 30.0, y: 90.0), "detected bottom-left image point")
+        try assertEqual(innerStretch.topLeft, detectedInnerStretch.topLeft, "inner stretch top-left writeback")
+        try assertEqual(innerStretch.topRight, detectedInnerStretch.topRight, "inner stretch top-right writeback")
+        try assertEqual(innerStretch.bottomRight, detectedInnerStretch.bottomRight, "inner stretch bottom-right writeback")
+        try assertEqual(innerStretch.bottomLeft, detectedInnerStretch.bottomLeft, "inner stretch bottom-left writeback")
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "object top-left after detection")
         try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.15, y: 0.10), "object bottom-left after detection")
     }
 
-    static func testDetectedSourceQuadObjectConversionUsesImageCoordinates() throws {
+    static func testDetectedInnerStretchObjectConversionUsesImageCoordinates() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         let imageQuad = AUQuad(
             topLeft: AUPoint(x: 40.0, y: 20.0),
@@ -300,7 +300,7 @@ struct AnyUprightGeometryTests {
         try assertApprox(point.y, 26.76, "corner y", accuracy: 0.01)
     }
 
-    static func testDetectionPointSelectionOrdersSourceQuadCorners() throws {
+    static func testDetectionPointSelectionOrdersInnerStretchCorners() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         let points = [
             AUPoint(x: 0.90, y: 0.15),
@@ -310,17 +310,17 @@ struct AnyUprightGeometryTests {
         ]
 
         let quad = try unwrap(AnyUprightGeometry.imageQuad(fromNormalizedObjectPoints: points, size: size), "ordered detection point quad")
-        let offsets = AnyUprightGeometry.sourceQuadOffsets(forSourceQuad: quad, size: size)
-        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: quad, size: size)
+        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
         try assertEqual(quad.topLeft, AUPoint(x: 40.0, y: 20.0), "ordered point top-left")
         try assertEqual(quad.topRight, AUPoint(x: 170.0, y: 30.0), "ordered point top-right")
         try assertEqual(quad.bottomRight, AUPoint(x: 180.0, y: 85.0), "ordered point bottom-right")
         try assertEqual(quad.bottomLeft, AUPoint(x: 30.0, y: 90.0), "ordered point bottom-left")
-        try assertEqual(sourceQuad.topLeft, quad.topLeft, "point selection writeback top-left")
-        try assertEqual(sourceQuad.topRight, quad.topRight, "point selection writeback top-right")
-        try assertEqual(sourceQuad.bottomRight, quad.bottomRight, "point selection writeback bottom-right")
-        try assertEqual(sourceQuad.bottomLeft, quad.bottomLeft, "point selection writeback bottom-left")
+        try assertEqual(innerStretch.topLeft, quad.topLeft, "point selection writeback top-left")
+        try assertEqual(innerStretch.topRight, quad.topRight, "point selection writeback top-right")
+        try assertEqual(innerStretch.bottomRight, quad.bottomRight, "point selection writeback bottom-right")
+        try assertEqual(innerStretch.bottomLeft, quad.bottomLeft, "point selection writeback bottom-left")
     }
 
     static func testDetectionLineSelectionBuildsQuadFromIntersections() throws {
@@ -334,14 +334,14 @@ struct AnyUprightGeometryTests {
         let objectLines = imageLines.map { AnyUprightGeometry.normalizedObjectLine(fromImageLine: $0, size: size) }
 
         let quad = try unwrap(AnyUprightGeometry.imageQuad(fromNormalizedObjectLines: objectLines, size: size), "line intersection quad")
-        let offsets = AnyUprightGeometry.sourceQuadOffsets(forSourceQuad: quad, size: size)
-        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: quad, size: size)
+        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
         try assertTrue(AnyUprightGeometry.isConvexImageQuad(quad), "line selection should create a convex quad")
-        try assertApprox(sourceQuad.topLeft.x, quad.topLeft.x, "line writeback top-left x")
-        try assertApprox(sourceQuad.topRight.y, quad.topRight.y, "line writeback top-right y")
-        try assertApprox(sourceQuad.bottomRight.x, quad.bottomRight.x, "line writeback bottom-right x")
-        try assertApprox(sourceQuad.bottomLeft.y, quad.bottomLeft.y, "line writeback bottom-left y")
+        try assertApprox(innerStretch.topLeft.x, quad.topLeft.x, "line writeback top-left x")
+        try assertApprox(innerStretch.topRight.y, quad.topRight.y, "line writeback top-right y")
+        try assertApprox(innerStretch.bottomRight.x, quad.bottomRight.x, "line writeback bottom-right x")
+        try assertApprox(innerStretch.bottomLeft.y, quad.bottomLeft.y, "line writeback bottom-left y")
     }
 
     static func testDetectionLineSelectionRejectsInvalidInputs() throws {
@@ -386,28 +386,28 @@ struct AnyUprightGeometryTests {
         try assertTrue(selection.shouldShowEdge(index: 8), "selecting a line should keep other lines visible")
     }
 
-    static func testQuadSourceFullFrameSelectionHasNoDYDrift() throws {
+    static func testQuadInnerStretchFullFrameSelectionHasNoDYDrift() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         let offsets = fullFrameSourceOffsets()
-        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
-        let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
-        let outputHandles = AnyUprightGeometry.sourceQuadOutputHandles(
+        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
+        let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
+        let outputHandles = AnyUprightGeometry.innerStretchOutputHandles(
             from: offsets,
             outputSize: size,
             sourceSize: size
         )
         let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
-            mode: .sourceQuad,
+            mode: .innerStretch,
             showCornerAdjuster: false,
             outputSize: size,
             sourceSize: size
         )
 
-        try assertEqual(sourceQuad.topLeft, AUPoint(x: 0.0, y: 0.0), "full-frame top-left")
-        try assertEqual(sourceQuad.topRight, AUPoint(x: size.width, y: 0.0), "full-frame top-right")
-        try assertEqual(sourceQuad.bottomRight, AUPoint(x: size.width, y: size.height), "full-frame bottom-right")
-        try assertEqual(sourceQuad.bottomLeft, AUPoint(x: 0.0, y: size.height), "full-frame bottom-left")
+        try assertEqual(innerStretch.topLeft, AUPoint(x: 0.0, y: 0.0), "full-frame top-left")
+        try assertEqual(innerStretch.topRight, AUPoint(x: size.width, y: 0.0), "full-frame top-right")
+        try assertEqual(innerStretch.bottomRight, AUPoint(x: size.width, y: size.height), "full-frame bottom-right")
+        try assertEqual(innerStretch.bottomLeft, AUPoint(x: 0.0, y: size.height), "full-frame bottom-left")
 
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.0, y: 1.0), "full-frame object top-left")
         try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.0, y: 0.0), "full-frame object bottom-left")
@@ -421,10 +421,10 @@ struct AnyUprightGeometryTests {
         try assertMaps(appliedMatrix, AUPoint(x: size.width / 2.0, y: size.height / 2.0), to: AUPoint(x: size.width / 2.0, y: size.height / 2.0))
     }
 
-    static func testQuadSourceObjectSpacePixelsMatchFxPlugOSCEvents() throws {
+    static func testQuadInnerStretchObjectSpacePixelsMatchFxPlugOSCEvents() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
-        let defaultObjectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+        let defaultObjectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
         let defaultPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: defaultObjectPoints, size: size)
 
         try assertEqual(defaultPixels.topLeft, AUPoint(x: 20.0, y: 90.0), "source object top-left pixel")
@@ -441,16 +441,16 @@ struct AnyUprightGeometryTests {
 
         offsets.topLeftPercent = percent
         let updatedObjectPixels = AnyUprightGeometry.objectPixelQuad(
-            fromNormalizedObjectQuad: AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size),
+            fromNormalizedObjectQuad: AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size),
             size: size
         )
-        let updatedSourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let updatedInnerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
         try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "source object-space drag percent offset")
         try assertEqual(updatedObjectPixels.topLeft, draggedPixel, "source object-space drag target")
-        try assertEqual(updatedSourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "source quad should sample the Y-flipped image point matching the visible handle")
+        try assertEqual(updatedInnerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "inner stretch should sample the Y-flipped image point matching the visible handle")
     }
 
-    static func testQuadSourceOSCPixelDragDoesNotFlipYAgain() throws {
+    static func testQuadInnerStretchOSCPixelDragDoesNotFlipYAgain() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
         let visualTopLeftOSCPixel = AUPoint(x: 45.0, y: 75.0)
@@ -464,14 +464,14 @@ struct AnyUprightGeometryTests {
         )
 
         offsets.topLeftPercent = percent
-        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
         try assertEqual(objectPoint, AUPoint(x: 0.225, y: 0.75), "osc pixel drag object point")
         try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "osc pixel drag percent")
-        try assertEqual(sourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "osc pixel drag should not flip Y a second time")
+        try assertEqual(innerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "osc pixel drag should not flip Y a second time")
     }
 
-    static func testQuadSourceRawCanvasDragFlipsObjectYBeforeWriting() throws {
+    static func testQuadInnerStretchRawCanvasDragFlipsObjectYBeforeWriting() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
         let rawCanvasTopLeftObjectPoint = AUPoint(x: 0.225, y: 0.25)
@@ -482,23 +482,23 @@ struct AnyUprightGeometryTests {
         )
 
         offsets.topLeftPercent = percent
-        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
         try assertEqual(correctedObjectPoint, AUPoint(x: 0.225, y: 0.75), "raw canvas source drag should flip object Y")
         try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "flipped raw canvas source percent")
-        try assertEqual(sourceQuad.topLeft, AUPoint(x: 45.0, y: 25.0), "flipped raw canvas drag should update the visible top-left source point")
+        try assertEqual(innerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "flipped raw canvas drag should update the visible top-left source point")
     }
 
-    static func testQuadSourceRawCanvasLayerMatchesSourcePreview() throws {
+    static func testQuadInnerStretchRawCanvasLayerMatchesSourcePreview() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
         offsets.topLeftPercent = AUPoint(x: 0.125, y: -0.15)
 
-        let objectPoints = AnyUprightGeometry.sourceQuadObjectPoints(from: offsets, size: size)
+        let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
         let objectCanvasPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: objectPoints, size: size)
         let rawCanvasObjectPoints = AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints)
         let rawCanvasPixels = AnyUprightGeometry.objectPixelQuad(fromNormalizedObjectQuad: rawCanvasObjectPoints, size: size)
-        let sourcePreviewHandles = AnyUprightGeometry.sourceQuadOutputHandles(
+        let sourcePreviewHandles = AnyUprightGeometry.innerStretchOutputHandles(
             from: offsets,
             outputSize: size,
             sourceSize: size
@@ -515,14 +515,14 @@ struct AnyUprightGeometryTests {
 
     static func testPixelQuadFlipMapsOutputHandlesToOSCRenderTargetCoordinates() throws {
         let size = AUSize(width: 200.0, height: 100.0)
-        let sourceQuad = AnyUprightGeometry.sourceQuadOutputHandles(
+        let innerStretch = AnyUprightGeometry.innerStretchOutputHandles(
             from: AUCornerOffsets(),
             outputSize: size,
             sourceSize: size
         )
-        let oscQuad = AnyUprightGeometry.verticallyFlippedPixelQuad(sourceQuad, size: size)
+        let oscQuad = AnyUprightGeometry.verticallyFlippedPixelQuad(innerStretch, size: size)
 
-        try assertEqual(sourceQuad.topLeft, AUPoint(x: 20.0, y: 10.0), "source top-left")
+        try assertEqual(innerStretch.topLeft, AUPoint(x: 20.0, y: 10.0), "source top-left")
         try assertEqual(oscQuad.topLeft, AUPoint(x: 20.0, y: 90.0), "osc top-left")
         try assertEqual(oscQuad.bottomLeft, AUPoint(x: 20.0, y: 10.0), "osc bottom-left")
     }
@@ -540,7 +540,7 @@ struct AnyUprightGeometryTests {
         try assertApprox(AnyUprightGeometry.distanceToQuadEdge(from: AUPoint(x: 165.0, y: 50.0), quad: quad), 0.0, "slanted edge distance")
     }
 
-    static func testQuadSourceAdjusterPreviewAndApplyUseSameSelection() throws {
+    static func testQuadInnerStretchAdjusterPreviewAndApplyUseSameSelection() throws {
         let outputSize = AUSize(width: 300.0, height: 150.0)
         let sourceSize = AUSize(width: 600.0, height: 300.0)
         var offsets = AUCornerOffsets()
@@ -549,7 +549,7 @@ struct AnyUprightGeometryTests {
         offsets.bottomRightPercent = AUPoint(x: -0.12, y: 0.07)
         offsets.bottomLeftPercent = AUPoint(x: 0.04, y: 0.08)
 
-        let selectedSourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: sourceSize)
+        let selectedInnerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: sourceSize)
         let previewSelectionToRect = AnyUprightGeometry.quadSelectionToOutputRectMatrix(
             from: offsets,
             outputSize: outputSize,
@@ -557,17 +557,17 @@ struct AnyUprightGeometryTests {
         )
         let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
-            mode: .sourceQuad,
+            mode: .innerStretch,
             showCornerAdjuster: false,
             outputSize: outputSize,
             sourceSize: sourceSize
         )
 
         let selectedOutputQuad = AUQuad(
-            topLeft: AUPoint(x: selectedSourceQuad.topLeft.x / 2.0, y: selectedSourceQuad.topLeft.y / 2.0),
-            topRight: AUPoint(x: selectedSourceQuad.topRight.x / 2.0, y: selectedSourceQuad.topRight.y / 2.0),
-            bottomRight: AUPoint(x: selectedSourceQuad.bottomRight.x / 2.0, y: selectedSourceQuad.bottomRight.y / 2.0),
-            bottomLeft: AUPoint(x: selectedSourceQuad.bottomLeft.x / 2.0, y: selectedSourceQuad.bottomLeft.y / 2.0)
+            topLeft: AUPoint(x: selectedInnerStretch.topLeft.x / 2.0, y: selectedInnerStretch.topLeft.y / 2.0),
+            topRight: AUPoint(x: selectedInnerStretch.topRight.x / 2.0, y: selectedInnerStretch.topRight.y / 2.0),
+            bottomRight: AUPoint(x: selectedInnerStretch.bottomRight.x / 2.0, y: selectedInnerStretch.bottomRight.y / 2.0),
+            bottomLeft: AUPoint(x: selectedInnerStretch.bottomLeft.x / 2.0, y: selectedInnerStretch.bottomLeft.y / 2.0)
         )
 
         try assertMaps(previewSelectionToRect, selectedOutputQuad.topLeft, to: AUPoint(x: 0.0, y: 0.0))
@@ -575,13 +575,13 @@ struct AnyUprightGeometryTests {
         try assertMaps(previewSelectionToRect, selectedOutputQuad.bottomRight, to: AUPoint(x: outputSize.width, y: outputSize.height))
         try assertMaps(previewSelectionToRect, selectedOutputQuad.bottomLeft, to: AUPoint(x: 0.0, y: outputSize.height))
 
-        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: selectedSourceQuad.topLeft)
-        try assertMaps(appliedMatrix, AUPoint(x: outputSize.width, y: 0.0), to: selectedSourceQuad.topRight)
-        try assertMaps(appliedMatrix, AUPoint(x: outputSize.width, y: outputSize.height), to: selectedSourceQuad.bottomRight)
-        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: outputSize.height), to: selectedSourceQuad.bottomLeft)
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: selectedInnerStretch.topLeft)
+        try assertMaps(appliedMatrix, AUPoint(x: outputSize.width, y: 0.0), to: selectedInnerStretch.topRight)
+        try assertMaps(appliedMatrix, AUPoint(x: outputSize.width, y: outputSize.height), to: selectedInnerStretch.bottomRight)
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: outputSize.height), to: selectedInnerStretch.bottomLeft)
     }
 
-    static func testQuadSourceOutputHandlesStayInImageSpace() throws {
+    static func testQuadInnerStretchOutputHandlesStayInImageSpace() throws {
         let outputSize = AUSize(width: 300.0, height: 150.0)
         let sourceSize = AUSize(width: 600.0, height: 300.0)
         var offsets = AUCornerOffsets()
@@ -590,7 +590,7 @@ struct AnyUprightGeometryTests {
         offsets.bottomRightPixels = AUPoint(x: -120.0, y: -45.0)
         offsets.bottomLeftPixels = AUPoint(x: 25.0, y: 60.0)
 
-        let handles = AnyUprightGeometry.sourceQuadOutputHandles(
+        let handles = AnyUprightGeometry.innerStretchOutputHandles(
             from: offsets,
             outputSize: outputSize,
             sourceSize: sourceSize
@@ -608,7 +608,7 @@ struct AnyUprightGeometryTests {
         try assertTrue(handles.topLeft != AUPoint(x: 0.0, y: 0.0), "fixed-size handles should be centered in output image space, not rect space")
     }
 
-    static func testQuadSourceOutputHandlesMayLeaveVideoFrame() throws {
+    static func testQuadInnerStretchOutputHandlesMayLeaveVideoFrame() throws {
         let outputSize = AUSize(width: 300.0, height: 150.0)
         let sourceSize = AUSize(width: 600.0, height: 300.0)
         var offsets = AUCornerOffsets()
@@ -617,7 +617,7 @@ struct AnyUprightGeometryTests {
         offsets.bottomRightPercent = AUPoint(x: 0.20, y: -0.25)
         offsets.bottomLeftPercent = AUPoint(x: -0.15, y: -0.30)
 
-        let handles = AnyUprightGeometry.sourceQuadOutputHandles(
+        let handles = AnyUprightGeometry.innerStretchOutputHandles(
             from: offsets,
             outputSize: outputSize,
             sourceSize: sourceSize
@@ -749,7 +749,7 @@ struct AnyUprightGeometryTests {
             AUPoint(x: 1604.0, y: 336.0),
             AUPoint(x: 580.0, y: 336.0)
         ]
-        let finalCutVisibleSourceQuad = [
+        let finalCutVisibleInnerStretch = [
             AUPoint(x: 788.4, y: 523.9),
             AUPoint(x: 1273.2, y: 511.1),
             AUPoint(x: 1305.4, y: 1043.7),
@@ -765,7 +765,7 @@ struct AnyUprightGeometryTests {
             !shouldIncludeMappedSurfaceOSCCandidate(
                 forInitialEventPoint: finalCutBottomRightHandle,
                 canvasFrame: finalCutCanvasFrame,
-                visibleControlPoints: finalCutVisibleSourceQuad,
+                visibleControlPoints: finalCutVisibleInnerStretch,
                 hitPadding: 24.0
             ),
             "visible Final Cut controls outside the video frame should keep raw-canvas hit testing"
@@ -777,7 +777,7 @@ struct AnyUprightGeometryTests {
             AUPoint(x: 1811.1, y: 71.2),
             AUPoint(x: 531.1, y: 71.2)
         ]
-        let motionVisibleSourceQuad = [
+        let motionVisibleInnerStretch = [
             AUPoint(x: 659.1, y: 719.2),
             AUPoint(x: 1683.1, y: 719.2),
             AUPoint(x: 1683.1, y: 143.2),
@@ -787,7 +787,7 @@ struct AnyUprightGeometryTests {
             AUCanvasSurfaceMapper(canvasFrame: motionCanvasFrame, surfaceSize: AUSize(width: 1670.0, height: 844.0)),
             "canvas mapper"
         )
-        let motionSurfaceEvent = mapper.eventPoint(fromCanvasPoint: motionVisibleSourceQuad[0])
+        let motionSurfaceEvent = mapper.eventPoint(fromCanvasPoint: motionVisibleInnerStretch[0])
         let mappedMotionCanvasPoint = mapper.canvasPoint(fromEventPoint: motionSurfaceEvent)
 
         try assertTrue(
@@ -795,7 +795,7 @@ struct AnyUprightGeometryTests {
                 forInitialEventPoint: motionSurfaceEvent,
                 mappedCanvasPoint: mappedMotionCanvasPoint,
                 canvasFrame: motionCanvasFrame,
-                visibleControlPoints: motionVisibleSourceQuad,
+                visibleControlPoints: motionVisibleInnerStretch,
                 hitPadding: 24.0
             ),
             "Motion-style surface-local events should still map through the surface mapper"
@@ -809,7 +809,7 @@ struct AnyUprightGeometryTests {
             AUPoint(x: 1604.0, y: 336.0),
             AUPoint(x: 580.0, y: 336.0)
         ]
-        let finalCutVisibleSourceQuad = [
+        let finalCutVisibleInnerStretch = [
             AUPoint(x: 778.5, y: 526.0),
             AUPoint(x: 1268.2, y: 513.3),
             AUPoint(x: 1273.2, y: 879.4),
@@ -822,10 +822,10 @@ struct AnyUprightGeometryTests {
             bottomLeft: AUPoint(x: 790.8, y: 394.2)
         )
         let visibleQuad = AUQuad(
-            topLeft: finalCutVisibleSourceQuad[0],
-            topRight: finalCutVisibleSourceQuad[1],
-            bottomRight: finalCutVisibleSourceQuad[2],
-            bottomLeft: finalCutVisibleSourceQuad[3]
+            topLeft: finalCutVisibleInnerStretch[0],
+            topRight: finalCutVisibleInnerStretch[1],
+            bottomRight: finalCutVisibleInnerStretch[2],
+            bottomLeft: finalCutVisibleInnerStretch[3]
         )
         let mapper = try unwrap(
             AUCanvasSurfaceMapper(canvasFrame: finalCutCanvasFrame, surfaceSize: AUSize(width: 2184.0, height: 1212.0)),
@@ -851,7 +851,7 @@ struct AnyUprightGeometryTests {
                 forInitialEventPoint: rawEventAboveVisibleFrame,
                 mappedCanvasPoint: incorrectlyMappedCanvasPoint,
                 canvasFrame: finalCutCanvasFrame,
-                visibleControlPoints: finalCutVisibleSourceQuad,
+                visibleControlPoints: finalCutVisibleInnerStretch,
                 hitPadding: 24.0
             ),
             "raw Final Cut events above the visible controls should not be folded into a hidden mapped hit layer"
@@ -865,7 +865,7 @@ struct AnyUprightGeometryTests {
             AUPoint(x: 1604.0, y: 336.0),
             AUPoint(x: 580.0, y: 336.0)
         ]
-        let finalCutVisibleSourceQuad = [
+        let finalCutVisibleInnerStretch = [
             AUPoint(x: 778.5, y: 526.0),
             AUPoint(x: 1268.2, y: 513.3),
             AUPoint(x: 1273.2, y: 879.4),
@@ -875,7 +875,7 @@ struct AnyUprightGeometryTests {
             AUCanvasSurfaceMapper(canvasFrame: finalCutCanvasFrame, surfaceSize: AUSize(width: 2184.0, height: 1212.0)),
             "canvas mapper"
         )
-        let motionStyleEvent = mapper.eventPoint(fromCanvasPoint: finalCutVisibleSourceQuad[0])
+        let motionStyleEvent = mapper.eventPoint(fromCanvasPoint: finalCutVisibleInnerStretch[0])
         let mappedCanvasPoint = mapper.canvasPoint(fromEventPoint: motionStyleEvent)
 
         try assertTrue(
@@ -883,7 +883,7 @@ struct AnyUprightGeometryTests {
                 forInitialEventPoint: motionStyleEvent,
                 mappedCanvasPoint: mappedCanvasPoint,
                 canvasFrame: finalCutCanvasFrame,
-                visibleControlPoints: finalCutVisibleSourceQuad,
+                visibleControlPoints: finalCutVisibleInnerStretch,
                 hitPadding: 24.0,
                 hostBundleIdentifier: "com.apple.Motion"
             ),
@@ -894,7 +894,7 @@ struct AnyUprightGeometryTests {
                 forInitialEventPoint: motionStyleEvent,
                 mappedCanvasPoint: mappedCanvasPoint,
                 canvasFrame: finalCutCanvasFrame,
-                visibleControlPoints: finalCutVisibleSourceQuad,
+                visibleControlPoints: finalCutVisibleInnerStretch,
                 hitPadding: 24.0,
                 hostBundleIdentifier: "com.apple.FinalCutApp"
             ),
@@ -1049,7 +1049,7 @@ struct AnyUprightGeometryTests {
         try assertApprox(mapping.textureSize.height, 2162.0, "padded input texture height")
     }
 
-    static func testSourceQuadEditPreviewRequestsDestinationTile() throws {
+    static func testInnerStretchEditPreviewRequestsDestinationTile() throws {
         let imageBounds = AUPixelBounds(left: -1320, bottom: -480, right: 2520, top: 1680)
         let paddedDestinationTile = AUPixelBounds(left: -1321, bottom: -481, right: 2521, top: 1681)
 
@@ -1073,7 +1073,7 @@ struct AnyUprightGeometryTests {
         )
     }
 
-    static func testQuadSourceModeShowsAdjusterBeforeApplyingWarp() throws {
+    static func testQuadInnerStretchModeShowsAdjusterBeforeApplyingWarp() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
         offsets.topLeftPixels = AUPoint(x: 25.0, y: -10.0)
@@ -1083,7 +1083,7 @@ struct AnyUprightGeometryTests {
 
         let previewMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
-            mode: .sourceQuad,
+            mode: .innerStretch,
             showCornerAdjuster: true,
             outputSize: size,
             sourceSize: size
@@ -1091,19 +1091,19 @@ struct AnyUprightGeometryTests {
 
         try assertMaps(previewMatrix, AUPoint(x: 30.0, y: 40.0), to: AUPoint(x: 30.0, y: 40.0))
 
-        let sourceQuad = AnyUprightGeometry.sourceQuad(from: offsets, size: size)
+        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
         let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
             from: offsets,
-            mode: .sourceQuad,
+            mode: .innerStretch,
             showCornerAdjuster: false,
             outputSize: size,
             sourceSize: size
         )
 
-        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: sourceQuad.topLeft)
-        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: sourceQuad.topRight)
-        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: sourceQuad.bottomRight)
-        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: sourceQuad.bottomLeft)
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: innerStretch.topLeft)
+        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: innerStretch.topRight)
+        try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: innerStretch.bottomRight)
+        try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: innerStretch.bottomLeft)
     }
 
     static func testHorizonFillScaleOnlyZoomsWhenNeeded() throws {

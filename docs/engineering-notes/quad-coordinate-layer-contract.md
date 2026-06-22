@@ -4,7 +4,7 @@ Last updated: 2026-06-10 15:40 MDT
 Reference commit: 11aa3148242f9743c8c48903739c604f84dd2e66
 Observed host versions: macOS 26.5, Motion Studio 6.2, Final Cut Pro 12.2
 
-This note is a transferable debugging contract for four-corner FxPlug controls. It is not a product feature description. Use it when implementing a similar source-quad/corner-pin control, or when a visible handle, hover target, render preview, or final warp appears shifted, mirrored, or fixed to the viewer instead of the image. Names such as "source quad" are examples of a source-selection control, not a requirement that another plug-in use the same product shape.
+This note is a transferable debugging contract for four-corner FxPlug controls. It is not a product feature description. Use it when implementing a similar inner-stretch/corner-pin control, or when a visible handle, hover target, render preview, or final warp appears shifted, mirrored, or fixed to the viewer instead of the image. Names such as "inner stretch" are examples of a source-selection control, not a requirement that another plug-in use the same product shape.
 
 Apple's FxPlug documentation names the host coordinate spaces and says Y increases upward in `CANVAS`, `DOCUMENT`, and `OBJECT`. It does not fully define how Final Cut Pro's viewer, the visible video rectangle, pan/zoom, the OSC drawable IOSurface, render tiles, and plug-in parameter storage relate to each other. Treat those host-specific relationships as empirical until logging proves them.
 

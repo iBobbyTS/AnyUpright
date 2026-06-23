@@ -18,9 +18,11 @@ func uprightCandidateLines(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6
         var visible = ObjCBool(false)
         var selected = ObjCBool(false)
         var orientationRaw = Int32(UprightGuideOrientation.vertical.rawValue)
+        var score = 0.0
         paramAPI.getBoolValue(&visible, fromParameter: spec.visible, at: time)
         paramAPI.getBoolValue(&selected, fromParameter: spec.selected, at: time)
         paramAPI.getIntValue(&orientationRaw, fromParameter: spec.orientation, at: time)
+        paramAPI.getFloatValue(&score, fromParameter: spec.score, at: time)
 
         guard visible.boolValue else {
             return nil
@@ -31,7 +33,8 @@ func uprightCandidateLines(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6
             selected: selected.boolValue,
             orientation: UprightGuideOrientation(rawValue: orientationRaw) ?? .vertical,
             start: uprightPointParam(paramAPI, spec.start, defaultValue: AUPoint(x: 0.0, y: 0.0), time: time),
-            end: uprightPointParam(paramAPI, spec.end, defaultValue: AUPoint(x: 0.0, y: 0.0), time: time)
+            end: uprightPointParam(paramAPI, spec.end, defaultValue: AUPoint(x: 0.0, y: 0.0), time: time),
+            score: min(1.0, max(0.0, score))
         )
     }
 }
@@ -74,6 +77,17 @@ func addUprightCandidateParameters(_ paramAPI: FxParameterCreationAPI_v5, collap
             defaultY: 0.0,
             parameterFlags: defaultFlags
         )
+        paramAPI.addPercentSlider(
+            withName: "\(title) Score",
+            parameterID: spec.score,
+            defaultValue: 0.0,
+            parameterMin: 0.0,
+            parameterMax: 1.0,
+            sliderMin: 0.0,
+            sliderMax: 1.0,
+            delta: 0.01,
+            parameterFlags: defaultFlags
+        )
         paramAPI.endParameterSubGroup()
     }
     paramAPI.endParameterSubGroup()
@@ -89,6 +103,7 @@ func writeUprightCandidateSlots(_ candidates: [UprightDetectedCandidate], settin
         guard index < candidates.count else {
             settingAPI.setBoolValue(false, toParameter: spec.visible, at: time)
             settingAPI.setBoolValue(false, toParameter: spec.selected, at: time)
+            settingAPI.setFloatValue(0.0, toParameter: spec.score, at: time)
             continue
         }
 
@@ -102,6 +117,6 @@ func writeUprightCandidateSlots(_ candidates: [UprightDetectedCandidate], settin
         settingAPI.setIntValue(Int32(candidate.orientation.rawValue), toParameter: spec.orientation, at: time)
         settingAPI.setXValue(candidate.start.x, yValue: candidate.start.y, toParameter: spec.start, at: time)
         settingAPI.setXValue(candidate.end.x, yValue: candidate.end.y, toParameter: spec.end, at: time)
+        settingAPI.setFloatValue(candidate.score, toParameter: spec.score, at: time)
     }
 }
-

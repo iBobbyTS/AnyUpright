@@ -25,6 +25,8 @@ enum UprightParam: UInt32 {
     case applySelectedVertical = 312
     case applySelectedHorizontal = 313
     case applySelectedFull = 314
+    case chooseFromDetections = 315
+    case candidateScoreThreshold = 316
 
     case guide1Enabled = 320
     case guide1Orientation = 321
@@ -208,6 +210,46 @@ func imageLine(from guide: UprightGuideLine, size: AUSize) -> AULineSegment {
     AULineSegment(
         start: AUPoint(x: guide.start.x * size.width, y: (1.0 - guide.start.y) * size.height),
         end: AUPoint(x: guide.end.x * size.width, y: (1.0 - guide.end.y) * size.height)
+    )
+}
+
+func uprightChooseFromDetections(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> Bool {
+    guard let paramAPI else {
+        return false
+    }
+
+    var choose = ObjCBool(false)
+    paramAPI.getBoolValue(&choose, fromParameter: UprightParam.chooseFromDetections.rawValue, at: time)
+    return choose.boolValue
+}
+
+func uprightCandidateScoreThreshold(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> Double {
+    guard let paramAPI else {
+        return 0.0
+    }
+
+    var threshold = 0.2
+    paramAPI.getFloatValue(&threshold, fromParameter: UprightParam.candidateScoreThreshold.rawValue, at: time)
+    return min(1.0, max(0.0, threshold))
+}
+
+func addUprightSemiAutomaticParameters(_ paramAPI: FxParameterCreationAPI_v5, defaultFlags: FxParameterFlags) {
+    paramAPI.addToggleButton(
+        withName: "Choose from detections",
+        parameterID: UprightParam.chooseFromDetections.rawValue,
+        defaultValue: false,
+        parameterFlags: defaultFlags
+    )
+    paramAPI.addPercentSlider(
+        withName: "Score Threshold",
+        parameterID: UprightParam.candidateScoreThreshold.rawValue,
+        defaultValue: 0.2,
+        parameterMin: 0.0,
+        parameterMax: 1.0,
+        sliderMin: 0.0,
+        sliderMax: 1.0,
+        delta: 0.01,
+        parameterFlags: defaultFlags
     )
 }
 

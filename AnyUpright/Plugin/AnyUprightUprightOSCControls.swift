@@ -22,7 +22,13 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     func drawOSC(withWidth width: Int, height: Int, activePart: Int, destinationImage: FxImageTile, at time: CMTime) {
         let paramAPI = parameterRetrievalAPI()
         let guides = uprightGuideLines(at: time, paramAPI: paramAPI)
-        let candidates = uprightCandidateLines(at: time, paramAPI: paramAPI)
+        let chooseFromDetections = uprightChooseFromDetections(at: time, paramAPI: paramAPI)
+        let candidateThreshold = uprightCandidateScoreThreshold(at: time, paramAPI: paramAPI)
+        let candidates = AnyUprightUprightCandidates.displayCandidates(
+            from: uprightCandidateLines(at: time, paramAPI: paramAPI),
+            chooseFromDetections: chooseFromDetections,
+            threshold: candidateThreshold
+        )
         var segments = candidates.map { candidate in
             AUOSCStyledSegment(
                 start: candidate.start,
@@ -54,6 +60,7 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let size = objectPixelSizeForOSC()
         let mouse = AUPoint(x: mousePositionX, y: mousePositionY)
         activePart?.pointee = UprightOSCPart.none.rawValue
+        let chooseFromDetections = uprightChooseFromDetections(at: time, paramAPI: paramAPI)
 
         for guide in uprightGuideLines(at: time, paramAPI: paramAPI) {
             let handles = [
@@ -70,7 +77,17 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             }
         }
 
-        for candidate in uprightCandidateLines(at: time, paramAPI: paramAPI) {
+        guard chooseFromDetections else {
+            return
+        }
+
+        let candidateThreshold = uprightCandidateScoreThreshold(at: time, paramAPI: paramAPI)
+        let candidates = AnyUprightUprightCandidates.displayCandidates(
+            from: uprightCandidateLines(at: time, paramAPI: paramAPI),
+            chooseFromDetections: true,
+            threshold: candidateThreshold
+        )
+        for candidate in candidates {
             if AnyUprightUprightCandidates.distanceFromPointToSegment(mouse, start: candidate.start, end: candidate.end, size: size) <= 8.0 {
                 activePart?.pointee = candidate.spec.linePart
                 return
@@ -82,7 +99,12 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     func mouseDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         if let candidateIndex = AnyUprightUprightCandidates.candidateIndex(for: activePart),
            let settingAPI = parameterSettingAPI() {
-            let candidates = uprightCandidateLines(at: time, paramAPI: parameterRetrievalAPI())
+            let paramAPI = parameterRetrievalAPI()
+            let candidates = AnyUprightUprightCandidates.displayCandidates(
+                from: uprightCandidateLines(at: time, paramAPI: paramAPI),
+                chooseFromDetections: uprightChooseFromDetections(at: time, paramAPI: paramAPI),
+                threshold: uprightCandidateScoreThreshold(at: time, paramAPI: paramAPI)
+            )
             if let candidate = candidates.first(where: { $0.spec.linePart == activePart }) {
                 let selected = AnyUprightUprightCandidates.selectionValueAfterToggling(candidate, within: candidates)
                 settingAPI.setBoolValue(selected, toParameter: AnyUprightUprightCandidates.specs[candidateIndex].selected, at: time)

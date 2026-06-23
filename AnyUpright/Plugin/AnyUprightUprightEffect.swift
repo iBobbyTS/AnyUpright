@@ -52,6 +52,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             selector: #selector(detectFullCandidates),
             parameterFlags: defaultFlags()
         )
+        addUprightSemiAutomaticParameters(paramAPI, defaultFlags: defaultFlags())
         paramAPI.addPushButton(
             withName: "Apply Selected Vertical",
             parameterID: UprightParam.applySelectedVertical.rawValue,
@@ -225,8 +226,28 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         let mode = analysisState.pendingAnalysisMode
         analysisLock.unlock()
 
-        guard let mode,
-              let grayscaleImage = AnyUprightAnalysisImage.grayscaleImage(from: frame, maxDimension: 360, context: analysisContext) else {
+        guard let mode else {
+            return
+        }
+
+        if mode.isCandidateDetection {
+            do {
+                let mlsdCandidates = try AnyUprightMLSDCoreMLDetector.detectCandidates(
+                    in: frame,
+                    mode: mode,
+                    context: analysisContext
+                )
+                analysisLock.lock()
+                analysisState.detectedCandidates = mlsdCandidates
+                analysisState.detectedPerspectiveTime = frameTime
+                analysisLock.unlock()
+                return
+            } catch {
+                // Keep local development usable before the ignored M-LSD model bundle is installed.
+            }
+        }
+
+        guard let grayscaleImage = AnyUprightAnalysisImage.grayscaleImage(from: frame, maxDimension: 360, context: analysisContext) else {
             return
         }
 
@@ -330,6 +351,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
         if mode?.isCandidateDetection == true {
             writeUprightCandidateSlots(candidates, settingAPI: settingAPI, time: time)
+            settingAPI.setBoolValue(true, toParameter: UprightParam.chooseFromDetections.rawValue, at: time)
             return
         }
 

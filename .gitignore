@@ -19,3 +19,4 @@ build/
 # Model weights
 AnyUpright/Plugin/GeoCalibRuntime/
 AnyUpright/Plugin/GeoCalibCoreML/
+AnyUpright/Plugin/MLSDCoreML/

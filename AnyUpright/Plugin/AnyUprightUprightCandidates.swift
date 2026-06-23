@@ -13,6 +13,7 @@ struct UprightCandidateSpec {
     var orientation: UInt32
     var start: UInt32
     var end: UInt32
+    var score: UInt32
     var group: UInt32
     var linePart: Int
 }
@@ -28,12 +29,14 @@ struct UprightCandidateLine {
     var orientation: UprightGuideOrientation
     var start: AUPoint
     var end: AUPoint
+    var score: Double
 }
 
 struct UprightDetectedCandidate {
     var orientation: UprightGuideOrientation
     var start: AUPoint
     var end: AUPoint
+    var score: Double
 }
 
 enum AnyUprightUprightCandidates {
@@ -46,6 +49,7 @@ enum AnyUprightUprightCandidates {
             orientation: base + 2,
             start: base + 3,
             end: base + 4,
+            score: base + 5,
             group: base + 9,
             linePart: uprightCandidateOSCPartBase + index
         )
@@ -65,9 +69,23 @@ enum AnyUprightUprightCandidates {
             return UprightDetectedCandidate(
                 orientation: orientation,
                 start: object.start,
-                end: object.end
+                end: object.end,
+                score: detectionScore(for: candidate, orientation: orientation, size: size)
             )
         }
+    }
+
+    static func displayCandidates(
+        from candidates: [UprightCandidateLine],
+        chooseFromDetections: Bool,
+        threshold: Double
+    ) -> [UprightCandidateLine] {
+        guard chooseFromDetections else {
+            return []
+        }
+
+        let clampedThreshold = min(1.0, max(0.0, threshold))
+        return candidates.filter { $0.selected || $0.score >= clampedThreshold }
     }
 
     static func selectedImageLines(from candidates: [UprightCandidateLine], orientation: UprightGuideOrientation) -> [AULineSegment] {
@@ -138,5 +156,13 @@ enum AnyUprightUprightCandidates {
         let closestX = sx + t * dx
         let closestY = sy + t * dy
         return hypot(px - closestX, py - closestY)
+    }
+
+    private static func detectionScore(for candidate: AULineCandidate, orientation: UprightGuideOrientation, size: AUSize) -> Double {
+        let maxDeviation = Double.pi / 6.0
+        let angleScore = max(0.0, 1.0 - candidate.absoluteDeviationRadians / maxDeviation)
+        let axis = orientation == .vertical ? max(1.0, size.height) : max(1.0, size.width)
+        let lengthScore = min(1.0, candidate.length / max(1.0, axis * 0.45))
+        return min(1.0, max(0.0, 0.35 * angleScore + 0.65 * lengthScore))
     }
 }

@@ -75,6 +75,7 @@ struct AnyUprightGeometryTests {
         try testSupportedLineDetectorReturnsFiniteSegments()
         try testUprightCandidateSelectionLimitsToTwoAndConvertsCoordinates()
         try testUprightCandidateToggleSelectionStopsAtTwoPerOrientation()
+        try testUprightCandidateDisplayHonorsChoiceModeAndThreshold()
         try testUprightCandidateObjectLineClampsAndFlipsY()
         try testUprightCandidateHitTestingUsesPixelDistance()
         try testZeroRotationMatrixIsIdentity()
@@ -1345,28 +1346,28 @@ struct AnyUprightGeometryTests {
     static func testUprightCandidateSelectionLimitsToTwoAndConvertsCoordinates() throws {
         let specs = AnyUprightUprightCandidates.specs
         let candidates = [
-            UprightCandidateLine(
+            uprightCandidateLine(
                 spec: specs[0],
                 selected: true,
                 orientation: .vertical,
                 start: AUPoint(x: 0.20, y: 0.80),
                 end: AUPoint(x: 0.20, y: 0.20)
             ),
-            UprightCandidateLine(
+            uprightCandidateLine(
                 spec: specs[1],
                 selected: true,
                 orientation: .vertical,
                 start: AUPoint(x: 0.40, y: 0.70),
                 end: AUPoint(x: 0.40, y: 0.30)
             ),
-            UprightCandidateLine(
+            uprightCandidateLine(
                 spec: specs[2],
                 selected: true,
                 orientation: .vertical,
                 start: AUPoint(x: 0.60, y: 0.70),
                 end: AUPoint(x: 0.60, y: 0.30)
             ),
-            UprightCandidateLine(
+            uprightCandidateLine(
                 spec: specs[3],
                 selected: true,
                 orientation: .horizontal,
@@ -1386,28 +1387,28 @@ struct AnyUprightGeometryTests {
 
     static func testUprightCandidateToggleSelectionStopsAtTwoPerOrientation() throws {
         let specs = AnyUprightUprightCandidates.specs
-        let selectedA = UprightCandidateLine(
+        let selectedA = uprightCandidateLine(
             spec: specs[0],
             selected: true,
             orientation: .vertical,
             start: AUPoint(x: 0.10, y: 0.20),
             end: AUPoint(x: 0.10, y: 0.80)
         )
-        let selectedB = UprightCandidateLine(
+        let selectedB = uprightCandidateLine(
             spec: specs[1],
             selected: true,
             orientation: .vertical,
             start: AUPoint(x: 0.30, y: 0.20),
             end: AUPoint(x: 0.30, y: 0.80)
         )
-        let unselectedVertical = UprightCandidateLine(
+        let unselectedVertical = uprightCandidateLine(
             spec: specs[2],
             selected: false,
             orientation: .vertical,
             start: AUPoint(x: 0.50, y: 0.20),
             end: AUPoint(x: 0.50, y: 0.80)
         )
-        let unselectedHorizontal = UprightCandidateLine(
+        let unselectedHorizontal = uprightCandidateLine(
             spec: specs[3],
             selected: false,
             orientation: .horizontal,
@@ -1429,6 +1430,46 @@ struct AnyUprightGeometryTests {
             AnyUprightUprightCandidates.selectionValueAfterToggling(unselectedHorizontal, within: candidates),
             "different orientation can still be selected"
         )
+    }
+
+    static func testUprightCandidateDisplayHonorsChoiceModeAndThreshold() throws {
+        let specs = AnyUprightUprightCandidates.specs
+        let lowScore = uprightCandidateLine(
+            spec: specs[0],
+            selected: false,
+            orientation: .vertical,
+            start: AUPoint(x: 0.1, y: 0.2),
+            end: AUPoint(x: 0.1, y: 0.8),
+            score: 0.3
+        )
+        let selectedLowScore = uprightCandidateLine(
+            spec: specs[1],
+            selected: true,
+            orientation: .vertical,
+            start: AUPoint(x: 0.2, y: 0.2),
+            end: AUPoint(x: 0.2, y: 0.8),
+            score: 0.1
+        )
+        let highScore = uprightCandidateLine(
+            spec: specs[2],
+            selected: false,
+            orientation: .horizontal,
+            start: AUPoint(x: 0.2, y: 0.5),
+            end: AUPoint(x: 0.8, y: 0.5),
+            score: 0.8
+        )
+        let candidates = [lowScore, selectedLowScore, highScore]
+
+        try assertEqual(
+            AnyUprightUprightCandidates.displayCandidates(from: candidates, chooseFromDetections: false, threshold: 0.5).count,
+            0,
+            "candidates hidden outside choice mode"
+        )
+
+        let displayed = AnyUprightUprightCandidates.displayCandidates(from: candidates, chooseFromDetections: true, threshold: 0.5)
+        try assertEqual(displayed.count, 2, "threshold keeps high score and selected low score")
+        try assertTrue(displayed.contains { $0.spec.linePart == selectedLowScore.spec.linePart }, "selected candidate remains visible")
+        try assertTrue(displayed.contains { $0.spec.linePart == highScore.spec.linePart }, "high score candidate remains visible")
     }
 
     static func testUprightCandidateObjectLineClampsAndFlipsY() throws {
@@ -1582,5 +1623,23 @@ struct AnyUprightGeometryTests {
         if let actual {
             throw TestFailure.failed("\(label): expected nil, got \(actual)")
         }
+    }
+
+    static func uprightCandidateLine(
+        spec: UprightCandidateSpec,
+        selected: Bool,
+        orientation: UprightGuideOrientation,
+        start: AUPoint,
+        end: AUPoint,
+        score: Double = 1.0
+    ) -> UprightCandidateLine {
+        UprightCandidateLine(
+            spec: spec,
+            selected: selected,
+            orientation: orientation,
+            start: start,
+            end: end,
+            score: score
+        )
     }
 }

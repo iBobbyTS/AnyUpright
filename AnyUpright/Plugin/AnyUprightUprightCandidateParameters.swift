@@ -93,11 +93,10 @@ func addUprightCandidateParameters(_ paramAPI: FxParameterCreationAPI_v5, collap
     paramAPI.endParameterSubGroup()
 }
 
-func writeUprightCandidateSlots(_ candidates: [UprightDetectedCandidate], settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
-    var selectedCountByOrientation: [UprightGuideOrientation: Int] = [
-        .vertical: 0,
-        .horizontal: 0
-    ]
+func writeUprightCandidateSlots(_ candidates: [UprightDetectedCandidate], correctionMode: UprightCorrectionMode, controlMode: UprightControlMode, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    let selectedIndexes = controlMode == .automatic
+        ? AnyUprightUprightCandidates.automaticSelectedIndexes(from: candidates, correctionMode: correctionMode)
+        : []
 
     for (index, spec) in AnyUprightUprightCandidates.specs.enumerated() {
         guard index < candidates.count else {
@@ -108,12 +107,9 @@ func writeUprightCandidateSlots(_ candidates: [UprightDetectedCandidate], settin
         }
 
         let candidate = candidates[index]
-        let selectedCount = selectedCountByOrientation[candidate.orientation, default: 0]
-        let shouldPreselect = selectedCount < 2
-        selectedCountByOrientation[candidate.orientation] = selectedCount + 1
 
         settingAPI.setBoolValue(true, toParameter: spec.visible, at: time)
-        settingAPI.setBoolValue(shouldPreselect, toParameter: spec.selected, at: time)
+        settingAPI.setBoolValue(selectedIndexes.contains(index), toParameter: spec.selected, at: time)
         settingAPI.setIntValue(Int32(candidate.orientation.rawValue), toParameter: spec.orientation, at: time)
         settingAPI.setXValue(candidate.start.x, yValue: candidate.start.y, toParameter: spec.start, at: time)
         settingAPI.setXValue(candidate.end.x, yValue: candidate.end.y, toParameter: spec.end, at: time)

@@ -82,7 +82,7 @@ enum AnyUprightMLSDCoreMLDetector {
 
     static func detectCandidates(
         in frame: FxImageTile,
-        mode: UprightAnalysisMode,
+        request: UprightAnalysisRequest,
         context: CIContext
     ) throws -> [UprightDetectedCandidate] {
         let source = try renderSourceRGBA(from: frame, context: context)
@@ -94,11 +94,11 @@ enum AnyUprightMLSDCoreMLDetector {
             imageWidth: source.width,
             imageHeight: source.height
         )
-        let limit = AnyUprightUprightCandidates.slotLimit(isFullMode: mode == .detectFullCandidates)
+        let limit = AnyUprightUprightCandidates.slotLimit(isFullMode: request.correctionMode == .full)
         var candidates: [UprightDetectedCandidate] = []
         candidates.reserveCapacity(AnyUprightUprightCandidates.slotCount)
 
-        if mode.includesVertical {
+        if request.includesVertical {
             candidates.append(contentsOf: filterCandidates(
                 decoded,
                 orientation: .vertical,
@@ -107,7 +107,7 @@ enum AnyUprightMLSDCoreMLDetector {
                 limit: limit
             ).map { detectedCandidate(from: $0, width: source.width, height: source.height) })
         }
-        if mode.includesHorizontal {
+        if request.includesHorizontal {
             candidates.append(contentsOf: filterCandidates(
                 decoded,
                 orientation: .horizontal,

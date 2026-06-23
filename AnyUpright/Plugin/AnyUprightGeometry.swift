@@ -1055,6 +1055,74 @@ enum AnyUprightGeometry {
         homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
     }
 
+    static func autoCropOutputToSourceMatrix(
+        _ outputToSource: simd_float3x3,
+        outputSize: AUSize,
+        sourceSize: AUSize,
+        maximumScale: Double = 8.0
+    ) -> simd_float3x3 {
+        let scale = autoCropScale(
+            for: outputToSource,
+            outputSize: outputSize,
+            sourceSize: sourceSize,
+            maximumScale: maximumScale
+        )
+        guard scale > 1.000001 else {
+            return outputToSource
+        }
+
+        return multiply(outputToSource, outputCenterUnzoomMatrix(scale: scale, size: outputSize))
+    }
+
+    static func autoCropScale(
+        for outputToSource: simd_float3x3,
+        outputSize: AUSize,
+        sourceSize: AUSize,
+        maximumScale: Double = 8.0
+    ) -> Double {
+        guard outputSize.width > 0.0,
+              outputSize.height > 0.0,
+              sourceSize.width > 0.0,
+              sourceSize.height > 0.0,
+              maximumScale > 1.0 else {
+            return 1.0
+        }
+
+        if outputFrameMapsInsideSource(outputToSource, outputSize: outputSize, sourceSize: sourceSize) {
+            return 1.0
+        }
+
+        let maxScale = max(1.0, maximumScale)
+        var lower = 1.0
+        var upper = 2.0
+        while upper < maxScale {
+            let candidate = multiply(outputToSource, outputCenterUnzoomMatrix(scale: upper, size: outputSize))
+            if outputFrameMapsInsideSource(candidate, outputSize: outputSize, sourceSize: sourceSize) {
+                break
+            }
+            lower = upper
+            upper *= 2.0
+        }
+        upper = min(upper, maxScale)
+
+        var candidate = multiply(outputToSource, outputCenterUnzoomMatrix(scale: upper, size: outputSize))
+        guard outputFrameMapsInsideSource(candidate, outputSize: outputSize, sourceSize: sourceSize) else {
+            return upper
+        }
+
+        for _ in 0..<24 {
+            let middle = (lower + upper) / 2.0
+            candidate = multiply(outputToSource, outputCenterUnzoomMatrix(scale: middle, size: outputSize))
+            if outputFrameMapsInsideSource(candidate, outputSize: outputSize, sourceSize: sourceSize) {
+                upper = middle
+            } else {
+                lower = middle
+            }
+        }
+
+        return upper
+    }
+
     private static func scalePoint(_ point: AUPoint, from sourceSize: AUSize, to outputSize: AUSize) -> AUPoint {
         AUPoint(
             x: point.x / max(sourceSize.width, 1.0) * outputSize.width,
@@ -1105,6 +1173,37 @@ enum AnyUprightGeometry {
         let ty = center.y - d * center.x - e * center.y
 
         return matrix(a, b, tx, d, e, ty, 0.0, 0.0, 1.0)
+    }
+
+    private static func outputCenterUnzoomMatrix(scale: Double, size: AUSize) -> simd_float3x3 {
+        let inverseScale = 1.0 / max(scale, 1.0)
+        let centerX = size.width / 2.0
+        let centerY = size.height / 2.0
+        return matrix(
+            inverseScale, 0.0, centerX - inverseScale * centerX,
+            0.0, inverseScale, centerY - inverseScale * centerY,
+            0.0, 0.0, 1.0
+        )
+    }
+
+    private static func outputFrameMapsInsideSource(_ matrix: simd_float3x3, outputSize: AUSize, sourceSize: AUSize) -> Bool {
+        let epsilon = 0.25
+        let corners = [
+            AUPoint(x: 0.0, y: 0.0),
+            AUPoint(x: outputSize.width, y: 0.0),
+            AUPoint(x: outputSize.width, y: outputSize.height),
+            AUPoint(x: 0.0, y: outputSize.height)
+        ]
+
+        return corners.allSatisfy { corner in
+            let mapped = transform(corner, by: matrix)
+            return mapped.x.isFinite
+                && mapped.y.isFinite
+                && mapped.x >= -epsilon
+                && mapped.y >= -epsilon
+                && mapped.x <= sourceSize.width + epsilon
+                && mapped.y <= sourceSize.height + epsilon
+        }
     }
 
     static func homography(from output: AUQuad, to source: AUQuad) -> simd_float3x3 {

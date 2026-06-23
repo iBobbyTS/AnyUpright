@@ -40,7 +40,7 @@ struct HorizonAnalysisScratchState {
 }
 
 struct UprightAnalysisScratchState {
-    var pendingAnalysisMode: UprightAnalysisMode?
+    var pendingAnalysisRequest: UprightAnalysisRequest?
     var detectedVerticalPerspective: Double?
     var detectedHorizontalPerspective: Double?
     var detectedRotationRadians: Double?

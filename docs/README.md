@@ -98,37 +98,39 @@ Provides Lightroom-style upright correction controls.
 Current implementation:
 
 - `AnyUpright Upright` is registered as a separate FxPlug filter.
-- `Vertical Perspective` uses a centered keystone transform around the horizontal centerline. Positive values move the top inward and bottom outward; negative values move the top outward and bottom inward.
-- `Horizontal Perspective` uses a centered keystone transform around the vertical centerline. Positive values move the right side inward and left side outward; negative values move the right side outward and left side inward.
-- `Rotation` applies a manual rotation around the frame center.
-- Internally this implementation treats upright perspective as a destination/output quadrilateral and maps it back to the full source frame. Fill, crop, and position are intentionally separate future steps.
+- The visible parameter surface is `Direction`, `Analyze`, `Mode`, `Auto Crop`, and `Edit Mode`. The implementation no longer exposes separate chosen-detection, threshold, guide, candidate, vertical-perspective, horizontal-perspective, or rotation controls in the inspector.
+- `Direction` chooses the correction family: `Vertical`, `Horizontal`, or `Full`. Hidden vertical perspective, horizontal perspective, and rotation result parameters are still stored so renders remain reproducible, but axes excluded by the current direction are ignored at render time.
+- `Mode` chooses `Manual`, `Semi Auto`, or `Full Auto`. `Analyze` applies the current manual guide state in manual mode, or starts candidate-line analysis in semi/full-auto modes.
+- `Edit Mode` shows the original unwarped frame and displays Upright OSC lines. Turning `Edit Mode` off applies the stored correction and hides all Upright OSC lines. `Auto Crop` zooms the rendered correction just enough to keep output-frame corners inside the source frame when possible.
+- Vertical perspective uses a centered keystone transform around the horizontal centerline. Positive values move the top inward and bottom outward; negative values move the top outward and bottom inward.
+- Horizontal perspective uses a centered keystone transform around the vertical centerline. Positive values move the right side inward and left side outward; negative values move the right side outward and left side inward.
+- Rotation is stored internally and applies only in `Full` direction.
+- Internally this implementation treats upright perspective as a destination/output quadrilateral and maps it back to the full source frame.
 - The centered keystone math is tested at the homography level: vertical, horizontal, and combined perspective transforms keep the frame center anchored instead of acting like edge-pivot shears.
-- `Auto Vertical`, `Auto Horizontal`, and `Auto Full` start FxAnalysis near the current parameter time, downsample it, run the shared Sobel/Hough candidate-line detector, choose up to two references whose deviation from the requested axis is strictly less than 30 degrees, and write estimated values back to the existing sliders. Full mode also writes `Rotation` from the selected horizontal references, or vertical references when no horizontal references are available.
-- Four editable guide lines are exposed as point parameters and onscreen line handles. The first two default to vertical references; the last two default to horizontal references.
-- `Apply Guided Vertical`, `Apply Guided Horizontal`, and `Apply Guided Full` convert enabled guide lines into the existing keyframeable `Vertical Perspective`, `Horizontal Perspective`, and, for full mode, `Rotation` parameters.
-- `Detect Vertical Candidates`, `Detect Horizontal Candidates`, and `Detect Full Candidates` fill up to 40 static candidate slots with detected lines whose deviation from the requested axis is strictly less than 30 degrees. Full mode reserves half the slots for vertical candidates and half for horizontal candidates. Each candidate slot stores a normalized 0...1 score. Candidate detection first tries the local M-LSD large Core ML model and Swift decode/ranking path, then falls back to the shared Sobel/Hough detector when the ignored local model resource is missing or inference fails.
-- Candidate detection automatically enables `Choose from detections`. While it is enabled, `Score Threshold` controls which candidate lines are drawn and hittable in the onscreen overlay; selected candidates remain visible even if their score is below the current threshold. Disabling `Choose from detections` hides candidate lines from OSC display and hit testing while leaving manual guide-line handles active.
-- Candidate lines are drawn in the onscreen overlay only while `Choose from detections` is enabled. Blue means visible but not selected; green means selected; yellow means the active hit-tested line. Clicking a candidate line toggles the same `Selected` checkbox exposed in the inspector, but onscreen clicks will not add a third selected line for the same orientation.
-- `Apply Selected Vertical`, `Apply Selected Horizontal`, and `Apply Selected Full` use the selected candidate lines, capped at two per orientation, and write the same keyframeable transform parameters used by manual and full-auto modes. This cap is also enforced during apply if the inspector is edited directly.
+- Manual mode displays only the guide lines relevant to the current direction. The first two guides default to vertical references and the last two default to horizontal references, so an unanalyzed clip starts from usable guide positions. Dragging endpoints updates correction immediately. Clicking a guide line toggles whether it contributes to correction; disabled guide endpoints draw gray. Switching back from semi/full-auto to manual preserves guide positions and does not show detected lines.
+- Manual and semi-auto vertical/horizontal modes support 0, 1, or 2 contributing lines. Manual and semi-auto full mode supports 0, 1, 2, 3, or 4 contributing lines. Zero contributing lines means no upright correction for the included axis.
+- Semi-auto mode displays only analyzed candidate lines that match the current direction. Candidate lines are the only hittable OSC primitives in this mode. Clicking a candidate toggles selection and writes correction while preventing more than two selected lines per orientation.
+- Full-auto mode analyzes matching candidate lines, selects the two highest-scoring included candidates overall, writes correction, and displays only those selected lines while `Edit Mode` is on.
+- Candidate detection first tries the local M-LSD large Core ML model and Swift decode/ranking path, then falls back to the shared Sobel/Hough detector when the ignored local model resource is missing or inference fails.
 
 Implemented controls:
 
-- Manual vertical, horizontal, and rotation axes.
-- Four manually drawn reference lines.
-- Vertical transform from detected or selected near-vertical lines.
-- Horizontal transform from detected or selected near-horizontal lines.
-- Full transform combining vertical and horizontal references.
+- Direction dropdown for vertical, horizontal, or full correction.
+- Analyze push button.
+- Mode dropdown for manual, semi-auto, or full-auto control.
+- Auto Crop checkbox.
+- Edit Mode checkbox.
 
 Automation levels:
 
-- Full auto: detect candidate lines and choose references automatically.
-- Semi auto: detect candidate lines, gate the visible/hittable set with `Score Threshold`, and allow the user to choose one or two references.
-- Manual: user draws or adjusts references directly.
-- The semi-auto implementation uses fixed candidate slots rather than dynamic UI rows, and it does not yet draw text labels.
+- Full auto: detect candidate lines and choose the two highest-scoring included references automatically.
+- Semi auto: detect candidate lines matching the current direction and allow the user to choose references by clicking lines in the canvas.
+- Manual: user adjusts the default guide lines directly in the canvas.
+- The semi-auto implementation uses hidden fixed candidate slots rather than dynamic inspector UI rows, and it does not yet draw text labels.
 
 Primary risks:
 
-- Automatic scoring quality. The M-LSD path produces model-confidence-filtered line segments, then uses angle fit, line length, center proximity, and pair promotion as the score for OSC thresholding. The Sobel/Hough fallback still uses a simpler angle-plus-length compatibility score.
+- Automatic scoring quality. The M-LSD path produces model-confidence-filtered line segments, then uses angle fit, line length, center proximity, and pair promotion as the candidate score. The Sobel/Hough fallback still uses a simpler angle-plus-length compatibility score.
 - UX complexity from combining manual axes, drawn lines, detected candidates, and keyframes.
 - Avoiding realtime playback cost from frame analysis.
 
@@ -259,12 +261,12 @@ Quad:
 Upright:
 
 - Apply `AnyUpright Upright` to `upright-facade-perspective.png`.
-- Manual `Vertical Perspective`, `Horizontal Perspective`, and `Rotation` should be keyframeable and should all render through the shared Metal warp.
-- Drag the four guide-line endpoints and click `Apply Guided Vertical`, `Apply Guided Horizontal`, or `Apply Guided Full`; the matching sliders should update.
-- Click `Auto Vertical`, `Auto Horizontal`, or `Auto Full`; the plugin should analyze near the current parameter time and write the matching transform parameters.
-- Click `Detect Vertical Candidates`, `Detect Horizontal Candidates`, or `Detect Full Candidates`; the plug-in should fill inspector candidate slots, write candidate scores, and enable `Choose from detections`. Candidate lines at or above `Score Threshold` should appear in the onscreen overlay. Blue lines are visible but unselected, green lines are selected, and clicking a line toggles its selected state without allowing more than two selected lines per orientation. Raising `Score Threshold` should hide low-scoring unselected candidates; selected low-scoring candidates should stay visible.
-- Disable `Choose from detections`; detected candidate lines should hide and stop receiving OSC hits, while the four manual guide-line endpoints remain draggable. Re-enable it to continue selecting detected candidates.
-- Click `Apply Selected Vertical`, `Apply Selected Horizontal`, or `Apply Selected Full`; the selected candidate lines, capped at two per orientation, should update the same transform parameters used by manual and auto modes.
+- The inspector should expose only `Direction`, `Analyze`, `Mode`, `Auto Crop`, and `Edit Mode`.
+- With `Edit Mode` on, the image should remain unwarped and Upright OSC should appear inside the actual video frame, not at absolute preview-window coordinates.
+- In `Manual` mode, switch `Direction` between `Vertical`, `Horizontal`, and `Full`; only the matching default guide lines should appear. Drag endpoints to update correction, then click a guide line to disable it and verify its endpoints become gray.
+- Turn `Edit Mode` off; the stored correction should render through the shared Metal warp and all Upright OSC should disappear. Toggle `Auto Crop` and verify it zooms the rendered correction to avoid exposed source edges when possible.
+- In `Semi Auto` mode, click `Analyze`; only analyzed candidate lines matching `Direction` should be drawn and hittable. Clicking candidates should toggle correction selection without allowing more than two selected lines per orientation.
+- In `Full Auto` mode, click `Analyze`; the plug-in should select and apply the two highest-scoring included candidate lines automatically.
 
 ## Open Decisions
 
@@ -281,4 +283,4 @@ This repository currently ships the four effects as FxPlug filters registered by
 
 For Final Cut templates that need onscreen dragging, the Motion template must include the host `Publish OSC` setting for the FxPlug filter. In the local `.moef` XML this appears as the built-in filter parameter `id="10005"` with `name="Publish OSC"` and `value="1"`. Publishing only user-facing parameters such as `Edit Mode` is not enough: Final Cut can still render Inner Stretch's filter-output dimming, but it may not instantiate or dispatch mouse events to the `FxOnScreenControl` that draws and hits the interactive handles.
 
-The current local development Final Cut templates live under `~/Movies/Motion Templates.localized/Effects.localized/AnyUpright/`. `Inner Stretch/Inner Stretch.moef` publishes Inner Stretch controls; `Horizon/Horizon.moef` publishes only `Analyze Horizon` (`./102`), `Rotation` (`./100`), and `Fill Frame` (`./101`). After adding or changing a local template, restart Final Cut Pro before judging Effects Browser visibility.
+The current local development Final Cut templates live under `~/Movies/Motion Templates.localized/Effects.localized/AnyUpright/`. `Inner Stretch/Inner Stretch.moef` publishes Inner Stretch controls; `Horizon/Horizon.moef` publishes only `Analyze Horizon` (`./102`), `Rotation` (`./100`), and `Fill Frame` (`./101`). `Upright/Upright.moef` should publish the five visible controls `Direction`, `Analyze`, `Mode`, `Auto Crop`, and `Edit Mode`, plus the built-in `Publish OSC` setting. After adding or changing a local template, restart Final Cut Pro before judging Effects Browser visibility.

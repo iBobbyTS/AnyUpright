@@ -26,6 +26,7 @@ struct AUOSCOverlayStyle {
 struct AUOSCHandle {
     var point: AUPoint
     var part: Int
+    var colorOverride: SIMD4<Float>? = nil
 }
 
 struct AUOSCStyledSegment {
@@ -322,7 +323,7 @@ final class AnyUprightOSCOverlayRenderer {
             )
         }
         for handle in handles {
-            let color = handle.part == activePart ? handleStyle.activeHandleColor : handleStyle.handleColor
+            let color = handle.part == activePart ? handleStyle.activeHandleColor : (handle.colorOverride ?? handleStyle.handleColor)
             appendHandle(center: handle.point, radius: handleStyle.handleRadius + 2.0, color: handleStyle.shadowColor, shape: handleStyle.handleShape, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
             appendHandle(center: handle.point, radius: handleStyle.handleRadius, color: color, shape: handleStyle.handleShape, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
         }

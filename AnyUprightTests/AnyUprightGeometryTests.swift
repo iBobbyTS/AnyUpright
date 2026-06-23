@@ -62,6 +62,7 @@ struct AnyUprightGeometryTests {
         try testInnerStretchEditPreviewRequestsDestinationTile()
         try testQuadInnerStretchModeShowsAdjusterBeforeApplyingWarp()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
+        try testAutoCropScalesWarpedOutputIntoSourceFrame()
         try testUprightVerticalAndHorizontalPerspectiveGenerateCenteredQuads()
         try testUprightPerspectiveKeepsFrameCenterAnchored()
         try testLineCandidateSelectionPrefersSmallestDeviation()
@@ -74,8 +75,9 @@ struct AnyUprightGeometryTests {
         try testDetectorFindsNearHorizontalAndVerticalLines()
         try testSupportedLineDetectorReturnsFiniteSegments()
         try testUprightCandidateSelectionLimitsToTwoAndConvertsCoordinates()
+        try testUprightAutomaticSelectionChoosesTopTwoIncludedCandidates()
         try testUprightCandidateToggleSelectionStopsAtTwoPerOrientation()
-        try testUprightCandidateDisplayHonorsChoiceModeAndThreshold()
+        try testUprightCandidateDisplayHonorsControlAndCorrectionMode()
         try testUprightCandidateObjectLineClampsAndFlipsY()
         try testUprightCandidateHitTestingUsesPixelDistance()
         try testZeroRotationMatrixIsIdentity()
@@ -1114,6 +1116,21 @@ struct AnyUprightGeometryTests {
         try assertTrue(AnyUprightGeometry.rotationScaleToFill(angleRadians: Double.pi / 18.0, size: size) > 1.0, "nonzero rotation should zoom to fill")
     }
 
+    static func testAutoCropScalesWarpedOutputIntoSourceFrame() throws {
+        let size = AUSize(width: 1920.0, height: 1080.0)
+        let correction = AnyUprightGeometry.rotationOutputToSource(
+            angleRadians: degreesToRadians(10.0),
+            fillFrame: false,
+            size: size
+        )
+
+        let scale = AnyUprightGeometry.autoCropScale(for: correction, outputSize: size, sourceSize: size)
+        let cropped = AnyUprightGeometry.autoCropOutputToSourceMatrix(correction, outputSize: size, sourceSize: size)
+
+        try assertTrue(scale > 1.0, "non-identity correction should require auto-crop zoom")
+        try assertOutputFrameMapsInsideSource(cropped, outputSize: size, sourceSize: size, label: "auto-cropped correction")
+    }
+
     static func testUprightVerticalAndHorizontalPerspectiveGenerateCenteredQuads() throws {
         let size = AUSize(width: 200.0, height: 100.0)
 
@@ -1385,6 +1402,41 @@ struct AnyUprightGeometryTests {
         try assertEqual(selected[1].end, AUPoint(x: 0.40, y: 0.70), "second selected candidate end")
     }
 
+    static func testUprightAutomaticSelectionChoosesTopTwoIncludedCandidates() throws {
+        let candidates = [
+            UprightDetectedCandidate(
+                orientation: .vertical,
+                start: AUPoint(x: 0.1, y: 0.2),
+                end: AUPoint(x: 0.1, y: 0.8),
+                score: 0.4
+            ),
+            UprightDetectedCandidate(
+                orientation: .horizontal,
+                start: AUPoint(x: 0.2, y: 0.4),
+                end: AUPoint(x: 0.8, y: 0.4),
+                score: 0.9
+            ),
+            UprightDetectedCandidate(
+                orientation: .vertical,
+                start: AUPoint(x: 0.3, y: 0.2),
+                end: AUPoint(x: 0.3, y: 0.8),
+                score: 0.8
+            ),
+            UprightDetectedCandidate(
+                orientation: .horizontal,
+                start: AUPoint(x: 0.2, y: 0.6),
+                end: AUPoint(x: 0.8, y: 0.6),
+                score: 0.7
+            )
+        ]
+
+        let full = AnyUprightUprightCandidates.automaticSelectedIndexes(from: candidates, correctionMode: .full)
+        let vertical = AnyUprightUprightCandidates.automaticSelectedIndexes(from: candidates, correctionMode: .vertical)
+
+        try assertTrue(full == Set([1, 2]), "full automatic should choose top two included scores overall")
+        try assertTrue(vertical == Set([0, 2]), "vertical automatic should choose top two vertical scores")
+    }
+
     static func testUprightCandidateToggleSelectionStopsAtTwoPerOrientation() throws {
         let specs = AnyUprightUprightCandidates.specs
         let selectedA = uprightCandidateLine(
@@ -1419,20 +1471,24 @@ struct AnyUprightGeometryTests {
         let candidates = [selectedA, selectedB, unselectedVertical, unselectedHorizontal]
 
         try assertTrue(
-            !AnyUprightUprightCandidates.selectionValueAfterToggling(selectedA, within: candidates),
+            !AnyUprightUprightCandidates.selectionValueAfterToggling(selectedA, within: candidates, correctionMode: .full),
             "selected candidate toggles off"
         )
         try assertTrue(
-            !AnyUprightUprightCandidates.selectionValueAfterToggling(unselectedVertical, within: candidates),
+            !AnyUprightUprightCandidates.selectionValueAfterToggling(unselectedVertical, within: candidates, correctionMode: .full),
             "third vertical candidate should stay unselected"
         )
         try assertTrue(
-            AnyUprightUprightCandidates.selectionValueAfterToggling(unselectedHorizontal, within: candidates),
+            AnyUprightUprightCandidates.selectionValueAfterToggling(unselectedHorizontal, within: candidates, correctionMode: .full),
             "different orientation can still be selected"
+        )
+        try assertTrue(
+            !AnyUprightUprightCandidates.selectionValueAfterToggling(unselectedHorizontal, within: candidates, correctionMode: .vertical),
+            "excluded orientation should stay unselected"
         )
     }
 
-    static func testUprightCandidateDisplayHonorsChoiceModeAndThreshold() throws {
+    static func testUprightCandidateDisplayHonorsControlAndCorrectionMode() throws {
         let specs = AnyUprightUprightCandidates.specs
         let lowScore = uprightCandidateLine(
             spec: specs[0],
@@ -1461,15 +1517,33 @@ struct AnyUprightGeometryTests {
         let candidates = [lowScore, selectedLowScore, highScore]
 
         try assertEqual(
-            AnyUprightUprightCandidates.displayCandidates(from: candidates, chooseFromDetections: false, threshold: 0.5).count,
+            AnyUprightUprightCandidates.displayCandidates(from: candidates, controlMode: .manual, correctionMode: .full).count,
             0,
-            "candidates hidden outside choice mode"
+            "manual mode hides detected candidates"
         )
 
-        let displayed = AnyUprightUprightCandidates.displayCandidates(from: candidates, chooseFromDetections: true, threshold: 0.5)
-        try assertEqual(displayed.count, 2, "threshold keeps high score and selected low score")
-        try assertTrue(displayed.contains { $0.spec.linePart == selectedLowScore.spec.linePart }, "selected candidate remains visible")
-        try assertTrue(displayed.contains { $0.spec.linePart == highScore.spec.linePart }, "high score candidate remains visible")
+        let semiVertical = AnyUprightUprightCandidates.displayCandidates(
+            from: candidates,
+            controlMode: .semiAutomatic,
+            correctionMode: .vertical
+        )
+        try assertEqual(semiVertical.count, 2, "semi-auto vertical shows analyzed vertical candidates")
+        try assertTrue(semiVertical.allSatisfy { $0.orientation == .vertical }, "semi-auto vertical hides horizontal candidates")
+
+        let semiFull = AnyUprightUprightCandidates.displayCandidates(
+            from: candidates,
+            controlMode: .semiAutomatic,
+            correctionMode: .full
+        )
+        try assertEqual(semiFull.count, 3, "semi-auto full shows all included analyzed candidates")
+
+        let automatic = AnyUprightUprightCandidates.displayCandidates(
+            from: candidates,
+            controlMode: .automatic,
+            correctionMode: .full
+        )
+        try assertEqual(automatic.count, 1, "automatic display shows only persisted selected candidates")
+        try assertTrue(automatic.contains { $0.spec.linePart == selectedLowScore.spec.linePart }, "selected candidate remains visible")
     }
 
     static func testUprightCandidateObjectLineClampsAndFlipsY() throws {
@@ -1524,6 +1598,26 @@ struct AnyUprightGeometryTests {
 
         try assertApprox(x, expected.x, "mapped x for \(point)")
         try assertApprox(y, expected.y, "mapped y for \(point)")
+    }
+
+    static func assertOutputFrameMapsInsideSource(_ matrix: simd_float3x3, outputSize: AUSize, sourceSize: AUSize, label: String) throws {
+        let corners = [
+            AUPoint(x: 0.0, y: 0.0),
+            AUPoint(x: outputSize.width, y: 0.0),
+            AUPoint(x: outputSize.width, y: outputSize.height),
+            AUPoint(x: 0.0, y: outputSize.height)
+        ]
+
+        for corner in corners {
+            let mapped = AnyUprightGeometry.transform(corner, by: matrix)
+            try assertTrue(
+                mapped.x >= -0.5
+                    && mapped.y >= -0.5
+                    && mapped.x <= sourceSize.width + 0.5
+                    && mapped.y <= sourceSize.height + 0.5,
+                "\(label) maps \(corner) inside source, got \(mapped)"
+            )
+        }
     }
 
     static func assertEqual(_ actual: AUPoint, _ expected: AUPoint, _ label: String) throws {

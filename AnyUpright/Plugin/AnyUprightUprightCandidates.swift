@@ -7,6 +7,53 @@ import Foundation
 
 let uprightCandidateOSCPartBase = 1000
 
+enum UprightCorrectionMode: Int32 {
+    case vertical = 0
+    case horizontal = 1
+    case full = 2
+
+    var includesVertical: Bool {
+        switch self {
+        case .vertical, .full:
+            return true
+        case .horizontal:
+            return false
+        }
+    }
+
+    var includesHorizontal: Bool {
+        switch self {
+        case .horizontal, .full:
+            return true
+        case .vertical:
+            return false
+        }
+    }
+}
+
+enum UprightControlMode: Int32 {
+    case manual = 0
+    case semiAutomatic = 1
+    case automatic = 2
+}
+
+struct UprightAnalysisRequest {
+    var correctionMode: UprightCorrectionMode
+    var controlMode: UprightControlMode
+
+    var includesVertical: Bool {
+        correctionMode.includesVertical
+    }
+
+    var includesHorizontal: Bool {
+        correctionMode.includesHorizontal
+    }
+
+    var shouldUseCandidateDetection: Bool {
+        controlMode != .manual
+    }
+}
+
 struct UprightCandidateSpec {
     var visible: UInt32
     var selected: UInt32
@@ -77,15 +124,47 @@ enum AnyUprightUprightCandidates {
 
     static func displayCandidates(
         from candidates: [UprightCandidateLine],
-        chooseFromDetections: Bool,
-        threshold: Double
+        controlMode: UprightControlMode,
+        correctionMode: UprightCorrectionMode
     ) -> [UprightCandidateLine] {
-        guard chooseFromDetections else {
+        guard controlMode != .manual else {
             return []
         }
 
-        let clampedThreshold = min(1.0, max(0.0, threshold))
-        return candidates.filter { $0.selected || $0.score >= clampedThreshold }
+        let oriented = candidates.filter { candidate in
+            switch candidate.orientation {
+            case .vertical:
+                return correctionMode.includesVertical
+            case .horizontal:
+                return correctionMode.includesHorizontal
+            }
+        }
+
+        guard controlMode == .automatic else {
+            return oriented
+        }
+
+        return oriented.filter(\.selected)
+    }
+
+    static func automaticSelectedIndexes(
+        from candidates: [UprightDetectedCandidate],
+        correctionMode: UprightCorrectionMode,
+        maximumCount: Int = 2
+    ) -> Set<Int> {
+        Set(
+            candidates
+                .enumerated()
+                .filter { included($0.element.orientation, in: correctionMode) }
+                .sorted {
+                    if $0.element.score == $1.element.score {
+                        return $0.offset < $1.offset
+                    }
+                    return $0.element.score > $1.element.score
+                }
+                .prefix(maximumCount)
+                .map(\.offset)
+        )
     }
 
     static func selectedImageLines(from candidates: [UprightCandidateLine], orientation: UprightGuideOrientation) -> [AULineSegment] {
@@ -97,15 +176,35 @@ enum AnyUprightUprightCandidates {
         )
     }
 
-    static func selectionValueAfterToggling(_ candidate: UprightCandidateLine, within candidates: [UprightCandidateLine], maximumSelectedPerOrientation: Int = 2) -> Bool {
+    static func selectionValueAfterToggling(_ candidate: UprightCandidateLine, within candidates: [UprightCandidateLine], correctionMode: UprightCorrectionMode, maximumSelectedPerOrientation: Int = 2) -> Bool {
         guard !candidate.selected else {
             return false
+        }
+
+        switch candidate.orientation {
+        case .vertical:
+            guard correctionMode.includesVertical else {
+                return false
+            }
+        case .horizontal:
+            guard correctionMode.includesHorizontal else {
+                return false
+            }
         }
 
         let selectedCount = candidates.filter {
             $0.selected && $0.orientation == candidate.orientation
         }.count
         return selectedCount < maximumSelectedPerOrientation
+    }
+
+    static func included(_ orientation: UprightGuideOrientation, in correctionMode: UprightCorrectionMode) -> Bool {
+        switch orientation {
+        case .vertical:
+            return correctionMode.includesVertical
+        case .horizontal:
+            return correctionMode.includesHorizontal
+        }
     }
 
     static func imageLine(from candidate: UprightCandidateLine, size: AUSize) -> AULineSegment {

@@ -16,79 +16,13 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private var analysisState = UprightAnalysisScratchState()
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
-        paramAPI.addPushButton(
-            withName: "Auto Vertical",
-            parameterID: UprightParam.analyzeVertical.rawValue,
-            selector: #selector(analyzeVertical),
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addPushButton(
-            withName: "Auto Horizontal",
-            parameterID: UprightParam.analyzeHorizontal.rawValue,
-            selector: #selector(analyzeHorizontal),
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addPushButton(
-            withName: "Auto Full",
-            parameterID: UprightParam.analyzeFull.rawValue,
-            selector: #selector(analyzeFull),
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addPushButton(
-            withName: "Detect Vertical Candidates",
-            parameterID: UprightParam.detectVerticalCandidates.rawValue,
-            selector: #selector(detectVerticalCandidates),
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addPushButton(
-            withName: "Detect Horizontal Candidates",
-            parameterID: UprightParam.detectHorizontalCandidates.rawValue,
-            selector: #selector(detectHorizontalCandidates),
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addPushButton(
-            withName: "Detect Full Candidates",
-            parameterID: UprightParam.detectFullCandidates.rawValue,
-            selector: #selector(detectFullCandidates),
-            parameterFlags: defaultFlags()
-        )
-        addUprightSemiAutomaticParameters(paramAPI, defaultFlags: defaultFlags())
-        paramAPI.addPushButton(
-            withName: "Apply Selected Vertical",
-            parameterID: UprightParam.applySelectedVertical.rawValue,
-            selector: #selector(applySelectedVertical),
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addPushButton(
-            withName: "Apply Selected Horizontal",
-            parameterID: UprightParam.applySelectedHorizontal.rawValue,
-            selector: #selector(applySelectedHorizontal),
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addPushButton(
-            withName: "Apply Selected Full",
-            parameterID: UprightParam.applySelectedFull.rawValue,
-            selector: #selector(applySelectedFull),
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addPushButton(
-            withName: "Apply Guided Vertical",
-            parameterID: UprightParam.applyGuidedVertical.rawValue,
-            selector: #selector(applyGuidedVertical),
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addPushButton(
-            withName: "Apply Guided Horizontal",
-            parameterID: UprightParam.applyGuidedHorizontal.rawValue,
-            selector: #selector(applyGuidedHorizontal),
-            parameterFlags: defaultFlags()
-        )
-        paramAPI.addPushButton(
-            withName: "Apply Guided Full",
-            parameterID: UprightParam.applyGuidedFull.rawValue,
-            selector: #selector(applyGuidedFull),
-            parameterFlags: defaultFlags()
-        )
+        addUprightWorkflowParameters(paramAPI, defaultFlags: defaultFlags())
+        addHiddenCorrectionResultParameters(paramAPI)
+        addUprightGuideParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
+        addUprightCandidateParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
+    }
+
+    private func addHiddenCorrectionResultParameters(_ paramAPI: FxParameterCreationAPI_v5) {
         paramAPI.addPercentSlider(
             withName: "Vertical Perspective",
             parameterID: UprightParam.verticalPerspective.rawValue,
@@ -98,7 +32,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             sliderMin: -0.5,
             sliderMax: 0.5,
             delta: 0.01,
-            parameterFlags: defaultFlags()
+            parameterFlags: hiddenFlags()
         )
         paramAPI.addPercentSlider(
             withName: "Horizontal Perspective",
@@ -109,7 +43,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             sliderMin: -0.5,
             sliderMax: 0.5,
             delta: 0.01,
-            parameterFlags: defaultFlags()
+            parameterFlags: hiddenFlags()
         )
         paramAPI.addAngleSlider(
             withName: "Rotation",
@@ -117,10 +51,16 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             defaultDegrees: 0.0,
             parameterMinDegrees: -45.0,
             parameterMaxDegrees: 45.0,
-            parameterFlags: defaultFlags()
+            parameterFlags: hiddenFlags()
         )
-        addUprightGuideParameters(paramAPI, collapsedFlags: collapsedFlags(), defaultFlags: defaultFlags())
-        addUprightCandidateParameters(paramAPI, collapsedFlags: collapsedFlags(), defaultFlags: defaultFlags())
+    }
+
+    private func hiddenFlags() -> FxParameterFlags {
+        FxParameterFlags(kFxParameterFlag_HIDDEN)
+    }
+
+    private func hiddenCollapsedFlags() -> FxParameterFlags {
+        FxParameterFlags(kFxParameterFlag_HIDDEN | kFxParameterFlag_COLLAPSED)
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
@@ -137,63 +77,32 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         paramAPI.getFloatValue(&horizontal, fromParameter: UprightParam.horizontalPerspective.rawValue, at: renderTime)
         paramAPI.getFloatValue(&rotation, fromParameter: UprightParam.rotation.rawValue, at: renderTime)
 
-        result.verticalPerspective = Float(vertical)
-        result.horizontalPerspective = Float(horizontal)
-        result.rotationRadians = Float(rotation)
+        let correctionMode = uprightCorrectionMode(at: renderTime, paramAPI: paramAPI)
+        let editMode = uprightEditMode(at: renderTime, paramAPI: paramAPI)
+        result.fillFrame = uprightAutoCrop(at: renderTime, paramAPI: paramAPI) ? 1 : 0
+        result.showCornerAdjuster = editMode ? 1 : 0
+        result.verticalPerspective = correctionMode.includesVertical ? Float(vertical) : 0.0
+        result.horizontalPerspective = correctionMode.includesHorizontal ? Float(horizontal) : 0.0
+        result.rotationRadians = correctionMode == .full ? Float(rotation) : 0.0
         return result
     }
 
-    @objc private func analyzeVertical() {
-        startAnalysis(.vertical)
+    @objc func analyze() {
+        let time = currentParameterTime()
+        let paramAPI = parameterRetrievalAPI()
+        let correctionMode = uprightCorrectionMode(at: time, paramAPI: paramAPI)
+        let controlMode = uprightControlMode(at: time, paramAPI: paramAPI)
+        guard controlMode != .manual else {
+            applyGuided(correctionMode, time: time)
+            return
+        }
+
+        startAnalysis(UprightAnalysisRequest(correctionMode: correctionMode, controlMode: controlMode))
     }
 
-    @objc private func analyzeHorizontal() {
-        startAnalysis(.horizontal)
-    }
-
-    @objc private func analyzeFull() {
-        startAnalysis(.full)
-    }
-
-    @objc private func detectVerticalCandidates() {
-        startAnalysis(.detectVerticalCandidates)
-    }
-
-    @objc private func detectHorizontalCandidates() {
-        startAnalysis(.detectHorizontalCandidates)
-    }
-
-    @objc private func detectFullCandidates() {
-        startAnalysis(.detectFullCandidates)
-    }
-
-    @objc private func applySelectedVertical() {
-        applySelected(.vertical)
-    }
-
-    @objc private func applySelectedHorizontal() {
-        applySelected(.horizontal)
-    }
-
-    @objc private func applySelectedFull() {
-        applySelected(.full)
-    }
-
-    @objc private func applyGuidedVertical() {
-        applyGuided(.vertical)
-    }
-
-    @objc private func applyGuidedHorizontal() {
-        applyGuided(.horizontal)
-    }
-
-    @objc private func applyGuidedFull() {
-        applyGuided(.full)
-    }
-
-    private func startAnalysis(_ mode: UprightAnalysisMode) {
+    private func startAnalysis(_ request: UprightAnalysisRequest) {
         analysisLock.lock()
-        analysisState.pendingAnalysisMode = mode
+        analysisState.pendingAnalysisRequest = request
         analysisState.requestedAnalysisTime = currentParameterTime()
         analysisLock.unlock()
 
@@ -223,18 +132,18 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
     func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
         analysisLock.lock()
-        let mode = analysisState.pendingAnalysisMode
+        let request = analysisState.pendingAnalysisRequest
         analysisLock.unlock()
 
-        guard let mode else {
+        guard let request else {
             return
         }
 
-        if mode.isCandidateDetection {
+        if request.shouldUseCandidateDetection {
             do {
                 let mlsdCandidates = try AnyUprightMLSDCoreMLDetector.detectCandidates(
                     in: frame,
-                    mode: mode,
+                    request: request,
                     context: analysisContext
                 )
                 analysisLock.lock()
@@ -252,21 +161,16 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         }
 
         let size = AUSize(width: Double(grayscaleImage.width), height: Double(grayscaleImage.height))
-        var verticalPerspective: Double?
-        var horizontalPerspective: Double?
-        var rotationRadians: Double?
-        var verticalReferenceLines: [AULineSegment] = []
-        var horizontalReferenceLines: [AULineSegment] = []
         var candidates: [UprightDetectedCandidate] = []
 
-        if mode.includesVertical {
+        if request.includesVertical {
             let lines = AnyUprightLineDetection.detectLineSegments(
                 in: grayscaleImage,
                 options: AULineDetectionOptions(
                     orientation: .vertical,
                     edgeThreshold: 40.0,
                     voteThreshold: max(20, grayscaleImage.height / 5),
-                    maxLines: candidateLimit(for: mode)
+                    maxLines: candidateLimit(for: request)
                 )
             )
             let lineCandidates = AnyUprightGeometry.lineCandidates(
@@ -275,27 +179,21 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 minimumLength: Double(grayscaleImage.height) * 0.25
             )
 
-            if mode.isCandidateDetection {
-                candidates.append(contentsOf: AnyUprightUprightCandidates.detectedCandidates(
-                    from: Array(lineCandidates.prefix(candidateLimit(for: mode))),
-                    orientation: .vertical,
-                    size: size
-                ))
-            } else {
-                let references = Array(lineCandidates.prefix(2).map(\.line))
-                verticalReferenceLines = references
-                verticalPerspective = AnyUprightGeometry.estimateVerticalPerspective(from: references, size: size)
-            }
+            candidates.append(contentsOf: AnyUprightUprightCandidates.detectedCandidates(
+                from: Array(lineCandidates.prefix(candidateLimit(for: request))),
+                orientation: .vertical,
+                size: size
+            ))
         }
 
-        if mode.includesHorizontal {
+        if request.includesHorizontal {
             let lines = AnyUprightLineDetection.detectLineSegments(
                 in: grayscaleImage,
                 options: AULineDetectionOptions(
                     orientation: .horizontal,
                     edgeThreshold: 40.0,
                     voteThreshold: max(20, grayscaleImage.width / 5),
-                    maxLines: candidateLimit(for: mode)
+                    maxLines: candidateLimit(for: request)
                 )
             )
             let lineCandidates = AnyUprightGeometry.lineCandidates(
@@ -304,31 +202,14 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 minimumLength: Double(grayscaleImage.width) * 0.25
             )
 
-            if mode.isCandidateDetection {
-                candidates.append(contentsOf: AnyUprightUprightCandidates.detectedCandidates(
-                    from: Array(lineCandidates.prefix(candidateLimit(for: mode))),
-                    orientation: .horizontal,
-                    size: size
-                ))
-            } else {
-                let references = Array(lineCandidates.prefix(2).map(\.line))
-                horizontalReferenceLines = references
-                horizontalPerspective = AnyUprightGeometry.estimateHorizontalPerspective(from: references, size: size)
-            }
-        }
-
-        if mode == .full {
-            let rotationLines = horizontalReferenceLines.isEmpty ? verticalReferenceLines : horizontalReferenceLines
-            let rotationOrientation: AUReferenceOrientation = horizontalReferenceLines.isEmpty ? .vertical : .horizontal
-            if let rotation = AnyUprightGeometry.rotationCorrectionRadians(from: rotationLines, orientation: rotationOrientation) {
-                rotationRadians = rotation
-            }
+            candidates.append(contentsOf: AnyUprightUprightCandidates.detectedCandidates(
+                from: Array(lineCandidates.prefix(candidateLimit(for: request))),
+                orientation: .horizontal,
+                size: size
+            ))
         }
 
         analysisLock.lock()
-        analysisState.detectedVerticalPerspective = verticalPerspective
-        analysisState.detectedHorizontalPerspective = horizontalPerspective
-        analysisState.detectedRotationRadians = rotationRadians
         analysisState.detectedCandidates = Array(candidates.prefix(AnyUprightUprightCandidates.slotCount))
         analysisState.detectedPerspectiveTime = frameTime
         analysisLock.unlock()
@@ -336,86 +217,105 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
     func cleanupAnalysis() throws {
         analysisLock.lock()
-        let mode = analysisState.pendingAnalysisMode
-        let vertical = analysisState.detectedVerticalPerspective
-        let horizontal = analysisState.detectedHorizontalPerspective
-        let rotation = analysisState.detectedRotationRadians
+        let request = analysisState.pendingAnalysisRequest
         let candidates = analysisState.detectedCandidates
         let time = parameterWriteTime(preferred: analysisState.requestedAnalysisTime, fallback: analysisState.detectedPerspectiveTime)
-        analysisState.pendingAnalysisMode = nil
+        analysisState.pendingAnalysisRequest = nil
         analysisLock.unlock()
 
-        guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
+        guard let request,
+              let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
             return
         }
 
-        if mode?.isCandidateDetection == true {
-            writeUprightCandidateSlots(candidates, settingAPI: settingAPI, time: time)
-            settingAPI.setBoolValue(true, toParameter: UprightParam.chooseFromDetections.rawValue, at: time)
-            return
-        }
+        writeUprightCandidateSlots(
+            candidates,
+            correctionMode: request.correctionMode,
+            controlMode: request.controlMode,
+            settingAPI: settingAPI,
+            time: time
+        )
 
-        if let vertical {
-            _ = settingAPI.setFloatValue(vertical, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
-        }
-        if let horizontal {
-            _ = settingAPI.setFloatValue(horizontal, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
-        }
-        if let rotation {
-            _ = settingAPI.setFloatValue(rotation, toParameter: UprightParam.rotation.rawValue, at: time)
+        if request.controlMode == .automatic {
+            let selectedIndexes = AnyUprightUprightCandidates.automaticSelectedIndexes(
+                from: candidates,
+                correctionMode: request.correctionMode
+            )
+            let selectedCandidates = candidates.enumerated()
+                .filter { selectedIndexes.contains($0.offset) }
+                .map(\.element)
+            let verticalLines = selectedDetectedImageLines(from: selectedCandidates, orientation: .vertical, correctionMode: request.correctionMode)
+            let horizontalLines = selectedDetectedImageLines(from: selectedCandidates, orientation: .horizontal, correctionMode: request.correctionMode)
+            writeUprightCorrection(
+                verticalLines: verticalLines,
+                horizontalLines: horizontalLines,
+                correctionMode: request.correctionMode,
+                settingAPI: settingAPI,
+                time: time
+            )
         }
     }
 
-    private func applyGuided(_ mode: UprightAnalysisMode) {
-        let time = currentParameterTime()
+    private func applyGuided(_ correctionMode: UprightCorrectionMode, time: CMTime) {
         let guides = uprightGuideLines(at: time, paramAPI: parameterRetrievalAPI())
         let verticalLines = guides
-            .filter { $0.orientation == .vertical }
+            .filter { $0.orientation == .vertical && correctionMode.includesVertical }
             .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
         let horizontalLines = guides
-            .filter { $0.orientation == .horizontal }
+            .filter { $0.orientation == .horizontal && correctionMode.includesHorizontal }
             .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
 
-        applyReferences(verticalLines: verticalLines, horizontalLines: horizontalLines, mode: mode, time: time)
+        applyReferences(verticalLines: verticalLines, horizontalLines: horizontalLines, correctionMode: correctionMode, time: time)
     }
 
-    private func applySelected(_ mode: UprightAnalysisMode) {
-        let time = currentParameterTime()
+    private func applySelected(_ correctionMode: UprightCorrectionMode, time: CMTime) {
         let candidates = uprightCandidateLines(at: time, paramAPI: parameterRetrievalAPI())
         let verticalLines = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .vertical)
         let horizontalLines = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .horizontal)
 
-        applyReferences(verticalLines: verticalLines, horizontalLines: horizontalLines, mode: mode, time: time)
+        applyReferences(verticalLines: verticalLines, horizontalLines: horizontalLines, correctionMode: correctionMode, time: time)
     }
 
-    private func applyReferences(verticalLines: [AULineSegment], horizontalLines: [AULineSegment], mode: UprightAnalysisMode, time: CMTime) {
+    private func applyReferences(verticalLines: [AULineSegment], horizontalLines: [AULineSegment], correctionMode: UprightCorrectionMode, time: CMTime) {
         guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
             return
         }
 
-        if mode.includesVertical,
-           let vertical = AnyUprightGeometry.estimateVerticalPerspective(from: verticalLines, size: AUSize(width: 1.0, height: 1.0)) {
-            settingAPI.setFloatValue(vertical, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
+        writeUprightCorrection(
+            verticalLines: verticalLines,
+            horizontalLines: horizontalLines,
+            correctionMode: correctionMode,
+            settingAPI: settingAPI,
+            time: time
+        )
+    }
+
+    private func selectedDetectedImageLines(from candidates: [UprightDetectedCandidate], orientation: UprightGuideOrientation, correctionMode: UprightCorrectionMode) -> [AULineSegment] {
+        let selected = candidates
+            .filter { $0.orientation == orientation }
+            .sorted {
+                if $0.score == $1.score {
+                    return $0.start.x < $1.start.x
+                }
+                return $0.score > $1.score
+            }
+            .prefix(2)
+
+        guard (orientation == .vertical && correctionMode.includesVertical)
+            || (orientation == .horizontal && correctionMode.includesHorizontal) else {
+            return []
         }
 
-        if mode.includesHorizontal,
-           let horizontal = AnyUprightGeometry.estimateHorizontalPerspective(from: horizontalLines, size: AUSize(width: 1.0, height: 1.0)) {
-            settingAPI.setFloatValue(horizontal, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
-        }
-
-        guard mode == .full else {
-            return
-        }
-
-        let rotationLines = horizontalLines.isEmpty ? verticalLines : horizontalLines
-        let rotationOrientation: AUReferenceOrientation = horizontalLines.isEmpty ? .vertical : .horizontal
-        if let rotation = AnyUprightGeometry.rotationCorrectionRadians(from: rotationLines, orientation: rotationOrientation) {
-            settingAPI.setFloatValue(rotation, toParameter: UprightParam.rotation.rawValue, at: time)
+        return selected.map {
+            AULineSegment(
+                start: AUPoint(x: $0.start.x, y: 1.0 - $0.start.y),
+                end: AUPoint(x: $0.end.x, y: 1.0 - $0.end.y)
+            )
         }
     }
 
-    private func candidateLimit(for mode: UprightAnalysisMode) -> Int {
-        AnyUprightUprightCandidates.slotLimit(isFullMode: mode == .detectFullCandidates)
+    private func candidateLimit(for request: UprightAnalysisRequest) -> Int {
+        AnyUprightUprightCandidates.slotLimit(isFullMode: request.correctionMode == .full)
     }
 
 }

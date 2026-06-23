@@ -13,20 +13,11 @@ enum UprightParam: UInt32 {
     case verticalPerspective = 300
     case horizontalPerspective = 301
     case rotation = 302
-    case analyzeVertical = 303
-    case analyzeHorizontal = 304
-    case analyzeFull = 305
-    case applyGuidedVertical = 306
-    case applyGuidedHorizontal = 307
-    case applyGuidedFull = 308
-    case detectVerticalCandidates = 309
-    case detectHorizontalCandidates = 310
-    case detectFullCandidates = 311
-    case applySelectedVertical = 312
-    case applySelectedHorizontal = 313
-    case applySelectedFull = 314
-    case chooseFromDetections = 315
-    case candidateScoreThreshold = 316
+    case analyze = 303
+    case correctionMode = 304
+    case controlMode = 305
+    case autoCrop = 306
+    case editMode = 307
 
     case guide1Enabled = 320
     case guide1Orientation = 321
@@ -46,42 +37,6 @@ enum UprightParam: UInt32 {
     case guide4End = 353
 }
 
-enum UprightAnalysisMode {
-    case vertical
-    case horizontal
-    case full
-    case detectVerticalCandidates
-    case detectHorizontalCandidates
-    case detectFullCandidates
-
-    var includesVertical: Bool {
-        switch self {
-        case .vertical, .full, .detectVerticalCandidates, .detectFullCandidates:
-            return true
-        case .horizontal, .detectHorizontalCandidates:
-            return false
-        }
-    }
-
-    var includesHorizontal: Bool {
-        switch self {
-        case .horizontal, .full, .detectHorizontalCandidates, .detectFullCandidates:
-            return true
-        case .vertical, .detectVerticalCandidates:
-            return false
-        }
-    }
-
-    var isCandidateDetection: Bool {
-        switch self {
-        case .detectVerticalCandidates, .detectHorizontalCandidates, .detectFullCandidates:
-            return true
-        case .vertical, .horizontal, .full:
-            return false
-        }
-    }
-}
-
 enum UprightOSCPart: Int {
     case none = 0
     case guide1Start = 1
@@ -92,6 +47,10 @@ enum UprightOSCPart: Int {
     case guide3End = 6
     case guide4Start = 7
     case guide4End = 8
+    case guide1Line = 9
+    case guide2Line = 10
+    case guide3Line = 11
+    case guide4Line = 12
 }
 
 struct UprightGuideSpec {
@@ -101,6 +60,7 @@ struct UprightGuideSpec {
     var end: UprightParam
     var startPart: UprightOSCPart
     var endPart: UprightOSCPart
+    var linePart: UprightOSCPart
     var defaultOrientation: UprightGuideOrientation
     var defaultStart: AUPoint
     var defaultEnd: AUPoint
@@ -108,6 +68,7 @@ struct UprightGuideSpec {
 
 struct UprightGuideLine {
     var spec: UprightGuideSpec
+    var enabled: Bool
     var orientation: UprightGuideOrientation
     var start: AUPoint
     var end: AUPoint
@@ -121,6 +82,7 @@ let uprightGuideSpecs = [
         end: .guide1End,
         startPart: .guide1Start,
         endPart: .guide1End,
+        linePart: .guide1Line,
         defaultOrientation: .vertical,
         defaultStart: AUPoint(x: 0.35, y: 0.2),
         defaultEnd: AUPoint(x: 0.35, y: 0.8)
@@ -132,6 +94,7 @@ let uprightGuideSpecs = [
         end: .guide2End,
         startPart: .guide2Start,
         endPart: .guide2End,
+        linePart: .guide2Line,
         defaultOrientation: .vertical,
         defaultStart: AUPoint(x: 0.65, y: 0.2),
         defaultEnd: AUPoint(x: 0.65, y: 0.8)
@@ -143,6 +106,7 @@ let uprightGuideSpecs = [
         end: .guide3End,
         startPart: .guide3Start,
         endPart: .guide3End,
+        linePart: .guide3Line,
         defaultOrientation: .horizontal,
         defaultStart: AUPoint(x: 0.2, y: 0.35),
         defaultEnd: AUPoint(x: 0.8, y: 0.35)
@@ -154,13 +118,14 @@ let uprightGuideSpecs = [
         end: .guide4End,
         startPart: .guide4Start,
         endPart: .guide4End,
+        linePart: .guide4Line,
         defaultOrientation: .horizontal,
         defaultStart: AUPoint(x: 0.2, y: 0.65),
         defaultEnd: AUPoint(x: 0.8, y: 0.65)
     )
 ]
 
-func uprightGuideLines(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> [UprightGuideLine] {
+func uprightGuideLines(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?, includeDisabled: Bool = false) -> [UprightGuideLine] {
     guard let paramAPI else {
         return []
     }
@@ -170,12 +135,13 @@ func uprightGuideLines(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -
         var orientationRaw = Int32(spec.defaultOrientation.rawValue)
         paramAPI.getBoolValue(&enabled, fromParameter: spec.enabled.rawValue, at: time)
         paramAPI.getIntValue(&orientationRaw, fromParameter: spec.orientation.rawValue, at: time)
-        guard enabled.boolValue else {
+        guard enabled.boolValue || includeDisabled else {
             return nil
         }
 
         return UprightGuideLine(
             spec: spec,
+            enabled: enabled.boolValue,
             orientation: UprightGuideOrientation(rawValue: orientationRaw) ?? spec.defaultOrientation,
             start: uprightPointParam(paramAPI, spec.start, defaultValue: spec.defaultStart, time: time),
             end: uprightPointParam(paramAPI, spec.end, defaultValue: spec.defaultEnd, time: time)
@@ -206,6 +172,10 @@ func endpointParameter(for part: UprightOSCPart) -> UprightParam? {
     return nil
 }
 
+func guideSpec(forLinePart part: UprightOSCPart) -> UprightGuideSpec? {
+    uprightGuideSpecs.first { $0.linePart == part }
+}
+
 func imageLine(from guide: UprightGuideLine, size: AUSize) -> AULineSegment {
     AULineSegment(
         start: AUPoint(x: guide.start.x * size.width, y: (1.0 - guide.start.y) * size.height),
@@ -213,42 +183,112 @@ func imageLine(from guide: UprightGuideLine, size: AUSize) -> AULineSegment {
     )
 }
 
-func uprightChooseFromDetections(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> Bool {
-    guard let paramAPI else {
-        return false
+func writeUprightCorrection(
+    verticalLines: [AULineSegment],
+    horizontalLines: [AULineSegment],
+    correctionMode: UprightCorrectionMode,
+    settingAPI: FxParameterSettingAPI_v5,
+    time: CMTime
+) {
+    let vertical: Double
+    if correctionMode.includesVertical {
+        vertical = AnyUprightGeometry.estimateVerticalPerspective(from: verticalLines, size: AUSize(width: 1.0, height: 1.0)) ?? 0.0
+    } else {
+        vertical = 0.0
     }
 
-    var choose = ObjCBool(false)
-    paramAPI.getBoolValue(&choose, fromParameter: UprightParam.chooseFromDetections.rawValue, at: time)
-    return choose.boolValue
-}
-
-func uprightCandidateScoreThreshold(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> Double {
-    guard let paramAPI else {
-        return 0.0
+    let horizontal: Double
+    if correctionMode.includesHorizontal {
+        horizontal = AnyUprightGeometry.estimateHorizontalPerspective(from: horizontalLines, size: AUSize(width: 1.0, height: 1.0)) ?? 0.0
+    } else {
+        horizontal = 0.0
     }
 
-    var threshold = 0.2
-    paramAPI.getFloatValue(&threshold, fromParameter: UprightParam.candidateScoreThreshold.rawValue, at: time)
-    return min(1.0, max(0.0, threshold))
+    let rotation: Double
+    if correctionMode == .full {
+        let rotationLines = horizontalLines.isEmpty ? verticalLines : horizontalLines
+        let rotationOrientation: AUReferenceOrientation = horizontalLines.isEmpty ? .vertical : .horizontal
+        rotation = AnyUprightGeometry.rotationCorrectionRadians(from: rotationLines, orientation: rotationOrientation) ?? 0.0
+    } else {
+        rotation = 0.0
+    }
+
+    settingAPI.setFloatValue(vertical, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
+    settingAPI.setFloatValue(horizontal, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
+    settingAPI.setFloatValue(rotation, toParameter: UprightParam.rotation.rawValue, at: time)
 }
 
-func addUprightSemiAutomaticParameters(_ paramAPI: FxParameterCreationAPI_v5, defaultFlags: FxParameterFlags) {
-    paramAPI.addToggleButton(
-        withName: "Choose from detections",
-        parameterID: UprightParam.chooseFromDetections.rawValue,
-        defaultValue: false,
+func uprightCorrectionMode(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> UprightCorrectionMode {
+    guard let paramAPI else {
+        return .full
+    }
+
+    var raw = Int32(UprightCorrectionMode.full.rawValue)
+    paramAPI.getIntValue(&raw, fromParameter: UprightParam.correctionMode.rawValue, at: time)
+    return UprightCorrectionMode(rawValue: raw) ?? .full
+}
+
+func uprightControlMode(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> UprightControlMode {
+    guard let paramAPI else {
+        return .manual
+    }
+
+    var raw = Int32(UprightControlMode.manual.rawValue)
+    paramAPI.getIntValue(&raw, fromParameter: UprightParam.controlMode.rawValue, at: time)
+    return UprightControlMode(rawValue: raw) ?? .manual
+}
+
+func uprightAutoCrop(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> Bool {
+    guard let paramAPI else {
+        return true
+    }
+
+    var value = ObjCBool(true)
+    paramAPI.getBoolValue(&value, fromParameter: UprightParam.autoCrop.rawValue, at: time)
+    return value.boolValue
+}
+
+func uprightEditMode(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> Bool {
+    guard let paramAPI else {
+        return true
+    }
+
+    var value = ObjCBool(true)
+    paramAPI.getBoolValue(&value, fromParameter: UprightParam.editMode.rawValue, at: time)
+    return value.boolValue
+}
+
+func addUprightWorkflowParameters(_ paramAPI: FxParameterCreationAPI_v5, defaultFlags: FxParameterFlags) {
+    paramAPI.addPopupMenu(
+        withName: "Direction",
+        parameterID: UprightParam.correctionMode.rawValue,
+        defaultValue: UInt32(UprightCorrectionMode.full.rawValue),
+        menuEntries: ["Vertical", "Horizontal", "Full"],
         parameterFlags: defaultFlags
     )
-    paramAPI.addPercentSlider(
-        withName: "Score Threshold",
-        parameterID: UprightParam.candidateScoreThreshold.rawValue,
-        defaultValue: 0.2,
-        parameterMin: 0.0,
-        parameterMax: 1.0,
-        sliderMin: 0.0,
-        sliderMax: 1.0,
-        delta: 0.01,
+    paramAPI.addPushButton(
+        withName: "Analyze",
+        parameterID: UprightParam.analyze.rawValue,
+        selector: #selector(AnyUprightUprightPlugIn.analyze),
+        parameterFlags: defaultFlags
+    )
+    paramAPI.addPopupMenu(
+        withName: "Mode",
+        parameterID: UprightParam.controlMode.rawValue,
+        defaultValue: UInt32(UprightControlMode.manual.rawValue),
+        menuEntries: ["Manual", "Semi Auto", "Full Auto"],
+        parameterFlags: defaultFlags
+    )
+    paramAPI.addToggleButton(
+        withName: "Auto Crop",
+        parameterID: UprightParam.autoCrop.rawValue,
+        defaultValue: true,
+        parameterFlags: defaultFlags
+    )
+    paramAPI.addToggleButton(
+        withName: "Edit Mode",
+        parameterID: UprightParam.editMode.rawValue,
+        defaultValue: true,
         parameterFlags: defaultFlags
     )
 }

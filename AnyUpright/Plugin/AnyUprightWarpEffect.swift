@@ -114,7 +114,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
     func sourceTileRect(_ sourceTileRect: UnsafeMutablePointer<FxRect>, sourceImageIndex: UInt, sourceImages: [FxImageTile], destinationTileRect: FxRect, destinationImage: FxImageTile, pluginState: Data?, at renderTime: CMTime) throws {
         let parameterState = state(from: pluginState)
-        let usesIdentityPreview = renderMode(from: parameterState) == Int32(AURM_InnerStretchAdjusterPreview)
+        let usesIdentityPreview = usesIdentitySourcePreview(from: parameterState)
         let bounds = AnyUprightGeometry.sourceTileBounds(
             for: pixelBounds(from: sourceImages[Int(sourceImageIndex)].imagePixelBounds),
             destinationTileBounds: pixelBounds(from: destinationTileRect),
@@ -324,19 +324,32 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             )
 
         case .upright:
+            let outputToSourceFrame = AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: sourceSize)
+            guard state.showCornerAdjuster == 0 else {
+                return outputToSourceFrame
+            }
+
             let perspectiveInOutputSpace = AnyUprightGeometry.uprightOutputToSourceMatrix(
                 vertical: Double(state.verticalPerspective),
                 horizontal: Double(state.horizontalPerspective),
                 size: outputSize
             )
-            let outputToSourceFrame = AnyUprightGeometry.homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
             let perspective = AnyUprightGeometry.multiply(outputToSourceFrame, perspectiveInOutputSpace)
             let rotation = AnyUprightGeometry.rotationOutputToSource(
                 angleRadians: Double(state.rotationRadians),
                 fillFrame: false,
                 size: outputSize
             )
-            return AnyUprightGeometry.multiply(perspective, rotation)
+            let correction = AnyUprightGeometry.multiply(perspective, rotation)
+            guard state.fillFrame != 0 else {
+                return correction
+            }
+
+            return AnyUprightGeometry.autoCropOutputToSourceMatrix(
+                correction,
+                outputSize: outputSize,
+                sourceSize: sourceSize
+            )
 
         case .none:
             return AnyUprightGeometry.homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
@@ -377,6 +390,15 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         }
 
         return Int32(AURM_WarpFullFrame)
+    }
+
+    private func usesIdentitySourcePreview(from state: AnyUprightParameterState) -> Bool {
+        if AnyUprightEffectKind(rawValue: state.effectKind) == .upright,
+           state.showCornerAdjuster != 0 {
+            return true
+        }
+
+        return renderMode(from: state) == Int32(AURM_InnerStretchAdjusterPreview)
     }
 
     func cornerOffsets(from state: AnyUprightParameterState) -> AUCornerOffsets {

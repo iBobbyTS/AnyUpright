@@ -78,9 +78,23 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         paramAPI.getFloatValue(&rotation, fromParameter: UprightParam.rotation.rawValue, at: renderTime)
 
         let correctionMode = uprightCorrectionMode(at: renderTime, paramAPI: paramAPI)
+        let controlMode = uprightControlMode(at: renderTime, paramAPI: paramAPI)
         let editMode = uprightEditMode(at: renderTime, paramAPI: paramAPI)
         result.fillFrame = uprightAutoCrop(at: renderTime, paramAPI: paramAPI) ? 1 : 0
         result.showCornerAdjuster = editMode ? 1 : 0
+
+        if controlMode == .manual && !editMode {
+            let correction = manualGuideCorrection(
+                at: renderTime,
+                paramAPI: paramAPI,
+                correctionMode: correctionMode
+            )
+            result.verticalPerspective = Float(correction.verticalPerspective)
+            result.horizontalPerspective = Float(correction.horizontalPerspective)
+            result.rotationRadians = Float(correction.rotationRadians)
+            return result
+        }
+
         result.verticalPerspective = correctionMode.includesVertical ? Float(vertical) : 0.0
         result.horizontalPerspective = correctionMode.includesHorizontal ? Float(horizontal) : 0.0
         result.rotationRadians = correctionMode == .full ? Float(rotation) : 0.0
@@ -258,14 +272,17 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
     private func applyGuided(_ correctionMode: UprightCorrectionMode, time: CMTime) {
         let guides = uprightGuideLines(at: time, paramAPI: parameterRetrievalAPI())
-        let verticalLines = guides
-            .filter { $0.orientation == .vertical && correctionMode.includesVertical }
-            .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
-        let horizontalLines = guides
-            .filter { $0.orientation == .horizontal && correctionMode.includesHorizontal }
-            .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
+        let references = referenceLines(
+            from: guides,
+            correctionMode: correctionMode
+        )
 
-        applyReferences(verticalLines: verticalLines, horizontalLines: horizontalLines, correctionMode: correctionMode, time: time)
+        applyReferences(
+            verticalLines: references.vertical,
+            horizontalLines: references.horizontal,
+            correctionMode: correctionMode,
+            time: time
+        )
     }
 
     private func applySelected(_ correctionMode: UprightCorrectionMode, time: CMTime) {
@@ -288,6 +305,33 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             settingAPI: settingAPI,
             time: time
         )
+    }
+
+    private func manualGuideCorrection(
+        at time: CMTime,
+        paramAPI: FxParameterRetrievalAPI_v6,
+        correctionMode: UprightCorrectionMode
+    ) -> UprightCorrectionValues {
+        let guides = uprightGuideLines(at: time, paramAPI: paramAPI)
+        let references = referenceLines(from: guides, correctionMode: correctionMode)
+        return AnyUprightUprightCandidates.correctionValues(
+            verticalLines: references.vertical,
+            horizontalLines: references.horizontal,
+            correctionMode: correctionMode
+        )
+    }
+
+    private func referenceLines(
+        from guides: [UprightGuideLine],
+        correctionMode: UprightCorrectionMode
+    ) -> (vertical: [AULineSegment], horizontal: [AULineSegment]) {
+        let verticalLines = guides
+            .filter { $0.enabled && $0.orientation == .vertical && correctionMode.includesVertical }
+            .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
+        let horizontalLines = guides
+            .filter { $0.enabled && $0.orientation == .horizontal && correctionMode.includesHorizontal }
+            .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
+        return (verticalLines, horizontalLines)
     }
 
     private func selectedDetectedImageLines(from candidates: [UprightDetectedCandidate], orientation: UprightGuideOrientation, correctionMode: UprightCorrectionMode) -> [AULineSegment] {

@@ -86,6 +86,18 @@ struct UprightDetectedCandidate {
     var score: Double
 }
 
+struct UprightCorrectionValues {
+    var verticalPerspective: Double
+    var horizontalPerspective: Double
+    var rotationRadians: Double
+
+    static let zero = UprightCorrectionValues(
+        verticalPerspective: 0.0,
+        horizontalPerspective: 0.0,
+        rotationRadians: 0.0
+    )
+}
+
 enum AnyUprightUprightCandidates {
     static let slotCount = 40
     static let specs: [UprightCandidateSpec] = (0..<slotCount).map { index in
@@ -226,6 +238,65 @@ enum AnyUprightUprightCandidates {
         }
 
         return (convert(imageLine.start), convert(imageLine.end))
+    }
+
+    static func correctionValues(
+        verticalLines: [AULineSegment],
+        horizontalLines: [AULineSegment],
+        correctionMode: UprightCorrectionMode
+    ) -> UprightCorrectionValues {
+        let solverSize = AUSize(width: 1000.0, height: 1000.0)
+        let scaledVerticalLines = verticalLines.map {
+            scaledLine($0, size: solverSize)
+        }
+        let scaledHorizontalLines = horizontalLines.map {
+            scaledLine($0, size: solverSize)
+        }
+
+        let vertical: Double
+        if correctionMode.includesVertical {
+            vertical = AnyUprightGeometry.estimateVerticalPerspective(
+                from: scaledVerticalLines,
+                size: solverSize
+            ) ?? 0.0
+        } else {
+            vertical = 0.0
+        }
+
+        let horizontal: Double
+        if correctionMode.includesHorizontal {
+            horizontal = AnyUprightGeometry.estimateHorizontalPerspective(
+                from: scaledHorizontalLines,
+                size: solverSize
+            ) ?? 0.0
+        } else {
+            horizontal = 0.0
+        }
+
+        let rotation: Double
+        if correctionMode == .full {
+            let rotationLines = scaledHorizontalLines.isEmpty ? scaledVerticalLines : scaledHorizontalLines
+            let rotationOrientation: AUReferenceOrientation = scaledHorizontalLines.isEmpty ? .vertical : .horizontal
+            rotation = AnyUprightGeometry.rotationCorrectionRadians(
+                from: rotationLines,
+                orientation: rotationOrientation
+            ) ?? 0.0
+        } else {
+            rotation = 0.0
+        }
+
+        return UprightCorrectionValues(
+            verticalPerspective: vertical,
+            horizontalPerspective: horizontal,
+            rotationRadians: rotation
+        )
+    }
+
+    private static func scaledLine(_ line: AULineSegment, size: AUSize) -> AULineSegment {
+        AULineSegment(
+            start: AUPoint(x: line.start.x * size.width, y: line.start.y * size.height),
+            end: AUPoint(x: line.end.x * size.width, y: line.end.y * size.height)
+        )
     }
 
     static func candidateIndex(for activePart: Int) -> Int? {

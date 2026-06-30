@@ -63,6 +63,7 @@ struct AnyUprightGeometryTests {
         try testQuadInnerStretchModeShowsAdjusterBeforeApplyingWarp()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
         try testAutoCropScalesWarpedOutputIntoSourceFrame()
+        try testAutoCropDoesNotForceMaximumScaleWhenNoCropCanFill()
         try testUprightVerticalAndHorizontalPerspectiveGenerateCenteredQuads()
         try testUprightPerspectiveKeepsFrameCenterAnchored()
         try testLineCandidateSelectionPrefersSmallestDeviation()
@@ -80,6 +81,7 @@ struct AnyUprightGeometryTests {
         try testUprightCandidateDisplayHonorsControlAndCorrectionMode()
         try testUprightCandidateObjectLineClampsAndFlipsY()
         try testUprightCandidateHitTestingUsesPixelDistance()
+        try testUprightCorrectionValuesDeriveFromCurrentReferences()
         try testZeroRotationMatrixIsIdentity()
         print("AnyUprightGeometryTests passed")
     }
@@ -1131,6 +1133,31 @@ struct AnyUprightGeometryTests {
         try assertOutputFrameMapsInsideSource(cropped, outputSize: size, sourceSize: size, label: "auto-cropped correction")
     }
 
+    static func testAutoCropDoesNotForceMaximumScaleWhenNoCropCanFill() throws {
+        let size = AUSize(width: 200.0, height: 100.0)
+        let impossible = simd_float3x3(columns: (
+            SIMD3<Float>(1.0, 0.0, 0.0),
+            SIMD3<Float>(0.0, 1.0, 0.0),
+            SIMD3<Float>(500.0, 0.0, 1.0)
+        ))
+
+        let scale = AnyUprightGeometry.autoCropScale(
+            for: impossible,
+            outputSize: size,
+            sourceSize: size,
+            maximumScale: 8.0
+        )
+        let cropped = AnyUprightGeometry.autoCropOutputToSourceMatrix(
+            impossible,
+            outputSize: size,
+            sourceSize: size,
+            maximumScale: 8.0
+        )
+
+        try assertApprox(scale, 1.0, "impossible auto-crop should not force max zoom")
+        try assertMaps(cropped, AUPoint(x: 0.0, y: 0.0), to: AUPoint(x: 500.0, y: 0.0))
+    }
+
     static func testUprightVerticalAndHorizontalPerspectiveGenerateCenteredQuads() throws {
         let size = AUSize(width: 200.0, height: 100.0)
 
@@ -1581,6 +1608,46 @@ struct AnyUprightGeometryTests {
 
         try assertApprox(nearDistance, 5.0, "candidate near hit distance")
         try assertApprox(outsideDistance, 30.0, "candidate endpoint hit distance")
+    }
+
+    static func testUprightCorrectionValuesDeriveFromCurrentReferences() throws {
+        let size = AUSize(width: 1.0, height: 1.0)
+        let expectedVertical = 0.35
+        let expectedHorizontal = -0.25
+        let verticalOutput = AULineSegment(
+            start: AUPoint(x: 0.35, y: 0.15),
+            end: AUPoint(x: 0.35, y: 0.85)
+        )
+        let horizontalOutput = AULineSegment(
+            start: AUPoint(x: 0.15, y: 0.40),
+            end: AUPoint(x: 0.85, y: 0.40)
+        )
+        let verticalOutputToSource = AnyUprightGeometry.homography(
+            from: AnyUprightGeometry.uprightQuad(vertical: expectedVertical, horizontal: 0.0, size: size),
+            to: AUQuad.fullFrame(size)
+        )
+        let horizontalOutputToSource = AnyUprightGeometry.homography(
+            from: AnyUprightGeometry.uprightQuad(vertical: 0.0, horizontal: expectedHorizontal, size: size),
+            to: AUQuad.fullFrame(size)
+        )
+        let verticalSource = AnyUprightGeometry.transform(verticalOutput, by: verticalOutputToSource)
+        let horizontalSource = AnyUprightGeometry.transform(horizontalOutput, by: horizontalOutputToSource)
+
+        let full = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: [verticalSource],
+            horizontalLines: [horizontalSource],
+            correctionMode: .full
+        )
+        let verticalOnly = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: [verticalSource],
+            horizontalLines: [horizontalSource],
+            correctionMode: .vertical
+        )
+
+        try assertApprox(full.verticalPerspective, expectedVertical, "full vertical reference correction", accuracy: 0.02)
+        try assertApprox(full.horizontalPerspective, expectedHorizontal, "full horizontal reference correction", accuracy: 0.02)
+        try assertApprox(verticalOnly.verticalPerspective, expectedVertical, "vertical mode keeps vertical reference", accuracy: 0.02)
+        try assertApprox(verticalOnly.horizontalPerspective, 0.0, "vertical mode ignores horizontal reference")
     }
 
     static func testZeroRotationMatrixIsIdentity() throws {

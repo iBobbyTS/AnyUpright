@@ -1107,7 +1107,7 @@ enum AnyUprightGeometry {
 
         var candidate = multiply(outputToSource, outputCenterUnzoomMatrix(scale: upper, size: outputSize))
         guard outputFrameMapsInsideSource(candidate, outputSize: outputSize, sourceSize: sourceSize) else {
-            return upper
+            return 1.0
         }
 
         for _ in 0..<24 {

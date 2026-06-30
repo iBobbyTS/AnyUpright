@@ -190,32 +190,15 @@ func writeUprightCorrection(
     settingAPI: FxParameterSettingAPI_v5,
     time: CMTime
 ) {
-    let vertical: Double
-    if correctionMode.includesVertical {
-        vertical = AnyUprightGeometry.estimateVerticalPerspective(from: verticalLines, size: AUSize(width: 1.0, height: 1.0)) ?? 0.0
-    } else {
-        vertical = 0.0
-    }
+    let correction = AnyUprightUprightCandidates.correctionValues(
+        verticalLines: verticalLines,
+        horizontalLines: horizontalLines,
+        correctionMode: correctionMode
+    )
 
-    let horizontal: Double
-    if correctionMode.includesHorizontal {
-        horizontal = AnyUprightGeometry.estimateHorizontalPerspective(from: horizontalLines, size: AUSize(width: 1.0, height: 1.0)) ?? 0.0
-    } else {
-        horizontal = 0.0
-    }
-
-    let rotation: Double
-    if correctionMode == .full {
-        let rotationLines = horizontalLines.isEmpty ? verticalLines : horizontalLines
-        let rotationOrientation: AUReferenceOrientation = horizontalLines.isEmpty ? .vertical : .horizontal
-        rotation = AnyUprightGeometry.rotationCorrectionRadians(from: rotationLines, orientation: rotationOrientation) ?? 0.0
-    } else {
-        rotation = 0.0
-    }
-
-    settingAPI.setFloatValue(vertical, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
-    settingAPI.setFloatValue(horizontal, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
-    settingAPI.setFloatValue(rotation, toParameter: UprightParam.rotation.rawValue, at: time)
+    settingAPI.setFloatValue(correction.verticalPerspective, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
+    settingAPI.setFloatValue(correction.horizontalPerspective, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
+    settingAPI.setFloatValue(correction.rotationRadians, toParameter: UprightParam.rotation.rawValue, at: time)
 }
 
 func uprightCorrectionMode(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> UprightCorrectionMode {

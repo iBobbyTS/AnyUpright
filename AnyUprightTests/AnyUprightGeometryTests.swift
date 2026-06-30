@@ -80,8 +80,13 @@ struct AnyUprightGeometryTests {
         try testUprightCandidateToggleSelectionStopsAtTwoPerOrientation()
         try testUprightCandidateDisplayHonorsControlAndCorrectionMode()
         try testUprightCandidateObjectLineClampsAndFlipsY()
+        try testUprightManualGuideImageLineDoesNotFlipY()
         try testUprightCandidateHitTestingUsesPixelDistance()
         try testUprightCorrectionValuesDeriveFromCurrentReferences()
+        try testVerticalUprightCorrectionStraightensReferenceLines()
+        try testMotionManualVerticalGuidesUsePreviewImageY()
+        try testVerticalUprightCorrectionKeepsNormalizedGuideMeaningAcrossAspectRatios()
+        try testHorizontalUprightCorrectionKeepsNormalizedGuideMeaningAcrossAspectRatios()
         try testZeroRotationMatrixIsIdentity()
         print("AnyUprightGeometryTests passed")
     }
@@ -1588,6 +1593,21 @@ struct AnyUprightGeometryTests {
         try assertEqual(objectLine.end, AUPoint(x: 1.0, y: 0.0), "object candidate end")
     }
 
+    static func testUprightManualGuideImageLineDoesNotFlipY() throws {
+        let manualLine = AULineSegment(
+            start: AUPoint(x: 0.2, y: 0.3),
+            end: AUPoint(x: 0.4, y: 0.8)
+        )
+
+        let imageLine = AnyUprightUprightCandidates.imageLine(
+            fromManualGuide: manualLine,
+            size: AUSize(width: 100.0, height: 200.0)
+        )
+
+        try assertEqual(imageLine.start, AUPoint(x: 20.0, y: 60.0), "manual guide image start")
+        try assertEqual(imageLine.end, AUPoint(x: 40.0, y: 160.0), "manual guide image end")
+    }
+
     static func testUprightCandidateHitTestingUsesPixelDistance() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         let start = AUPoint(x: 0.25, y: 0.50)
@@ -1650,6 +1670,210 @@ struct AnyUprightGeometryTests {
         try assertApprox(verticalOnly.horizontalPerspective, 0.0, "vertical mode ignores horizontal reference")
     }
 
+    static func testVerticalUprightCorrectionStraightensReferenceLines() throws {
+        let size = AUSize(width: 1000.0, height: 1000.0)
+        let sourceLines = [
+            AULineSegment(
+                start: AUPoint(x: 240.0, y: 140.0),
+                end: AUPoint(x: 300.0, y: 840.0)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 760.0, y: 140.0),
+                end: AUPoint(x: 700.0, y: 840.0)
+            )
+        ]
+        let normalizedLines = sourceLines.map { line in
+            AULineSegment(
+                start: AUPoint(x: line.start.x / size.width, y: line.start.y / size.height),
+                end: AUPoint(x: line.end.x / size.width, y: line.end.y / size.height)
+            )
+        }
+        let correction = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: normalizedLines,
+            horizontalLines: [],
+            correctionMode: .vertical
+        )
+        let outputToSource = AnyUprightGeometry.uprightOutputToSourceMatrix(
+            vertical: correction.verticalPerspective,
+            horizontal: 0.0,
+            size: size
+        )
+        let sourceToOutput = simd_inverse(outputToSource)
+        let correctedLines = sourceLines.map {
+            AnyUprightGeometry.transform($0, by: sourceToOutput)
+        }
+
+        try assertTrue(
+            meanVerticalDeviation(correctedLines) < meanVerticalDeviation(sourceLines) * 0.25,
+            "vertical upright correction should make selected vertical references substantially straighter"
+        )
+    }
+
+    static func testMotionManualVerticalGuidesUsePreviewImageY() throws {
+        let manualGuideLines = [
+            AULineSegment(
+                start: AUPoint(x: 0.12000582870687918, y: 0.4439647351031818),
+                end: AUPoint(x: 0.079615545853546854, y: 0.7493946548715269)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.79611260802409756, y: 0.4675621403700746),
+                end: AUPoint(x: 0.87551399334079938, y: 0.78371711509750985)
+            )
+        ]
+        let flippedObjectInterpretation = manualGuideLines.map {
+            AULineSegment(
+                start: AUPoint(x: $0.start.x, y: 1.0 - $0.start.y),
+                end: AUPoint(x: $0.end.x, y: 1.0 - $0.end.y)
+            )
+        }
+
+        let manualCorrection = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: manualGuideLines,
+            horizontalLines: [],
+            correctionMode: .vertical
+        )
+        let flippedCorrection = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: flippedObjectInterpretation,
+            horizontalLines: [],
+            correctionMode: .vertical
+        )
+
+        try assertTrue(manualCorrection.verticalPerspective < 0.0, "manual preview-image guides produce negative vertical correction")
+        try assertTrue(flippedCorrection.verticalPerspective > 0.0, "object-space interpretation would produce the old opposite sign")
+
+        let size = AUSize(width: 1920.0, height: 1080.0)
+        let sourceLines = manualGuideLines.map {
+            AULineSegment(
+                start: AUPoint(x: $0.start.x * size.width, y: $0.start.y * size.height),
+                end: AUPoint(x: $0.end.x * size.width, y: $0.end.y * size.height)
+            )
+        }
+        let sourceToOutput = simd_inverse(AnyUprightGeometry.uprightOutputToSourceMatrix(
+            vertical: manualCorrection.verticalPerspective,
+            horizontal: 0.0,
+            size: size
+        ))
+        let oldSourceToOutput = simd_inverse(AnyUprightGeometry.uprightOutputToSourceMatrix(
+            vertical: flippedCorrection.verticalPerspective,
+            horizontal: 0.0,
+            size: size
+        ))
+        let correctedLines = sourceLines.map {
+            AnyUprightGeometry.transform($0, by: sourceToOutput)
+        }
+        let oldCorrectedLines = sourceLines.map {
+            AnyUprightGeometry.transform($0, by: oldSourceToOutput)
+        }
+        let originalDeviation = meanVerticalDeviation(sourceLines)
+        let correctedDeviation = meanVerticalDeviation(correctedLines)
+        let oldCorrectedDeviation = meanVerticalDeviation(oldCorrectedLines)
+
+        try assertTrue(
+            correctedDeviation < originalDeviation * 0.50,
+            "manual preview-image guide correction should make Motion guide lines substantially more vertical"
+        )
+        try assertTrue(
+            oldCorrectedDeviation > originalDeviation,
+            "old object-space Y interpretation should worsen the current Motion guide lines"
+        )
+    }
+
+    static func testVerticalUprightCorrectionKeepsNormalizedGuideMeaningAcrossAspectRatios() throws {
+        let correction = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: [
+                AULineSegment(
+                    start: AUPoint(x: 0.11908, y: 0.55827),
+                    end: AUPoint(x: 0.06161, y: 0.17369)
+                ),
+                AULineSegment(
+                    start: AUPoint(x: 0.79465, y: 0.54537),
+                    end: AUPoint(x: 0.86840, y: 0.22969)
+                )
+            ],
+            horizontalLines: [],
+            correctionMode: .vertical
+        )
+
+        for size in [
+            AUSize(width: 1000.0, height: 1000.0),
+            AUSize(width: 1920.0, height: 1080.0),
+            AUSize(width: 4032.0, height: 3024.0),
+            AUSize(width: 3024.0, height: 4032.0)
+        ] {
+            let sourceLines = [
+                AULineSegment(
+                    start: AUPoint(x: 0.11908 * size.width, y: 0.55827 * size.height),
+                    end: AUPoint(x: 0.06161 * size.width, y: 0.17369 * size.height)
+                ),
+                AULineSegment(
+                    start: AUPoint(x: 0.79465 * size.width, y: 0.54537 * size.height),
+                    end: AUPoint(x: 0.86840 * size.width, y: 0.22969 * size.height)
+                )
+            ]
+            let sourceToOutput = simd_inverse(AnyUprightGeometry.uprightOutputToSourceMatrix(
+                vertical: correction.verticalPerspective,
+                horizontal: 0.0,
+                size: size
+            ))
+            let correctedLines = sourceLines.map {
+                AnyUprightGeometry.transform($0, by: sourceToOutput)
+            }
+
+            try assertTrue(
+                meanVerticalDeviation(correctedLines) < meanVerticalDeviation(sourceLines) * 0.40,
+                "vertical correction should retain normalized guide meaning for \(size)"
+            )
+        }
+    }
+
+    static func testHorizontalUprightCorrectionKeepsNormalizedGuideMeaningAcrossAspectRatios() throws {
+        let correction = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: [],
+            horizontalLines: [
+                AULineSegment(
+                    start: AUPoint(x: 0.16700, y: 0.26500),
+                    end: AUPoint(x: 0.84100, y: 0.19800)
+                ),
+                AULineSegment(
+                    start: AUPoint(x: 0.18200, y: 0.76200),
+                    end: AUPoint(x: 0.82500, y: 0.82900)
+                )
+            ],
+            correctionMode: .horizontal
+        )
+
+        for size in [
+            AUSize(width: 1000.0, height: 1000.0),
+            AUSize(width: 1920.0, height: 1080.0),
+            AUSize(width: 4032.0, height: 3024.0),
+            AUSize(width: 3024.0, height: 4032.0)
+        ] {
+            let sourceLines = [
+                AULineSegment(
+                    start: AUPoint(x: 0.16700 * size.width, y: 0.26500 * size.height),
+                    end: AUPoint(x: 0.84100 * size.width, y: 0.19800 * size.height)
+                ),
+                AULineSegment(
+                    start: AUPoint(x: 0.18200 * size.width, y: 0.76200 * size.height),
+                    end: AUPoint(x: 0.82500 * size.width, y: 0.82900 * size.height)
+                )
+            ]
+            let sourceToOutput = simd_inverse(AnyUprightGeometry.uprightOutputToSourceMatrix(
+                vertical: 0.0,
+                horizontal: correction.horizontalPerspective,
+                size: size
+            ))
+            let correctedLines = sourceLines.map {
+                AnyUprightGeometry.transform($0, by: sourceToOutput)
+            }
+
+            try assertTrue(
+                meanHorizontalDeviation(correctedLines) < meanHorizontalDeviation(sourceLines) * 0.40,
+                "horizontal correction should retain normalized guide meaning for \(size)"
+            )
+        }
+    }
+
     static func testZeroRotationMatrixIsIdentity() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         let matrix = AnyUprightGeometry.rotationOutputToSource(angleRadians: 0.0, fillFrame: false, size: size)
@@ -1685,6 +1909,32 @@ struct AnyUprightGeometryTests {
                 "\(label) maps \(corner) inside source, got \(mapped)"
             )
         }
+    }
+
+    static func meanVerticalDeviation(_ lines: [AULineSegment]) -> Double {
+        guard !lines.isEmpty else {
+            return 0.0
+        }
+
+        let total = lines.reduce(0.0) { partial, line in
+            let dx = abs(line.end.x - line.start.x)
+            let dy = abs(line.end.y - line.start.y)
+            return partial + atan2(dx, max(dy, 0.000001))
+        }
+        return total / Double(lines.count)
+    }
+
+    static func meanHorizontalDeviation(_ lines: [AULineSegment]) -> Double {
+        guard !lines.isEmpty else {
+            return 0.0
+        }
+
+        let total = lines.reduce(0.0) { partial, line in
+            let dx = abs(line.end.x - line.start.x)
+            let dy = abs(line.end.y - line.start.y)
+            return partial + atan2(dy, max(dx, 0.000001))
+        }
+        return total / Double(lines.count)
     }
 
     static func assertEqual(_ actual: AUPoint, _ expected: AUPoint, _ label: String) throws {

@@ -104,6 +104,7 @@ Current implementation:
 - `Edit Mode` shows the original unwarped frame and displays Upright OSC lines. Turning `Edit Mode` off applies the stored correction and hides all Upright OSC lines. `Auto Crop` zooms the rendered correction just enough to keep output-frame corners inside the source frame when possible.
 - Vertical perspective uses a centered keystone transform around the horizontal centerline. Positive values move the top inward and bottom outward; negative values move the top outward and bottom inward.
 - Horizontal perspective uses a centered keystone transform around the vertical centerline. Positive values move the right side inward and left side outward; negative values move the right side outward and left side inward.
+- Upright perspective parameters are normalized by their acting axis so guide-line correction keeps the same meaning across aspect ratios: vertical perspective is normalized by image height, and horizontal perspective is normalized by image width.
 - Rotation is stored internally and applies only in `Full` direction.
 - Internally this implementation treats upright perspective as a destination/output quadrilateral and maps it back to the full source frame.
 - The centered keystone math is tested at the homography level: vertical, horizontal, and combined perspective transforms keep the frame center anchored instead of acting like edge-pivot shears.

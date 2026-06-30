@@ -863,10 +863,9 @@ enum AnyUprightGeometry {
 
         let centerX = size.width / 2.0
         let centerY = size.height / 2.0
-        let scale = max(size.width, size.height, 1.0)
         let maxProjectiveStrength = 1.5
-        let verticalStrength = max(-1.0, min(1.0, vertical)) * maxProjectiveStrength / scale
-        let horizontalStrength = -max(-1.0, min(1.0, horizontal)) * maxProjectiveStrength / scale
+        let verticalStrength = max(-1.0, min(1.0, vertical)) * maxProjectiveStrength / max(size.height, 1.0)
+        let horizontalStrength = -max(-1.0, min(1.0, horizontal)) * maxProjectiveStrength / max(size.width, 1.0)
 
         let toCenter = matrix(
             1.0, 0.0, -centerX,

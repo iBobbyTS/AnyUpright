@@ -226,6 +226,13 @@ enum AnyUprightUprightCandidates {
         )
     }
 
+    static func imageLine(fromManualGuide line: AULineSegment, size: AUSize) -> AULineSegment {
+        AULineSegment(
+            start: AUPoint(x: line.start.x * size.width, y: line.start.y * size.height),
+            end: AUPoint(x: line.end.x * size.width, y: line.end.y * size.height)
+        )
+    }
+
     static func objectLine(from imageLine: AULineSegment, size: AUSize) -> (start: AUPoint, end: AUPoint) {
         let width = max(1.0, size.width)
         let height = max(1.0, size.height)

@@ -177,9 +177,9 @@ func guideSpec(forLinePart part: UprightOSCPart) -> UprightGuideSpec? {
 }
 
 func imageLine(from guide: UprightGuideLine, size: AUSize) -> AULineSegment {
-    AULineSegment(
-        start: AUPoint(x: guide.start.x * size.width, y: (1.0 - guide.start.y) * size.height),
-        end: AUPoint(x: guide.end.x * size.width, y: (1.0 - guide.end.y) * size.height)
+    AnyUprightUprightCandidates.imageLine(
+        fromManualGuide: AULineSegment(start: guide.start, end: guide.end),
+        size: size
     )
 }
 

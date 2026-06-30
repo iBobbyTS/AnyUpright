@@ -87,6 +87,7 @@ struct AnyUprightGeometryTests {
         try testMotionManualVerticalGuidesUsePreviewImageY()
         try testVerticalUprightCorrectionKeepsNormalizedGuideMeaningAcrossAspectRatios()
         try testHorizontalUprightCorrectionKeepsNormalizedGuideMeaningAcrossAspectRatios()
+        try testUprightAppliedCorrectionIsStableAcrossPreviewOutputSizes()
         try testZeroRotationMatrixIsIdentity()
         print("AnyUprightGeometryTests passed")
     }
@@ -1871,6 +1872,63 @@ struct AnyUprightGeometryTests {
                 meanHorizontalDeviation(correctedLines) < meanHorizontalDeviation(sourceLines) * 0.40,
                 "horizontal correction should retain normalized guide meaning for \(size)"
             )
+        }
+    }
+
+    static func testUprightAppliedCorrectionIsStableAcrossPreviewOutputSizes() throws {
+        let sourceSize = AUSize(width: 1920.0, height: 1080.0)
+        let vertical = -0.37
+        let horizontal = 0.12
+        let rotation = degreesToRadians(2.0)
+        let reference = AnyUprightGeometry.uprightAppliedOutputToSourceMatrix(
+            vertical: vertical,
+            horizontal: horizontal,
+            rotationRadians: rotation,
+            fillFrame: true,
+            outputSize: sourceSize,
+            sourceSize: sourceSize
+        )
+        let normalizedSamples = [
+            AUPoint(x: 0.0, y: 0.0),
+            AUPoint(x: 1.0, y: 0.0),
+            AUPoint(x: 1.0, y: 1.0),
+            AUPoint(x: 0.0, y: 1.0),
+            AUPoint(x: 0.5, y: 0.5),
+            AUPoint(x: 0.18, y: 0.31),
+            AUPoint(x: 0.82, y: 0.69)
+        ]
+
+        for outputSize in [
+            AUSize(width: 960.0, height: 540.0),
+            AUSize(width: 854.0, height: 480.0),
+            AUSize(width: 853.0, height: 480.0),
+            AUSize(width: 641.0, height: 360.0),
+            AUSize(width: 640.0, height: 361.0)
+        ] {
+            let matrix = AnyUprightGeometry.uprightAppliedOutputToSourceMatrix(
+                vertical: vertical,
+                horizontal: horizontal,
+                rotationRadians: rotation,
+                fillFrame: true,
+                outputSize: outputSize,
+                sourceSize: sourceSize
+            )
+
+            for sample in normalizedSamples {
+                let referenceOutput = AUPoint(
+                    x: sample.x * sourceSize.width,
+                    y: sample.y * sourceSize.height
+                )
+                let previewOutput = AUPoint(
+                    x: sample.x * outputSize.width,
+                    y: sample.y * outputSize.height
+                )
+                let expected = AnyUprightGeometry.transform(referenceOutput, by: reference)
+                let actual = AnyUprightGeometry.transform(previewOutput, by: matrix)
+
+                try assertApprox(actual.x, expected.x, "upright preview-size stable x for \(outputSize) sample \(sample)", accuracy: 0.02)
+                try assertApprox(actual.y, expected.y, "upright preview-size stable y for \(outputSize) sample \(sample)", accuracy: 0.02)
+            }
         }
     }
 

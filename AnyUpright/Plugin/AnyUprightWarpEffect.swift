@@ -324,29 +324,15 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             )
 
         case .upright:
-            let outputToSourceFrame = AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: sourceSize)
             guard state.showCornerAdjuster == 0 else {
-                return outputToSourceFrame
+                return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: sourceSize)
             }
 
-            let perspectiveInOutputSpace = AnyUprightGeometry.uprightOutputToSourceMatrix(
+            return AnyUprightGeometry.uprightAppliedOutputToSourceMatrix(
                 vertical: Double(state.verticalPerspective),
                 horizontal: Double(state.horizontalPerspective),
-                size: outputSize
-            )
-            let perspective = AnyUprightGeometry.multiply(outputToSourceFrame, perspectiveInOutputSpace)
-            let rotation = AnyUprightGeometry.rotationOutputToSource(
-                angleRadians: Double(state.rotationRadians),
-                fillFrame: false,
-                size: outputSize
-            )
-            let correction = AnyUprightGeometry.multiply(perspective, rotation)
-            guard state.fillFrame != 0 else {
-                return correction
-            }
-
-            return AnyUprightGeometry.autoCropOutputToSourceMatrix(
-                correction,
+                rotationRadians: Double(state.rotationRadians),
+                fillFrame: state.fillFrame != 0,
                 outputSize: outputSize,
                 sourceSize: sourceSize
             )

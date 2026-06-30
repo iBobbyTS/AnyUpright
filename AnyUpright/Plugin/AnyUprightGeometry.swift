@@ -886,6 +886,37 @@ enum AnyUprightGeometry {
         return multiply(multiply(fromCenter, perspective), toCenter)
     }
 
+    static func uprightAppliedOutputToSourceMatrix(
+        vertical: Double,
+        horizontal: Double,
+        rotationRadians: Double,
+        fillFrame: Bool,
+        outputSize: AUSize,
+        sourceSize: AUSize
+    ) -> simd_float3x3 {
+        let outputToSourceFrame = identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: sourceSize)
+        let perspective = uprightOutputToSourceMatrix(
+            vertical: vertical,
+            horizontal: horizontal,
+            size: sourceSize
+        )
+        let rotation = rotationOutputToSource(
+            angleRadians: rotationRadians,
+            fillFrame: false,
+            size: sourceSize
+        )
+        let correction = multiply(perspective, rotation)
+        let stableCorrection = fillFrame
+            ? autoCropOutputToSourceMatrix(
+                correction,
+                outputSize: sourceSize,
+                sourceSize: sourceSize
+            )
+            : correction
+
+        return multiply(stableCorrection, outputToSourceFrame)
+    }
+
     static func lineCandidates(
         from lines: [AULineSegment],
         orientation: AUReferenceOrientation,

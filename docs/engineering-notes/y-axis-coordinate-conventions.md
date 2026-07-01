@@ -1,8 +1,8 @@
 # Y-Axis Coordinate Conventions
 
-Last updated: 2026-06-10 15:47 MDT
-Reference commit: 11aa3148242f9743c8c48903739c604f84dd2e66
-Observed host versions: macOS 26.5, Motion Studio 6.2, Final Cut Pro 12.2
+Last updated: 2026-07-01 16:46 MDT
+Reference commit: 23c5dcf48b242464e584b38ea59b2f05653f67f3
+Observed host versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 (447036), Final Cut Pro 12.2, Xcode 26.5 (17F42), FxPlug SDK package 4.3.4.1.1769575879
 
 This note records reusable Y-axis guidance for four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../quad-implementation-notes.md`.
 
@@ -20,13 +20,14 @@ x = base.x + percent.x * width + pixels.x
 y = base.y - percent.y * height - pixels.y
 ```
 
-- Keep homography input/output points, source selections, output-corner geometry, and render sampling in one explicit image/output convention.
+- Keep homography input/output points, source selections, output-corner geometry, reference-line solving, and render sampling in one explicit image/output convention.
 
 ### FxPlug Object Space
 
 - Apple documents `OBJECT`, `DOCUMENT`, and `CANVAS` drawing coordinates as Y-up spaces.
 - For normalized object-space handles, visual top should therefore have larger normalized Y than visual bottom.
 - Converting object-space storage to image/output preview geometry crosses a Y-axis boundary. Do not assume an object-space point's Y has the same visual meaning as an image/output pixel's Y.
+- Reference-line controls stored as normalized object-space points need the same boundary as point handles before line solving. A line can look correct in an OSC overlay while its persisted endpoints still need `1.0 - y` before becoming image-space geometry.
 
 ### Preview-Aligned Interaction Layer
 
@@ -46,6 +47,7 @@ y = base.y - percent.y * height - pixels.y
 
 - A warp renderer may build tile-local Metal vertices while pairing them with image/output coordinates.
 - Keep shader source/output geometry in the renderer's image/output pixel convention.
+- Keep project geometry and texture addressing separate. A projective output-to-source matrix should map output image pixels to source image pixels; a separate render boundary should map source image pixels into the current input texture.
 - For OSC overlay rendering, define a local surface-pixel layer before converting to Metal vertices.
 - If Metal vertex space is centered with Y up, perform the single Y flip at the local-surface-to-Metal boundary:
 
@@ -64,6 +66,8 @@ metalY = surfaceHeight / 2 - surfaceY
 - If a handle drags correctly but hover appears on the opposite edge, inspect hover/overlay drawing and event interpretation before changing render geometry.
 - If the visible source-selection quad moves correctly but hit targets are mirrored, inspect raw canvas versus mapped surface event resolution before changing render preview or homography.
 - If the visible video/export is shifted while OSC controls are correct, inspect render tile/source texture origin before changing OSC or object-space math.
+- If an offline CPU render and the live Metal render disagree while using the same project geometry matrix, inspect the source-image-to-input-texture boundary and the fragment output-coordinate boundary before changing the solver.
+- If a reference line should become vertical or horizontal after correction, verify the transformed source line in image/output coordinates. Do not infer correctness from the stored endpoint signs alone.
 
 ## Regression Surfaces To Keep
 
@@ -77,6 +81,8 @@ A robust four-corner control should have deterministic checks for:
 - Host gating of any mapped-surface fallback.
 - Host canvas X/Y staying direct for overlay points, including points outside the visible surface.
 - OSC surface-pixel to Metal-centered-pixel conversion, including the single viewport-height Y flip.
+- Object-space reference lines converting to image-space lines before perspective estimation.
+- Boundary-adjusted render matrices matching explicit output-image and source-texture Y conversions.
 
 ## Previous Wrong Attempts
 
@@ -86,3 +92,5 @@ A robust four-corner control should have deterministic checks for:
 - Globally changing event candidate order or adding a new Y-flipped event candidate broke drag dispatch. Event interpretation should stay separate from writeback semantics.
 - Letting storage object/canvas geometry compete with preview-aligned raw-canvas geometry created mirrored hit layers. The visible layer and hit layer must agree.
 - Applying `FxImageTile.pixelTransform` to a base edit preview was incorrect in the observed host path. The preview was rendered into filter output, and Motion/Final Cut applied object/view transforms after plug-in rendering, so applying the host transform in shader double-moved the overlay.
+- Treating visually correct guide overlays as proof that stored guide endpoints were already in image-space Y-down coordinates was wrong. Object-space storage can draw correctly through host conversion and still require a Y flip before image-space line solving.
+- Leaving one output-coordinate Y flip and one input-texture Y flip inside the shader made render orientation hard to reason about. The production model should name both boundaries and preferably compose them into a testable render matrix.

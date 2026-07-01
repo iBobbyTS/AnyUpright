@@ -32,23 +32,18 @@ static float2 clampedImageCoordinate(float2 outputCoordinate, constant AnyUprigh
     return clamp(outputCoordinate, warpState->imageCoordinateMin, warpState->imageCoordinateMax);
 }
 
-static float2 finalDisplayOutputCoordinate(float2 outputCoordinate, constant AnyUprightWarpState *warpState)
+static float2 inputTextureUV(float2 texturePixel, constant AnyUprightWarpState *warpState)
 {
-    return float2(outputCoordinate.x, warpState->outputSize.y - outputCoordinate.y);
-}
-
-static float2 inputTextureUV(float2 sourcePixel, constant AnyUprightWarpState *warpState)
-{
-    float2 texturePixel = float2(
-        sourcePixel.x + warpState->inputImageOriginInTexture.x,
-        warpState->inputImageOriginInTexture.y + warpState->inputSize.y - sourcePixel.y
-    );
     return texturePixel / warpState->inputTextureSize;
 }
 
-static float sourceImageCoverage(float2 sourcePixel, constant AnyUprightWarpState *warpState)
+static float sourceImageCoverage(float2 texturePixel, constant AnyUprightWarpState *warpState)
 {
     float2 sourceSize = max(warpState->inputSize, float2(1.0));
+    float2 sourcePixel = float2(
+        texturePixel.x - warpState->inputImageOriginInTexture.x,
+        sourceSize.y - (texturePixel.y - warpState->inputImageOriginInTexture.y)
+    );
     float outsideDistance = max(
         max(-sourcePixel.x, sourcePixel.x - sourceSize.x),
         max(-sourcePixel.y, sourcePixel.y - sourceSize.y)
@@ -59,11 +54,11 @@ static float sourceImageCoverage(float2 sourcePixel, constant AnyUprightWarpStat
 
 static float4 sampleInputImage(texture2d<half> colorTexture,
                                sampler textureSampler,
-                               float2 sourcePixel,
+                               float2 texturePixel,
                                constant AnyUprightWarpState *warpState)
 {
-    float coverage = sourceImageCoverage(sourcePixel, warpState);
-    float2 sourceUV = clamp(inputTextureUV(sourcePixel, warpState), float2(0.0), float2(1.0));
+    float coverage = sourceImageCoverage(texturePixel, warpState);
+    float2 sourceUV = clamp(inputTextureUV(texturePixel, warpState), float2(0.0), float2(1.0));
     float4 color = float4(colorTexture.sample(textureSampler, sourceUV));
     color.rgb *= coverage;
     return color;
@@ -94,14 +89,14 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
                                      address::clamp_to_edge);
 
     if (warpState->renderMode == AURM_InnerStretchAdjusterPreview) {
-        float2 outputCoordinate = clampedImageCoordinate(finalDisplayOutputCoordinate(in.outputCoordinate, warpState), warpState);
+        float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
         float3 sourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
         if (fabs(sourceHomogeneous.z) < 0.000001) {
             return float4(0.0, 0.0, 0.0, 1.0);
         }
 
-        float2 sourcePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
-        float4 color = sampleInputImage(colorTexture, textureSampler, sourcePixel, warpState);
+        float2 texturePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
+        float4 color = sampleInputImage(colorTexture, textureSampler, texturePixel, warpState);
         float3 selectionHomogeneous = warpState->selectionOutputToRect * float3(outputCoordinate, 1.0);
         if (fabs(selectionHomogeneous.z) < 0.000001) {
             color.rgb *= 0.70;
@@ -122,14 +117,14 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
         return color;
     }
 
-    float2 outputCoordinate = clampedImageCoordinate(finalDisplayOutputCoordinate(in.outputCoordinate, warpState), warpState);
+    float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
     float3 sourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
     if (fabs(sourceHomogeneous.z) < 0.000001) {
         return float4(0.0, 0.0, 0.0, 1.0);
     }
 
-    float2 sourcePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
-    return sampleInputImage(colorTexture, textureSampler, sourcePixel, warpState);
+    float2 texturePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
+    return sampleInputImage(colorTexture, textureSampler, texturePixel, warpState);
 }
 
 vertex OverlayRasterizerData anyUprightOverlayVertex(uint vertexID [[vertex_id]],

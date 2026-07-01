@@ -59,8 +59,8 @@ struct AnyUprightGeometryTests {
         try testOSCDisplayPartKeepsDragHighlightedWhenHoverStops()
         try testOutputCoordinatesKeepHostTilePaddingImageRelative()
         try testInputTextureCoordinatesRespectHostTilePadding()
-        try testInputTexturePixelFlipsSourceImageYAtTextureBoundary()
-        try testFinalDisplayOutputPixelFlipsYAtRenderBoundary()
+        try testRenderBoundaryMatrixMatchesFormerShaderYFlips()
+        try testSelectionBoundaryMatrixMatchesFormerOutputFlip()
         try testInnerStretchEditPreviewRequestsDestinationTile()
         try testUprightStableIdealizedImageSizeUsesPixelTransformScale()
         try testUprightStableIdealizedImageSizeUsesPixelTransformCenterRounding()
@@ -1070,52 +1070,63 @@ struct AnyUprightGeometryTests {
         try assertApprox(mapping.textureSize.height, 2162.0, "padded input texture height")
     }
 
-    static func testInputTexturePixelFlipsSourceImageYAtTextureBoundary() throws {
+    static func testRenderBoundaryMatrixMatchesFormerShaderYFlips() throws {
         let mapping = AnyUprightGeometry.textureCoordinateMapping(
             for: AUPixelBounds(left: -1320, bottom: -480, right: 2520, top: 1680),
             tileBounds: AUPixelBounds(left: -1321, bottom: -481, right: 2521, top: 1681),
             textureSize: AUSize(width: 3842.0, height: 2162.0)
         )
-        let sourceSize = AUSize(width: 3840.0, height: 2160.0)
+        let outputSize = AUSize(width: 3840.0, height: 2160.0)
+        let sourceSize = outputSize
+        let outputToSource = AnyUprightGeometry.homography(
+            from: AUQuad.fullFrame(outputSize),
+            to: AUQuad(
+                topLeft: AUPoint(x: 20.0, y: 30.0),
+                topRight: AUPoint(x: 3800.0, y: 40.0),
+                bottomRight: AUPoint(x: 3700.0, y: 2100.0),
+                bottomLeft: AUPoint(x: 100.0, y: 2050.0)
+            )
+        )
+        let adjusted = AnyUprightGeometry.renderBoundaryAdjustedOutputToTextureMatrix(
+            outputToSource,
+            outputSize: outputSize,
+            sourceSize: sourceSize,
+            textureMapping: mapping
+        )
+        let sampleOutput = AUPoint(x: 1130.0, y: 870.0)
+        let formerShaderOutput = AUPoint(x: sampleOutput.x, y: outputSize.height - sampleOutput.y)
+        let formerSource = AnyUprightGeometry.transform(formerShaderOutput, by: outputToSource)
+        let expectedTexture = AUPoint(
+            x: formerSource.x + mapping.imageOriginInTexture.x,
+            y: mapping.imageOriginInTexture.y + sourceSize.height - formerSource.y
+        )
 
         try assertEqual(
-            AnyUprightGeometry.inputTexturePixel(
-                forSourceImagePixel: AUPoint(x: 0.0, y: 0.0),
-                sourceSize: sourceSize,
-                mapping: mapping
-            ),
-            AUPoint(x: 1.0, y: 2161.0),
-            "top-left source image pixel should cross the source-to-texture Y boundary"
-        )
-        try assertEqual(
-            AnyUprightGeometry.inputTexturePixel(
-                forSourceImagePixel: AUPoint(x: 3840.0, y: 2160.0),
-                sourceSize: sourceSize,
-                mapping: mapping
-            ),
-            AUPoint(x: 3841.0, y: 1.0),
-            "bottom-right source image pixel should preserve one-pixel host tile padding"
+            AnyUprightGeometry.transform(sampleOutput, by: adjusted),
+            expectedTexture,
+            "boundary-adjusted matrix should match former shader output and source texture Y flips"
         )
     }
 
-    static func testFinalDisplayOutputPixelFlipsYAtRenderBoundary() throws {
+    static func testSelectionBoundaryMatrixMatchesFormerOutputFlip() throws {
         let outputSize = AUSize(width: 3840.0, height: 2160.0)
+        let selectionToRect = AnyUprightGeometry.homography(
+            from: AUQuad(
+                topLeft: AUPoint(x: 300.0, y: 200.0),
+                topRight: AUPoint(x: 3500.0, y: 300.0),
+                bottomRight: AUPoint(x: 3300.0, y: 1900.0),
+                bottomLeft: AUPoint(x: 500.0, y: 1850.0)
+            ),
+            to: AUQuad.fullFrame(outputSize)
+        )
+        let adjusted = AnyUprightGeometry.renderBoundaryAdjustedSelectionToRectMatrix(selectionToRect, outputSize: outputSize)
+        let sampleOutput = AUPoint(x: 1800.0, y: 500.0)
+        let formerShaderOutput = AUPoint(x: sampleOutput.x, y: outputSize.height - sampleOutput.y)
 
         try assertEqual(
-            AnyUprightGeometry.finalDisplayOutputPixel(
-                forOutputPixel: AUPoint(x: 0.0, y: 0.0),
-                outputSize: outputSize
-            ),
-            AUPoint(x: 0.0, y: 2160.0),
-            "top display pixel should sample the bottom corrected output row"
-        )
-        try assertEqual(
-            AnyUprightGeometry.finalDisplayOutputPixel(
-                forOutputPixel: AUPoint(x: 3840.0, y: 2160.0),
-                outputSize: outputSize
-            ),
-            AUPoint(x: 3840.0, y: 0.0),
-            "bottom display pixel should sample the top corrected output row"
+            AnyUprightGeometry.transform(sampleOutput, by: adjusted),
+            AnyUprightGeometry.transform(formerShaderOutput, by: selectionToRect),
+            "boundary-adjusted selection matrix should match former shader output Y flip"
         )
     }
 

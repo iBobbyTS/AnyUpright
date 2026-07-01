@@ -491,17 +491,35 @@ enum AnyUprightGeometry {
         )
     }
 
-    static func inputTexturePixel(forSourceImagePixel sourcePixel: AUPoint, sourceSize: AUSize, mapping: AUTextureCoordinateMapping) -> AUPoint {
-        AUPoint(
-            x: sourcePixel.x + mapping.imageOriginInTexture.x,
-            y: mapping.imageOriginInTexture.y + sourceSize.height - sourcePixel.y
+    static func renderBoundaryAdjustedOutputToTextureMatrix(
+        _ outputToSource: simd_float3x3,
+        outputSize: AUSize,
+        sourceSize: AUSize,
+        textureMapping: AUTextureCoordinateMapping
+    ) -> simd_float3x3 {
+        multiply(
+            sourceImageToInputTextureMatrix(sourceSize: sourceSize, mapping: textureMapping),
+            multiply(outputToSource, verticalFlipMatrix(size: outputSize))
         )
     }
 
-    static func finalDisplayOutputPixel(forOutputPixel outputPixel: AUPoint, outputSize: AUSize) -> AUPoint {
-        AUPoint(
-            x: outputPixel.x,
-            y: outputSize.height - outputPixel.y
+    static func renderBoundaryAdjustedSelectionToRectMatrix(_ selectionToRect: simd_float3x3, outputSize: AUSize) -> simd_float3x3 {
+        multiply(selectionToRect, verticalFlipMatrix(size: outputSize))
+    }
+
+    private static func sourceImageToInputTextureMatrix(sourceSize: AUSize, mapping: AUTextureCoordinateMapping) -> simd_float3x3 {
+        matrix(
+            1.0, 0.0, mapping.imageOriginInTexture.x,
+            0.0, -1.0, mapping.imageOriginInTexture.y + sourceSize.height,
+            0.0, 0.0, 1.0
+        )
+    }
+
+    private static func verticalFlipMatrix(size: AUSize) -> simd_float3x3 {
+        matrix(
+            1.0, 0.0, 0.0,
+            0.0, -1.0, size.height,
+            0.0, 0.0, 1.0
         )
     }
 

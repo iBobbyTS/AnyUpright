@@ -438,8 +438,17 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             tileBounds: pixelBounds(from: sourceImage.tilePixelBounds),
             textureSize: AUSize(width: Double(sourceTexture.width), height: Double(sourceTexture.height))
         )
-        let matrix = outputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
-        let selectionToRect = selectionOutputToRectMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
+        let outputToSource = outputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
+        let matrix = AnyUprightGeometry.renderBoundaryAdjustedOutputToTextureMatrix(
+            outputToSource,
+            outputSize: destinationSize,
+            sourceSize: sourceSize,
+            textureMapping: inputTextureMapping
+        )
+        let selectionToRect = AnyUprightGeometry.renderBoundaryAdjustedSelectionToRectMatrix(
+            selectionOutputToRectMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize),
+            outputSize: destinationSize
+        )
         let sourceHandles = innerStretchOutputHandles(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let renderMode = renderMode(from: parameterState)
 

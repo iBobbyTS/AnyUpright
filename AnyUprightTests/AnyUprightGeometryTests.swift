@@ -59,6 +59,8 @@ struct AnyUprightGeometryTests {
         try testOSCDisplayPartKeepsDragHighlightedWhenHoverStops()
         try testOutputCoordinatesKeepHostTilePaddingImageRelative()
         try testInputTextureCoordinatesRespectHostTilePadding()
+        try testInputTexturePixelFlipsSourceImageYAtTextureBoundary()
+        try testFinalDisplayOutputPixelFlipsYAtRenderBoundary()
         try testInnerStretchEditPreviewRequestsDestinationTile()
         try testUprightStableIdealizedImageSizeUsesPixelTransformScale()
         try testUprightStableIdealizedImageSizeUsesPixelTransformCenterRounding()
@@ -88,6 +90,10 @@ struct AnyUprightGeometryTests {
         try testUprightCandidateHitTestingUsesPixelDistance()
         try testUprightCorrectionValuesDeriveFromCurrentReferences()
         try testVerticalUprightCorrectionStraightensReferenceLines()
+        try testVerticalUprightCorrectionDoesNotAddResidualRotationForOffCenterGuides()
+        try testGuidedVerticalMatrixStraightensOffCenterMotionGuidesWithoutSkewingScanlines()
+        try testManualGuidedVerticalMatrixIgnoresAutoCropWhenAdaptedToPreviewSize()
+        try testManualGuidedVerticalMatrixIsStableAcrossMotionPreviewSizes()
         try testMotionManualVerticalGuidesUseObjectY()
         try testVerticalUprightCorrectionKeepsNormalizedGuideMeaningAcrossAspectRatios()
         try testHorizontalUprightCorrectionKeepsNormalizedGuideMeaningAcrossAspectRatios()
@@ -1064,6 +1070,55 @@ struct AnyUprightGeometryTests {
         try assertApprox(mapping.textureSize.height, 2162.0, "padded input texture height")
     }
 
+    static func testInputTexturePixelFlipsSourceImageYAtTextureBoundary() throws {
+        let mapping = AnyUprightGeometry.textureCoordinateMapping(
+            for: AUPixelBounds(left: -1320, bottom: -480, right: 2520, top: 1680),
+            tileBounds: AUPixelBounds(left: -1321, bottom: -481, right: 2521, top: 1681),
+            textureSize: AUSize(width: 3842.0, height: 2162.0)
+        )
+        let sourceSize = AUSize(width: 3840.0, height: 2160.0)
+
+        try assertEqual(
+            AnyUprightGeometry.inputTexturePixel(
+                forSourceImagePixel: AUPoint(x: 0.0, y: 0.0),
+                sourceSize: sourceSize,
+                mapping: mapping
+            ),
+            AUPoint(x: 1.0, y: 2161.0),
+            "top-left source image pixel should cross the source-to-texture Y boundary"
+        )
+        try assertEqual(
+            AnyUprightGeometry.inputTexturePixel(
+                forSourceImagePixel: AUPoint(x: 3840.0, y: 2160.0),
+                sourceSize: sourceSize,
+                mapping: mapping
+            ),
+            AUPoint(x: 3841.0, y: 1.0),
+            "bottom-right source image pixel should preserve one-pixel host tile padding"
+        )
+    }
+
+    static func testFinalDisplayOutputPixelFlipsYAtRenderBoundary() throws {
+        let outputSize = AUSize(width: 3840.0, height: 2160.0)
+
+        try assertEqual(
+            AnyUprightGeometry.finalDisplayOutputPixel(
+                forOutputPixel: AUPoint(x: 0.0, y: 0.0),
+                outputSize: outputSize
+            ),
+            AUPoint(x: 0.0, y: 2160.0),
+            "top display pixel should sample the bottom corrected output row"
+        )
+        try assertEqual(
+            AnyUprightGeometry.finalDisplayOutputPixel(
+                forOutputPixel: AUPoint(x: 3840.0, y: 2160.0),
+                outputSize: outputSize
+            ),
+            AUPoint(x: 3840.0, y: 0.0),
+            "bottom display pixel should sample the top corrected output row"
+        )
+    }
+
     static func testInnerStretchEditPreviewRequestsDestinationTile() throws {
         let imageBounds = AUPixelBounds(left: -1320, bottom: -480, right: 2520, top: 1680)
         let paddedDestinationTile = AUPixelBounds(left: -1321, bottom: -481, right: 2521, top: 1681)
@@ -1778,20 +1833,222 @@ struct AnyUprightGeometryTests {
             horizontalLines: [],
             correctionMode: .vertical
         )
-        let outputToSource = AnyUprightGeometry.uprightOutputToSourceMatrix(
+        let outputToSource = AnyUprightGeometry.uprightAppliedOutputToSourceMatrix(
             vertical: correction.verticalPerspective,
-            horizontal: 0.0,
-            size: size
+            horizontal: correction.horizontalPerspective,
+            rotationRadians: correction.rotationRadians,
+            fillFrame: false,
+            outputSize: size,
+            sourceSize: size
         )
-        let sourceToOutput = simd_inverse(outputToSource)
         let correctedLines = sourceLines.map {
-            AnyUprightGeometry.transform($0, by: sourceToOutput)
+            AnyUprightGeometry.transform($0, by: simd_inverse(outputToSource))
         }
 
         try assertTrue(
             meanVerticalDeviation(correctedLines) < meanVerticalDeviation(sourceLines) * 0.25,
             "vertical upright correction should make selected vertical references substantially straighter"
         )
+    }
+
+    static func testVerticalUprightCorrectionDoesNotAddResidualRotationForOffCenterGuides() throws {
+        let size = AUSize(width: 5712.0, height: 4284.0)
+        let objectLines = [
+            AULineSegment(
+                start: AUPoint(x: 0.125237, y: 0.460393),
+                end: AUPoint(x: 0.090030, y: 0.768210)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.795013, y: 0.467646),
+                end: AUPoint(x: 0.865249, y: 0.776023)
+            )
+        ]
+        let normalizedImageLines = objectLines.map {
+            AULineSegment(
+                start: AUPoint(x: $0.start.x, y: 1.0 - $0.start.y),
+                end: AUPoint(x: $0.end.x, y: 1.0 - $0.end.y)
+            )
+        }
+        let correction = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: normalizedImageLines,
+            horizontalLines: [],
+            correctionMode: .vertical,
+            referenceSize: size
+        )
+        try assertApprox(correction.rotationRadians, 0.0, "vertical direction must not apply residual rotation")
+        try assertApprox(correction.horizontalPerspective, 0.0, "vertical direction must ignore horizontal correction")
+        try assertTrue(
+            abs(correction.verticalPerspective) > 0.1,
+            "off-center vertical guides should still produce a vertical perspective correction"
+        )
+    }
+
+    static func testGuidedVerticalMatrixStraightensOffCenterMotionGuidesWithoutSkewingScanlines() throws {
+        let size = AUSize(width: 5712.0, height: 4284.0)
+        let normalizedImageLines = [
+            AULineSegment(
+                start: AUPoint(x: 0.125237, y: 0.539607),
+                end: AUPoint(x: 0.090030, y: 0.231790)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.795013, y: 0.532354),
+                end: AUPoint(x: 0.865249, y: 0.223977)
+            )
+        ]
+        let sourceLines = normalizedImageLines.map {
+            AULineSegment(
+                start: AUPoint(x: $0.start.x * size.width, y: $0.start.y * size.height),
+                end: AUPoint(x: $0.end.x * size.width, y: $0.end.y * size.height)
+            )
+        }
+
+        let outputToSource = try unwrap(
+            AnyUprightGeometry.guidedVerticalOutputToSourceMatrix(
+                fromNormalizedImageLines: normalizedImageLines,
+                size: size
+            ),
+            "guided vertical output-to-source"
+        )
+        let correctedLines = sourceLines.map {
+            AnyUprightGeometry.transform($0, by: simd_inverse(outputToSource))
+        }
+
+        try assertTrue(
+            meanVerticalDeviation(correctedLines) < degreesToRadians(0.05),
+            "guided vertical matrix should make off-center Motion guides vertical without a residual rotation parameter"
+        )
+
+        let sourceScanlines = [
+            AULineSegment(
+                start: AUPoint(x: 500.0, y: 1000.0),
+                end: AUPoint(x: 5000.0, y: 1000.0)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 500.0, y: 2142.0),
+                end: AUPoint(x: 5000.0, y: 2142.0)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 500.0, y: 3000.0),
+                end: AUPoint(x: 5000.0, y: 3000.0)
+            )
+        ]
+        let correctedScanlines = sourceScanlines.map {
+            AnyUprightGeometry.transform($0, by: simd_inverse(outputToSource))
+        }
+
+        try assertTrue(
+            meanHorizontalDeviation(correctedScanlines) < degreesToRadians(0.05),
+            "vertical-only guided matrix should not introduce visible rotation or vertical shear into source scanlines"
+        )
+    }
+
+    static func testManualGuidedVerticalMatrixIgnoresAutoCropWhenAdaptedToPreviewSize() throws {
+        let stableSize = AUSize(width: 5712.0, height: 4284.0)
+        let previewSize = AUSize(width: 2880.0, height: 2160.0)
+        let normalizedImageLines = [
+            AULineSegment(
+                start: AUPoint(x: 0.125237, y: 0.539607),
+                end: AUPoint(x: 0.090030, y: 0.231790)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.795013, y: 0.532354),
+                end: AUPoint(x: 0.865249, y: 0.223977)
+            )
+        ]
+        let stableMatrix = try unwrap(
+            AnyUprightGeometry.guidedVerticalOutputToSourceMatrix(
+                fromNormalizedImageLines: normalizedImageLines,
+                size: stableSize
+            ),
+            "guided vertical output-to-source"
+        )
+        let previewMatrix = AnyUprightGeometry.appliedOutputToCurrentSourceMatrix(
+            stableMatrix,
+            fillFrame: false,
+            outputSize: previewSize,
+            sourceSize: previewSize,
+            correctionOutputSize: stableSize,
+            correctionSourceSize: stableSize
+        )
+        let autoCroppedPreviewMatrix = AnyUprightGeometry.appliedOutputToCurrentSourceMatrix(
+            stableMatrix,
+            fillFrame: true,
+            outputSize: previewSize,
+            sourceSize: previewSize,
+            correctionOutputSize: stableSize,
+            correctionSourceSize: stableSize
+        )
+
+        try assertApprox(
+            AnyUprightGeometry.transform(AUPoint(x: 0.0, y: 0.0), by: previewMatrix).x,
+            -336.3503,
+            "manual guided preview matrix should keep uncropped offline framing",
+            accuracy: 0.05
+        )
+        try assertTrue(
+            AnyUprightGeometry.transform(AUPoint(x: 0.0, y: 0.0), by: autoCroppedPreviewMatrix).x > 0.0,
+            "auto-cropping this matrix would remove the offline target's black edge framing"
+        )
+    }
+
+    static func testManualGuidedVerticalMatrixIsStableAcrossMotionPreviewSizes() throws {
+        let stableSize = AUSize(width: 5712.0, height: 4284.0)
+        let normalizedImageLines = [
+            AULineSegment(
+                start: AUPoint(x: 0.125237, y: 0.539607),
+                end: AUPoint(x: 0.090030, y: 0.231790)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.795013, y: 0.532354),
+                end: AUPoint(x: 0.865249, y: 0.223977)
+            )
+        ]
+        let stableMatrix = try unwrap(
+            AnyUprightGeometry.guidedVerticalOutputToSourceMatrix(
+                fromNormalizedImageLines: normalizedImageLines,
+                size: stableSize
+            ),
+            "guided vertical output-to-source"
+        )
+        let normalizedSamples = [
+            AUPoint(x: 0.0, y: 0.0),
+            AUPoint(x: 1.0, y: 0.0),
+            AUPoint(x: 1.0, y: 1.0),
+            AUPoint(x: 0.0, y: 1.0),
+            AUPoint(x: 0.5, y: 0.5),
+            AUPoint(x: 0.2, y: 0.4),
+            AUPoint(x: 0.8, y: 0.6)
+        ]
+
+        for previewSize in [
+            AUSize(width: 2880.0, height: 2160.0),
+            AUSize(width: 1200.0, height: 900.0),
+            AUSize(width: 288.0, height: 216.0),
+            AUSize(width: 112.0, height: 84.0)
+        ] {
+            let previewMatrix = AnyUprightGeometry.appliedOutputToCurrentSourceMatrix(
+                stableMatrix,
+                fillFrame: false,
+                outputSize: previewSize,
+                sourceSize: previewSize,
+                correctionOutputSize: stableSize,
+                correctionSourceSize: stableSize
+            )
+
+            for sample in normalizedSamples {
+                let stableOutput = AUPoint(x: sample.x * stableSize.width, y: sample.y * stableSize.height)
+                let previewOutput = AUPoint(x: sample.x * previewSize.width, y: sample.y * previewSize.height)
+                let stableSource = AnyUprightGeometry.transform(stableOutput, by: stableMatrix)
+                let previewSource = AnyUprightGeometry.transform(previewOutput, by: previewMatrix)
+                let scaledStableSource = AUPoint(
+                    x: stableSource.x * previewSize.width / stableSize.width,
+                    y: stableSource.y * previewSize.height / stableSize.height
+                )
+
+                try assertApprox(previewSource.x, scaledStableSource.x, "manual matrix stable x for \(previewSize) sample \(sample)", accuracy: 0.02)
+                try assertApprox(previewSource.y, scaledStableSource.y, "manual matrix stable y for \(previewSize) sample \(sample)", accuracy: 0.02)
+            }
+        }
     }
 
     static func testMotionManualVerticalGuidesUseObjectY() throws {

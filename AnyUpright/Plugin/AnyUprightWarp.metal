@@ -32,9 +32,17 @@ static float2 clampedImageCoordinate(float2 outputCoordinate, constant AnyUprigh
     return clamp(outputCoordinate, warpState->imageCoordinateMin, warpState->imageCoordinateMax);
 }
 
+static float2 finalDisplayOutputCoordinate(float2 outputCoordinate, constant AnyUprightWarpState *warpState)
+{
+    return float2(outputCoordinate.x, warpState->outputSize.y - outputCoordinate.y);
+}
+
 static float2 inputTextureUV(float2 sourcePixel, constant AnyUprightWarpState *warpState)
 {
-    float2 texturePixel = sourcePixel + warpState->inputImageOriginInTexture;
+    float2 texturePixel = float2(
+        sourcePixel.x + warpState->inputImageOriginInTexture.x,
+        warpState->inputImageOriginInTexture.y + warpState->inputSize.y - sourcePixel.y
+    );
     return texturePixel / warpState->inputTextureSize;
 }
 
@@ -86,7 +94,7 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
                                      address::clamp_to_edge);
 
     if (warpState->renderMode == AURM_InnerStretchAdjusterPreview) {
-        float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
+        float2 outputCoordinate = clampedImageCoordinate(finalDisplayOutputCoordinate(in.outputCoordinate, warpState), warpState);
         float3 sourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
         if (fabs(sourceHomogeneous.z) < 0.000001) {
             return float4(0.0, 0.0, 0.0, 1.0);
@@ -114,7 +122,7 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
         return color;
     }
 
-    float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
+    float2 outputCoordinate = clampedImageCoordinate(finalDisplayOutputCoordinate(in.outputCoordinate, warpState), warpState);
     float3 sourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
     if (fabs(sourceHomogeneous.z) < 0.000001) {
         return float4(0.0, 0.0, 0.0, 1.0);

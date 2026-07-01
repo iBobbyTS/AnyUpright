@@ -12,6 +12,10 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
         fatalError("Subclasses must choose a fixed Quad mode.")
     }
 
+    override var needsFullBuffer: Bool {
+        true
+    }
+
     var showsSourceEditMode: Bool {
         fixedQuadMode == .innerStretch
     }
@@ -54,7 +58,9 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
-        quadParameterState(at: renderTime, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
+        var result = quadParameterState(at: renderTime, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
+        populateStableRenderSizes(&result, at: renderTime)
+        return result
     }
 
     private func addFixedModeParameter(_ paramAPI: FxParameterCreationAPI_v5) {

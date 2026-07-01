@@ -1,8 +1,8 @@
 # Quad Implementation Notes
 
-Last updated: 2026-06-22 17:10 MDT
-Reference commit: 11aa3148242f9743c8c48903739c604f84dd2e66
-Observed host versions: macOS 26.5, Motion Studio 6.2, Final Cut Pro 12.2
+Last updated: 2026-07-01 17:39 MDT
+Reference commit: 25061acacefa010d1c2037887e93d1f3342addab
+Observed host versions: macOS 26.5.1, Motion Creator Studio 6.2, Final Cut Pro 12.2
 
 This file records AnyUpright-specific Quad implementation choices. Reusable debugging guidance and host observations that may help other FxPlug plug-ins live under `docs/engineering-notes/`.
 
@@ -47,7 +47,10 @@ This file records AnyUpright-specific Quad implementation choices. Reusable debu
 
 ## Render And Overlay Choices
 
+- Both Quad mode filters currently declare full-buffer rendering. Inner Stretch edit preview and both applied Quad modes are treated as full-frame render surfaces for Motion/FCP preview stability.
+- Quad parameter state populates stable input/output sizes before rendering. Applied Quad matrices are solved in that stable correction frame, then adapted to the current render request's source/output size.
 - Inner Stretch edit-preview render sampling uses identity preview tile selection: `sourceTileBounds(... usesIdentityPreview: true)` requests the same source tile as the destination tile.
+- Inner Stretch edit preview keeps its project matrix as the current-request identity path even when stable correction sizes are present; stable-size adaptation is for applied Quad transforms.
 - Render state carries `inputImageOriginInTexture` and `inputTextureSize`; shader texture lookup computes `texturePixel = sourcePixel + inputImageOriginInTexture` before dividing by `inputTextureSize`.
 - Inner Stretch edit preview does not apply `destinationImage.pixelTransform` or `sourceImage.inversePixelTransform` in shader.
 - Inner Stretch OSC points use `.canvasFramePixels`; `oscSurfacePixel(fromHostCanvasPixel:)` currently returns direct X/Y.
@@ -62,6 +65,7 @@ This file records AnyUpright-specific Quad implementation choices. Reusable debu
 - After changing template publication, plugin registration, OSC class shape, or parameter surface, restart Motion/Final Cut or delete and re-add the effect.
 - If PlugInKit identity looks stale, quit host apps, kill AnyUpright wrapper/XPC processes, rebuild/register the intended wrapper, and re-add the effect.
 - Debug logging is enabled by creating `/tmp/AnyUprightQuadOSC.debug`; logs are written to `/tmp/AnyUprightQuadOSC.log`. Remove the flag during normal use.
+- Temporary Quad render diagnostics use `/tmp/AnyUprightQuadRender.debug` and `/tmp/AnyUprightQuadRender.log`. They are intended for local debugging only and should remain flag-gated.
 
 ## Relevant Engineering Notes
 

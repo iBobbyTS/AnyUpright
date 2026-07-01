@@ -67,6 +67,9 @@ struct AnyUprightGeometryTests {
         try testUprightStableIdealizedImageSizeMergesMotionPreviewRounding()
         try testUprightStableIdealizedImageSizeMergesMotionPanRounding()
         try testQuadInnerStretchModeShowsAdjusterBeforeApplyingWarp()
+        try testQuadInnerStretchApplyMatrixIsStableAcrossMotionPreviewSizes()
+        try testQuadEditPreviewKeepsCurrentRequestIdentity()
+        try testQuadOutputCornersApplyMatrixIsStableAcrossMotionPreviewSizes()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
         try testAutoCropScalesWarpedOutputIntoSourceFrame()
         try testAutoCropDoesNotForceMaximumScaleWhenNoCropCanFill()
@@ -1267,6 +1270,94 @@ struct AnyUprightGeometryTests {
         try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: innerStretch.bottomLeft)
     }
 
+    static func testQuadInnerStretchApplyMatrixIsStableAcrossMotionPreviewSizes() throws {
+        let stableSize = AUSize(width: 5712.0, height: 4284.0)
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPercent = AUPoint(x: -0.018, y: 0.012)
+        offsets.topRightPercent = AUPoint(x: 0.024, y: -0.006)
+        offsets.bottomRightPercent = AUPoint(x: -0.015, y: 0.021)
+        offsets.bottomLeftPercent = AUPoint(x: 0.013, y: -0.017)
+        offsets.topLeftPixels = AUPoint(x: 42.0, y: -21.0)
+        offsets.bottomRightPixels = AUPoint(x: -37.0, y: 18.0)
+
+        let stableMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
+            from: offsets,
+            mode: .innerStretch,
+            showCornerAdjuster: false,
+            outputSize: stableSize,
+            sourceSize: stableSize
+        )
+
+        try assertStableAdaptedQuadMapping(
+            stableMatrix: stableMatrix,
+            stableSize: stableSize,
+            offsets: offsets,
+            mode: .innerStretch,
+            previewSizes: [
+                AUSize(width: 2880.0, height: 2160.0),
+                AUSize(width: 913.0, height: 684.0),
+                AUSize(width: 288.0, height: 216.0),
+                AUSize(width: 112.0, height: 84.0)
+            ],
+            label: "inner stretch"
+        )
+    }
+
+    static func testQuadEditPreviewKeepsCurrentRequestIdentity() throws {
+        let stableSize = AUSize(width: 5712.0, height: 4284.0)
+        let previewSize = AUSize(width: 913.0, height: 684.0)
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPixels = AUPoint(x: 90.0, y: 40.0)
+        offsets.bottomRightPixels = AUPoint(x: -110.0, y: -70.0)
+
+        let matrix = AnyUprightGeometry.quadOutputToCurrentSourceMatrix(
+            from: offsets,
+            mode: .innerStretch,
+            showCornerAdjuster: true,
+            outputSize: previewSize,
+            sourceSize: previewSize,
+            correctionOutputSize: stableSize,
+            correctionSourceSize: stableSize
+        )
+
+        try assertMaps(matrix, AUPoint(x: 0.0, y: 0.0), to: AUPoint(x: 0.0, y: 0.0))
+        try assertMaps(matrix, AUPoint(x: previewSize.width, y: 0.0), to: AUPoint(x: previewSize.width, y: 0.0))
+        try assertMaps(matrix, AUPoint(x: previewSize.width, y: previewSize.height), to: AUPoint(x: previewSize.width, y: previewSize.height))
+        try assertMaps(matrix, AUPoint(x: 0.0, y: previewSize.height), to: AUPoint(x: 0.0, y: previewSize.height))
+    }
+
+    static func testQuadOutputCornersApplyMatrixIsStableAcrossMotionPreviewSizes() throws {
+        let stableSize = AUSize(width: 5712.0, height: 4284.0)
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPercent = AUPoint(x: 0.020, y: 0.010)
+        offsets.topRightPercent = AUPoint(x: -0.018, y: 0.014)
+        offsets.bottomRightPercent = AUPoint(x: -0.026, y: -0.011)
+        offsets.bottomLeftPercent = AUPoint(x: 0.031, y: -0.019)
+        offsets.topRightPixels = AUPoint(x: 25.0, y: 12.0)
+        offsets.bottomLeftPixels = AUPoint(x: -18.0, y: 30.0)
+
+        let stableMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
+            from: offsets,
+            mode: .outputCorners,
+            showCornerAdjuster: false,
+            outputSize: stableSize,
+            sourceSize: stableSize
+        )
+
+        try assertStableAdaptedQuadMapping(
+            stableMatrix: stableMatrix,
+            stableSize: stableSize,
+            offsets: offsets,
+            mode: .outputCorners,
+            previewSizes: [
+                AUSize(width: 2880.0, height: 2160.0),
+                AUSize(width: 913.0, height: 684.0),
+                AUSize(width: 112.0, height: 84.0)
+            ],
+            label: "output corners"
+        )
+    }
+
     static func testHorizonFillScaleOnlyZoomsWhenNeeded() throws {
         let size = AUSize(width: 1920.0, height: 1080.0)
 
@@ -2318,6 +2409,51 @@ struct AnyUprightGeometryTests {
                     && mapped.y <= sourceSize.height + 0.5,
                 "\(label) maps \(corner) inside source, got \(mapped)"
             )
+        }
+    }
+
+    static func assertStableAdaptedQuadMapping(
+        stableMatrix: simd_float3x3,
+        stableSize: AUSize,
+        offsets: AUCornerOffsets,
+        mode: AUQuadTransformMode,
+        previewSizes: [AUSize],
+        label: String
+    ) throws {
+        let normalizedSamples = [
+            AUPoint(x: 0.0, y: 0.0),
+            AUPoint(x: 1.0, y: 0.0),
+            AUPoint(x: 1.0, y: 1.0),
+            AUPoint(x: 0.0, y: 1.0),
+            AUPoint(x: 0.5, y: 0.5),
+            AUPoint(x: 0.2, y: 0.4),
+            AUPoint(x: 0.8, y: 0.6)
+        ]
+
+        for previewSize in previewSizes {
+            let previewMatrix = AnyUprightGeometry.quadOutputToCurrentSourceMatrix(
+                from: offsets,
+                mode: mode,
+                showCornerAdjuster: false,
+                outputSize: previewSize,
+                sourceSize: previewSize,
+                correctionOutputSize: stableSize,
+                correctionSourceSize: stableSize
+            )
+
+            for sample in normalizedSamples {
+                let stableOutput = AUPoint(x: sample.x * stableSize.width, y: sample.y * stableSize.height)
+                let previewOutput = AUPoint(x: sample.x * previewSize.width, y: sample.y * previewSize.height)
+                let stableSource = AnyUprightGeometry.transform(stableOutput, by: stableMatrix)
+                let previewSource = AnyUprightGeometry.transform(previewOutput, by: previewMatrix)
+                let scaledStableSource = AUPoint(
+                    x: stableSource.x * previewSize.width / stableSize.width,
+                    y: stableSource.y * previewSize.height / stableSize.height
+                )
+
+                try assertApprox(previewSource.x, scaledStableSource.x, "\(label) stable x for \(previewSize) sample \(sample)", accuracy: 0.02)
+                try assertApprox(previewSource.y, scaledStableSource.y, "\(label) stable y for \(previewSize) sample \(sample)", accuracy: 0.02)
+            }
         }
     }
 

@@ -1346,6 +1346,36 @@ enum AnyUprightGeometry {
         }
     }
 
+    static func quadOutputToCurrentSourceMatrix(
+        from offsets: AUCornerOffsets,
+        mode: AUQuadTransformMode,
+        showCornerAdjuster: Bool,
+        outputSize: AUSize,
+        sourceSize: AUSize,
+        correctionOutputSize: AUSize,
+        correctionSourceSize: AUSize
+    ) -> simd_float3x3 {
+        guard !showCornerAdjuster else {
+            return identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: sourceSize)
+        }
+
+        let correction = quadOutputToSourceMatrix(
+            from: offsets,
+            mode: mode,
+            showCornerAdjuster: false,
+            outputSize: correctionOutputSize,
+            sourceSize: correctionSourceSize
+        )
+        return appliedOutputToCurrentSourceMatrix(
+            correction,
+            fillFrame: false,
+            outputSize: outputSize,
+            sourceSize: sourceSize,
+            correctionOutputSize: correctionOutputSize,
+            correctionSourceSize: correctionSourceSize
+        )
+    }
+
     static func quadSelectionToOutputRectMatrix(
         from offsets: AUCornerOffsets,
         outputSize: AUSize,

@@ -1,6 +1,6 @@
 # FxPlug Preview Render Stability For Global Warps
 
-Last updated: 2026-07-01 16:46 MDT
+Last updated: 2026-07-01 17:39 MDT
 Reference commit: 23c5dcf48b242464e584b38ea59b2f05653f67f3
 Observed versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 (447036), Xcode 26.5 (17F42), FxPlug SDK package 4.3.4.1.1769575879
 
@@ -27,6 +27,7 @@ The headers do not promise that Motion preview pan/zoom requests will expose the
 These observations were measured on the versions above and should be treated as host behavior, not universal API guarantees.
 
 - Motion preview pan/zoom can drive partial destination tiles for an effect whose visible output depends on a full-frame projective correction. In the observed failure, the source image bounds, source tile, destination image bounds, output-to-source matrix, and source texture size stayed stable while the destination tile bottom changed across frames. The viewer appeared to jump vertically during pan/zoom.
+- The same failure signature can appear in a source-selection edit preview even when the project matrix is identity. In one observed Motion 6.2 edit-preview path, render logs showed stable image bounds, stable pixel transforms, and identity correction/project matrices, while every render request still had `dstTile != dstImage` and the source tile matched the moving destination tile. The unstable layer was still the host partial-tile request and tile-to-texture boundary, not the selection geometry.
 - Enabling full-buffer rendering for that global warp changed the same preview path from partial destination tiles to full-buffer requests, removing one class of viewer-position flicker.
 - A second flicker source remained when the correction matrix was initialized from preview-sized `imagePixelBounds`. A 100% source that should remain `5712x4284` could be inferred as `5718x4284`, `5718x4290`, or `5716x4288` from a clipped preview request before later requests corrected it. That one-frame stable-size jump is enough to move a global warp visibly.
 - Directly computing `imagePixelBounds.width / pixelTransform.scale` can over-count by one preview pixel per axis. In one observed Motion 6.2 request, bounds width `913`, scale `0.159664`, and transform translation near the preview bounds center over-counted the idealized width until the one-pixel rounded edge was removed.
@@ -54,6 +55,7 @@ For a global warp, the safe model is:
 - Trigger the host viewer motion that reproduces the issue, such as pan or zoom. Parameter drag bugs and viewer pan/zoom bugs can look similar but exercise different host requests.
 - First classify the unstable value:
   - If only destination tile bounds move while the correction matrix and stable size stay fixed, suspect a partial-tile render path for a full-frame effect.
+  - If render logs show identity project/correction matrices but `dstTile`, texture origin, and texture size move during viewer pan/zoom, suspect an edit-preview tiling problem rather than a geometry solver problem.
   - If the correction matrix or stable size changes between adjacent preview requests, suspect preview-boundary size recovery.
   - If only the displayed OSC overlay moves while filter output is stable, debug OSC canvas mapping instead of render sampling.
   - If offline CPU geometry is stable and matches the logged project matrix but live Metal is flipped or inverted, suspect image-to-texture or output-coordinate render boundaries instead of preview-size recovery.
@@ -65,6 +67,7 @@ For a global warp, the safe model is:
 ## Correct Fix Pattern
 
 - For a full-frame projective or perspective warp that cannot be evaluated independently per destination tile, set `NeedsFullBuffer` for that effect.
+- For edit previews that must keep a full-frame source-selection overlay, dimming mask, or source-relative identity image stable while the host viewer pans, evaluate whether they also need full-buffer behavior. A mathematically identity preview can still jump if the visible edit layer is derived independently per moving host tile.
 - Keep `PixelTransformSupport` at `ScaleTranslate` unless the renderer explicitly handles full perspective host pixel transforms.
 - Prefer stable source-size APIs or host object/input size APIs when available. Use `imagePixelBounds` plus `pixelTransform` only as a fallback.
 - When deriving idealized size from preview bounds, compare the direct extent with `extent - 1` in pixel-transform units. If the trimmed extent is closer to an integer idealized size, treat the preview edge as host rounding.

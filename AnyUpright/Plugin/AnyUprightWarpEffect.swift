@@ -116,7 +116,7 @@ class AnyUprightOSCPlugIn: NSObject {
 class AnyUprightWarpEffect: NSObject, FxTileableEffect {
     let _apiManager: PROAPIAccessing!
     private let stableRenderSizeLock = NSLock()
-    private var cachedUprightStableRenderSize: AUSize?
+    private var cachedStableRenderSize: AUSize?
 
     required init?(apiManager: PROAPIAccessing) {
         _apiManager = apiManager
@@ -170,6 +170,15 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             for: pixelBounds(from: sourceImages[Int(sourceImageIndex)].imagePixelBounds),
             destinationTileBounds: pixelBounds(from: destinationTileRect),
             usesIdentityPreview: usesIdentityPreview
+        )
+        debugLogQuadSourceTile(
+            parameterState: parameterState,
+            sourceImage: sourceImages[Int(sourceImageIndex)],
+            destinationTileRect: destinationTileRect,
+            destinationImage: destinationImage,
+            returnedBounds: bounds,
+            usesIdentityPreview: usesIdentityPreview,
+            renderTime: renderTime
         )
         sourceTileRect.pointee = fxRect(from: bounds)
     }
@@ -243,6 +252,16 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             sourceImage: sourceImage,
             sourceTexture: inputTexture,
             destinationImage: destinationImage
+        )
+        debugLogQuadRender(
+            parameterState: parameterState,
+            sourceImage: sourceImage,
+            sourceTexture: inputTexture,
+            destinationImage: destinationImage,
+            destinationTexture: outputTexture,
+            outputBounds: outputBounds,
+            warpState: warpState,
+            renderTime: renderTime
         )
         debugLogUprightRender(
             parameterState: parameterState,
@@ -483,12 +502,24 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
         case .quad:
             let mode = AUQuadTransformMode(rawValue: state.quadMode) ?? .outputCorners
-            return AnyUprightGeometry.quadOutputToSourceMatrix(
+            guard state.showCornerAdjuster == 0 else {
+                return AnyUprightGeometry.quadOutputToSourceMatrix(
+                    from: cornerOffsets(from: state),
+                    mode: mode,
+                    showCornerAdjuster: true,
+                    outputSize: outputSize,
+                    sourceSize: sourceSize
+                )
+            }
+
+            return AnyUprightGeometry.quadOutputToCurrentSourceMatrix(
                 from: cornerOffsets(from: state),
                 mode: mode,
-                showCornerAdjuster: state.showCornerAdjuster != 0,
+                showCornerAdjuster: false,
                 outputSize: outputSize,
-                sourceSize: sourceSize
+                sourceSize: sourceSize,
+                correctionOutputSize: stableOutputSize(from: state, fallback: outputSize),
+                correctionSourceSize: stableInputSize(from: state, fallback: sourceSize)
             )
 
         case .upright:
@@ -557,7 +588,8 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         destinationImage: FxImageTile,
         renderTime: CMTime
     ) -> AnyUprightParameterState {
-        guard AnyUprightEffectKind(rawValue: state.effectKind) == .upright else {
+        let effectKind = AnyUprightEffectKind(rawValue: state.effectKind)
+        guard effectKind == .upright || effectKind == .quad else {
             return state
         }
 
@@ -587,16 +619,16 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         guard let candidate,
               candidate.width > 0.0,
               candidate.height > 0.0 else {
-            return cachedUprightStableRenderSize
+            return cachedStableRenderSize
         }
 
-        guard let cached = cachedUprightStableRenderSize else {
-            cachedUprightStableRenderSize = candidate
+        guard let cached = cachedStableRenderSize else {
+            cachedStableRenderSize = candidate
             return candidate
         }
 
         let merged = AnyUprightGeometry.mergedStableIdealizedImageSize(cached: cached, candidate: candidate)
-        cachedUprightStableRenderSize = merged
+        cachedStableRenderSize = merged
         return merged
     }
 
@@ -787,6 +819,144 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         debugAppendUprightRenderLog(message)
     }
 
+    private func debugLogQuadSourceTile(
+        parameterState: AnyUprightParameterState,
+        sourceImage: FxImageTile,
+        destinationTileRect: FxRect,
+        destinationImage: FxImageTile,
+        returnedBounds: AUPixelBounds,
+        usesIdentityPreview: Bool,
+        renderTime: CMTime
+    ) {
+        guard AnyUprightEffectKind(rawValue: parameterState.effectKind) == .quad,
+              FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadRender.debug") else {
+            return
+        }
+
+        let mode = AUQuadTransformMode(rawValue: parameterState.quadMode) ?? .outputCorners
+        let message = String(
+            format: "quad-source-tile time=%@ mode=%@ edit=%d identityPreview=%d srcImage=%@ srcTile=%@ dstImage=%@ requestedDstTile=%@ returnedSrcTile=(%d,%d,%d,%d) stableIn=(%.2fx%.2f) stableOut=(%.2fx%.2f)",
+            debugTime(renderTime),
+            debugQuadMode(mode),
+            parameterState.showCornerAdjuster,
+            usesIdentityPreview ? 1 : 0,
+            debugRect(sourceImage.imagePixelBounds),
+            debugRect(sourceImage.tilePixelBounds),
+            debugRect(destinationImage.imagePixelBounds),
+            debugRect(destinationTileRect),
+            returnedBounds.left,
+            returnedBounds.bottom,
+            returnedBounds.right,
+            returnedBounds.top,
+            parameterState.stableInputWidth,
+            parameterState.stableInputHeight,
+            parameterState.stableOutputWidth,
+            parameterState.stableOutputHeight
+        )
+        debugAppendQuadRenderLog(message)
+    }
+
+    private func debugLogQuadRender(
+        parameterState: AnyUprightParameterState,
+        sourceImage: FxImageTile,
+        sourceTexture: MTLTexture,
+        destinationImage: FxImageTile,
+        destinationTexture: MTLTexture,
+        outputBounds: AUOutputCoordinateBounds,
+        warpState: AnyUprightWarpState,
+        renderTime: CMTime
+    ) {
+        guard AnyUprightEffectKind(rawValue: parameterState.effectKind) == .quad,
+              FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadRender.debug") else {
+            return
+        }
+
+        let outputSize = AUSize(width: Double(warpState.outputSize.x), height: Double(warpState.outputSize.y))
+        let sourceSize = AUSize(width: Double(warpState.inputSize.x), height: Double(warpState.inputSize.y))
+        let mode = AUQuadTransformMode(rawValue: parameterState.quadMode) ?? .outputCorners
+        let stableOutputSize = stableOutputSize(from: parameterState, fallback: outputSize)
+        let stableInputSize = stableInputSize(from: parameterState, fallback: sourceSize)
+        let offsets = cornerOffsets(from: parameterState)
+        let projectMatrix = outputToSourceMatrix(from: parameterState, outputSize: outputSize, sourceSize: sourceSize)
+        let correctionMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
+            from: offsets,
+            mode: mode,
+            showCornerAdjuster: parameterState.showCornerAdjuster != 0,
+            outputSize: stableOutputSize,
+            sourceSize: stableInputSize
+        )
+        let sourceHandles = innerStretchOutputHandles(from: parameterState, outputSize: outputSize, sourceSize: sourceSize)
+        let samplePoints = [
+            ("tileTL", AUPoint(x: outputBounds.left, y: outputBounds.top)),
+            ("tileTR", AUPoint(x: outputBounds.right, y: outputBounds.top)),
+            ("tileBR", AUPoint(x: outputBounds.right, y: outputBounds.bottom)),
+            ("tileBL", AUPoint(x: outputBounds.left, y: outputBounds.bottom)),
+            (
+                "tileCenter",
+                AUPoint(
+                    x: (outputBounds.left + outputBounds.right) / 2.0,
+                    y: (outputBounds.top + outputBounds.bottom) / 2.0
+                )
+            ),
+            ("imageCenter", AUPoint(x: outputSize.width / 2.0, y: outputSize.height / 2.0))
+        ]
+        let projectSamples = samplePoints.map { name, point in
+            let mapped = AnyUprightGeometry.transform(point, by: projectMatrix)
+            return String(format: "%@ out=%@ src=%@", name, debugPoint(point), debugPoint(mapped))
+        }.joined(separator: " | ")
+        let textureSamples = samplePoints.map { name, point in
+            let mapped = AnyUprightGeometry.transform(point, by: warpState.outputToSource)
+            return String(format: "%@ out=%@ tex=%@", name, debugPoint(point), debugPoint(mapped))
+        }.joined(separator: " | ")
+        let transformSamples = debugTransformSamples(
+            sourceImage: sourceImage,
+            destinationImage: destinationImage,
+            outputBounds: outputBounds
+        )
+
+        let message = String(
+            format: "quad-render time=%@ mode=%@ edit=%d renderMode=%d stableIn=(%.2fx%.2f) stableOut=(%.2fx%.2f) currentIn=%@ currentOut=%@ srcImage=%@ srcTile=%@ dstImage=%@ dstTile=%@ srcOrigin=%lu dstOrigin=%lu srcPT=%@ srcInvPT=%@ dstPT=%@ dstInvPT=%@ transformSamples=%@ srcTex=%dx%d dstTex=%dx%d outBounds=(l=%.2f,r=%.2f,t=%.2f,b=%.2f) texOrigin=%@ texSize=%@ handles=%@ correctionMatrix=%@ projectMatrix=%@ textureMatrix=%@ projectSamples=%@ textureSamples=%@",
+            debugTime(renderTime),
+            debugQuadMode(mode),
+            parameterState.showCornerAdjuster,
+            warpState.renderMode,
+            parameterState.stableInputWidth,
+            parameterState.stableInputHeight,
+            parameterState.stableOutputWidth,
+            parameterState.stableOutputHeight,
+            debugSize(sourceSize),
+            debugSize(outputSize),
+            debugRect(sourceImage.imagePixelBounds),
+            debugRect(sourceImage.tilePixelBounds),
+            debugRect(destinationImage.imagePixelBounds),
+            debugRect(destinationImage.tilePixelBounds),
+            sourceImage.imageOrigin,
+            destinationImage.imageOrigin,
+            debugMatrix44(sourceImage.pixelTransform),
+            debugMatrix44(sourceImage.inversePixelTransform),
+            debugMatrix44(destinationImage.pixelTransform),
+            debugMatrix44(destinationImage.inversePixelTransform),
+            transformSamples,
+            sourceTexture.width,
+            sourceTexture.height,
+            destinationTexture.width,
+            destinationTexture.height,
+            outputBounds.left,
+            outputBounds.right,
+            outputBounds.top,
+            outputBounds.bottom,
+            debugVector(warpState.inputImageOriginInTexture),
+            debugVector(warpState.inputTextureSize),
+            debugQuad(sourceHandles),
+            debugMatrix(correctionMatrix),
+            debugMatrix(projectMatrix),
+            debugMatrix(warpState.outputToSource),
+            projectSamples,
+            textureSamples
+        )
+        debugAppendQuadRenderLog(message)
+    }
+
     private func debugTransformSamples(sourceImage: FxImageTile, destinationImage: FxImageTile, outputBounds: AUOutputCoordinateBounds) -> String {
         let samplePoints = [
             ("dstImageTL", CGPoint(x: CGFloat(destinationImage.imagePixelBounds.left), y: CGFloat(destinationImage.imagePixelBounds.top))),
@@ -820,7 +990,14 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
     }
 
     private func debugAppendUprightRenderLog(_ message: String) {
-        let logPath = "/tmp/AnyUprightUprightRender.log"
+        debugAppendLog(message, to: "/tmp/AnyUprightUprightRender.log")
+    }
+
+    private func debugAppendQuadRenderLog(_ message: String) {
+        debugAppendLog(message, to: "/tmp/AnyUprightQuadRender.log")
+    }
+
+    private func debugAppendLog(_ message: String, to logPath: String) {
         let timestamp = String(format: "%.3f", Date().timeIntervalSince1970)
         guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
             return
@@ -907,6 +1084,25 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
     private func debugSize(_ size: AUSize) -> String {
         String(format: "(%.2fx%.2f)", size.width, size.height)
+    }
+
+    private func debugQuad(_ quad: AUQuad) -> String {
+        String(
+            format: "tl=%@ tr=%@ br=%@ bl=%@",
+            debugPoint(quad.topLeft),
+            debugPoint(quad.topRight),
+            debugPoint(quad.bottomRight),
+            debugPoint(quad.bottomLeft)
+        )
+    }
+
+    private func debugQuadMode(_ mode: AUQuadTransformMode) -> String {
+        switch mode {
+        case .outputCorners:
+            return "outputCorners"
+        case .innerStretch:
+            return "innerStretch"
+        }
     }
 
     private func debugVector(_ vector: vector_float2) -> String {

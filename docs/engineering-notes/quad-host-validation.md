@@ -1,6 +1,6 @@
 # Quad Host Validation Notes
 
-Last updated: 2026-07-01 16:46 MDT
+Last updated: 2026-07-01 17:39 MDT
 Reference commit: 23c5dcf48b242464e584b38ea59b2f05653f67f3
 Observed host versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 (447036), Final Cut Pro 12.2, Xcode 26.5 (17F42), FxPlug SDK package 4.3.4.1.1769575879
 
@@ -13,6 +13,7 @@ For coordinate bugs, pair this host-state checklist with `quad-coordinate-layer-
 - After changing plugin registration, template publication, OSC class shape, or parameter surface, restart Motion/Final Cut or delete and re-add the effect.
 - After changing static effect properties, render pipeline state, Metal shader semantics, or matrix conventions, restart the host or delete and re-add the effect before judging render math.
 - If PlugInKit identity looks stale, quit host apps, kill stale wrapper/XPC processes, rebuild/register the intended wrapper, and re-add the effect.
+- Rebuilding the same registered wrapper path and killing the plug-in XPC can be enough for Motion to launch a new binary without restarting the host. This proves new diagnostic code is loaded, but it does not prove an already-applied effect instance has re-read static properties.
 - Before judging a Motion/FCP rendering or OSC fix, verify there is exactly one PlugInKit entry for the plug-in bundle ID and that its path is the intended build:
 
 ```bash
@@ -32,6 +33,7 @@ These observations are not Apple API guarantees. They were measured on macOS 26.
 - Existing Motion/Final Cut instances and already-applied effects could keep stale template, PlugInKit, or XPC state after code/template changes. Re-add the effect and restart/kill stale processes before changing coordinate math.
 - Motion could keep using an older build when two PlugInKit entries shared `AnyUpright-XPC-Service`. In the observed case, `pluginkit -m -v` showed only the older Debug path, while `pluginkit -m -ADv -i AnyUpright-XPC-Service` revealed both Debug and Release entries. Removing the stale entry and restarting Motion made the XPC process launch from the intended Release path.
 - Motion could keep rendering with an old effect instance after shader or render-matrix changes. Deleting and re-adding the filter, or restarting Motion when re-add is not enough, was required before visual validation matched the freshly built code.
+- Motion could launch a newly rebuilt XPC from the same registered path after the stale XPC process was killed, while an already-applied filter instance still behaved as if an old static property value was cached. In the observed path, the new binary emitted render logs, but the existing instance still received partial destination tiles after the plug-in code had changed its full-buffer property. Deleting and re-adding the filter refreshed that instance state.
 - Final Cut templates needed Motion's built-in `Publish OSC` parameter enabled for the FxPlug filter. Custom published parameters alone were not enough to prove OSC callbacks would dispatch.
 - Accessibility showed `OZFxPlugOnscreenControl` even when that did not prove the plug-in's specific OSC callbacks were firing.
 - Point-parameter writeback accepted during a Motion OSC drag did not persist in the tested path; float-parameter writeback did.
@@ -45,6 +47,7 @@ These observations are not Apple API guarantees. They were measured on macOS 26.
 - Swift typecheck or build after FxPlug API selector changes.
 - Wrapper build from one known DerivedData path.
 - Process path and timestamp for the running XPC service after the host has reopened the document or re-added the effect.
+- Binary-string or version-marker evidence from the running build path when checking whether a new XPC binary is actually loaded.
 - A log snapshot of callback width/height, destination image bounds, object/input bounds, raw event point, converted canvas point, chosen event interpretation, and active part before changing coordinate math.
 
 ## External References Checked
@@ -61,5 +64,6 @@ These observations are not Apple API guarantees. They were measured on macOS 26.
 - Changing plist version strings, moving OSC methods onto the filter class, or making the OSC class inherit directly from `NSObject` did not make Motion dispatch callbacks.
 - Using stale Motion/FCP instances after rebuilds repeatedly produced false negatives.
 - Judging a render-matrix or shader fix while Motion still held the previous effect instance was wrong. A stale host can make correct code look mathematically wrong.
+- Treating "new XPC binary is running" as proof that static effect properties have refreshed was wrong. Binary reload and effect-instance/property refresh are separate host-state layers.
 - Assuming the Publishing pane exposes OSC state was wrong in the observed Motion path. The Motion Filters inspector `Publish OSC` checkbox controlled whether Final Cut users got onscreen controls.
 - Assuming FxPlug angle writeback uses degrees was wrong in the validated Motion path; angle parameter reads/writes behaved as radians. That note matters for angle-writing effects, but not directly for Quad.

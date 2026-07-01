@@ -492,7 +492,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             if state.uprightManualMatrixEnabled != 0 {
                 return AnyUprightGeometry.appliedOutputToCurrentSourceMatrix(
                     manualUprightOutputToSourceMatrix(from: state),
-                    fillFrame: false,
+                    fillFrame: state.fillFrame != 0,
                     outputSize: outputSize,
                     sourceSize: sourceSize,
                     correctionOutputSize: stableOutputSize,

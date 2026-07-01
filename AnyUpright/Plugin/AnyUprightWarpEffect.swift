@@ -18,6 +18,39 @@ struct AnyUprightParameterState {
     var fillFrame: Int32 = 0
     var quadMode: Int32 = AUQuadTransformMode.innerStretch.rawValue
     var showCornerAdjuster: Int32 = 1
+    var uprightCorrectionMode: Int32 = 0
+    var uprightControlMode: Int32 = 0
+    var uprightManualLineCount: Int32 = 0
+    var uprightManualLine1Orientation: Int32 = 0
+    var uprightManualLine1StartX: Float = 0.0
+    var uprightManualLine1StartY: Float = 0.0
+    var uprightManualLine1EndX: Float = 0.0
+    var uprightManualLine1EndY: Float = 0.0
+    var uprightManualLine2Orientation: Int32 = 0
+    var uprightManualLine2StartX: Float = 0.0
+    var uprightManualLine2StartY: Float = 0.0
+    var uprightManualLine2EndX: Float = 0.0
+    var uprightManualLine2EndY: Float = 0.0
+    var uprightManualLine3Orientation: Int32 = 0
+    var uprightManualLine3StartX: Float = 0.0
+    var uprightManualLine3StartY: Float = 0.0
+    var uprightManualLine3EndX: Float = 0.0
+    var uprightManualLine3EndY: Float = 0.0
+    var uprightManualLine4Orientation: Int32 = 0
+    var uprightManualLine4StartX: Float = 0.0
+    var uprightManualLine4StartY: Float = 0.0
+    var uprightManualLine4EndX: Float = 0.0
+    var uprightManualLine4EndY: Float = 0.0
+    var uprightManualMatrixEnabled: Int32 = 0
+    var uprightManualMatrixA: Float = 1.0
+    var uprightManualMatrixB: Float = 0.0
+    var uprightManualMatrixC: Float = 0.0
+    var uprightManualMatrixD: Float = 0.0
+    var uprightManualMatrixE: Float = 1.0
+    var uprightManualMatrixF: Float = 0.0
+    var uprightManualMatrixG: Float = 0.0
+    var uprightManualMatrixH: Float = 0.0
+    var uprightManualMatrixI: Float = 1.0
     var rotationRadians: Float = 0.0
     var verticalPerspective: Float = 0.0
     var horizontalPerspective: Float = 0.0
@@ -234,6 +267,11 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         commandEncoder.endEncoding()
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
+        debugCaptureUprightOutputTextureIfNeeded(
+            parameterState: parameterState,
+            texture: outputTexture,
+            outputBounds: outputBounds
+        )
     }
 
     func parameterRetrievalAPI() -> FxParameterRetrievalAPI_v6? {
@@ -451,6 +489,17 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
             let stableOutputSize = stableOutputSize(from: state, fallback: outputSize)
             let stableInputSize = stableInputSize(from: state, fallback: sourceSize)
+            if state.uprightManualMatrixEnabled != 0 {
+                return AnyUprightGeometry.appliedOutputToCurrentSourceMatrix(
+                    manualUprightOutputToSourceMatrix(from: state),
+                    fillFrame: false,
+                    outputSize: outputSize,
+                    sourceSize: sourceSize,
+                    correctionOutputSize: stableOutputSize,
+                    correctionSourceSize: stableInputSize
+                )
+            }
+
             return AnyUprightGeometry.uprightAppliedOutputToCurrentSourceMatrix(
                 vertical: Double(state.verticalPerspective),
                 horizontal: Double(state.horizontalPerspective),
@@ -465,6 +514,14 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         case .none:
             return AnyUprightGeometry.homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
         }
+    }
+
+    private func manualUprightOutputToSourceMatrix(from state: AnyUprightParameterState) -> simd_float3x3 {
+        simd_float3x3(columns: (
+            SIMD3<Float>(state.uprightManualMatrixA, state.uprightManualMatrixD, state.uprightManualMatrixG),
+            SIMD3<Float>(state.uprightManualMatrixB, state.uprightManualMatrixE, state.uprightManualMatrixH),
+            SIMD3<Float>(state.uprightManualMatrixC, state.uprightManualMatrixF, state.uprightManualMatrixI)
+        ))
     }
 
     private func stableOutputSize(from state: AnyUprightParameterState, fallback: AUSize) -> AUSize {
@@ -485,7 +542,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         return AUSize(width: width, height: height)
     }
 
-    private func runtimeParameterState(
+    func runtimeParameterState(
         from state: AnyUprightParameterState,
         sourceImage: FxImageTile,
         destinationImage: FxImageTile,
@@ -679,10 +736,11 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         )
 
         let message = String(
-            format: "time=%@ fill=%d edit=%d v=%.6f h=%.6f rot=%.6f renderMode=%d stableIn=(%.2fx%.2f) stableOut=(%.2fx%.2f) srcImage=%@ srcTile=%@ dstImage=%@ dstTile=%@ srcOrigin=%lu dstOrigin=%lu srcPT=%@ srcInvPT=%@ dstPT=%@ dstInvPT=%@ transformSamples=%@ srcTex=%dx%d dstTex=%dx%d outBounds=(l=%.2f,r=%.2f,t=%.2f,b=%.2f) outSize=%@ srcSize=%@ texOrigin=%@ texSize=%@ matrix=%@ samples=%@",
+            format: "time=%@ fill=%d edit=%d manualMatrix=%d v=%.6f h=%.6f rot=%.6f renderMode=%d stableIn=(%.2fx%.2f) stableOut=(%.2fx%.2f) srcImage=%@ srcTile=%@ dstImage=%@ dstTile=%@ srcOrigin=%lu dstOrigin=%lu srcPT=%@ srcInvPT=%@ dstPT=%@ dstInvPT=%@ transformSamples=%@ srcTex=%dx%d dstTex=%dx%d outBounds=(l=%.2f,r=%.2f,t=%.2f,b=%.2f) outSize=%@ srcSize=%@ texOrigin=%@ texSize=%@ matrix=%@ samples=%@",
             debugTime(renderTime),
             parameterState.fillFrame,
             parameterState.showCornerAdjuster,
+            parameterState.uprightManualMatrixEnabled,
             parameterState.verticalPerspective,
             parameterState.horizontalPerspective,
             parameterState.rotationRadians,
@@ -767,6 +825,63 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         } else {
             try? data.write(to: URL(fileURLWithPath: logPath))
         }
+    }
+
+    private func debugCaptureUprightOutputTextureIfNeeded(
+        parameterState: AnyUprightParameterState,
+        texture: MTLTexture,
+        outputBounds: AUOutputCoordinateBounds
+    ) {
+        guard AnyUprightEffectKind(rawValue: parameterState.effectKind) == .upright,
+              FileManager.default.fileExists(atPath: "/tmp/AnyUprightUprightRender.debug"),
+              outputBounds.left == 0.0,
+              outputBounds.top == 0.0,
+              Int(outputBounds.right) == texture.width,
+              Int(outputBounds.bottom) == texture.height,
+              texture.width >= 1000,
+              texture.height >= 700 else {
+            return
+        }
+
+        let bytesPerPixel: Int
+        switch texture.pixelFormat {
+        case .bgra8Unorm, .rgba8Unorm:
+            bytesPerPixel = 4
+        case .rgba16Float:
+            bytesPerPixel = 8
+        case .rgba32Float:
+            bytesPerPixel = 16
+        default:
+            return
+        }
+
+        let bytesPerRow = texture.width * bytesPerPixel
+        var data = Data(count: bytesPerRow * texture.height)
+        data.withUnsafeMutableBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else {
+                return
+            }
+            texture.getBytes(
+                baseAddress,
+                bytesPerRow: bytesPerRow,
+                from: MTLRegionMake2D(0, 0, texture.width, texture.height),
+                mipmapLevel: 0
+            )
+        }
+
+        let rawPath = "/tmp/AnyUprightUprightRender-output.raw"
+        let metaPath = "/tmp/AnyUprightUprightRender-output.meta"
+        try? data.write(to: URL(fileURLWithPath: rawPath))
+
+        let meta = String(
+            format: "width=%d\nheight=%d\npixelFormat=%lu\nbytesPerPixel=%d\nbytesPerRow=%d\n",
+            texture.width,
+            texture.height,
+            texture.pixelFormat.rawValue,
+            bytesPerPixel,
+            bytesPerRow
+        )
+        try? meta.write(to: URL(fileURLWithPath: metaPath), atomically: true, encoding: .utf8)
     }
 
     private func debugRect(_ rect: FxRect) -> String {

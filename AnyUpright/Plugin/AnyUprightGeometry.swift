@@ -491,6 +491,20 @@ enum AnyUprightGeometry {
         )
     }
 
+    static func inputTexturePixel(forSourceImagePixel sourcePixel: AUPoint, sourceSize: AUSize, mapping: AUTextureCoordinateMapping) -> AUPoint {
+        AUPoint(
+            x: sourcePixel.x + mapping.imageOriginInTexture.x,
+            y: mapping.imageOriginInTexture.y + sourceSize.height - sourcePixel.y
+        )
+    }
+
+    static func finalDisplayOutputPixel(forOutputPixel outputPixel: AUPoint, outputSize: AUSize) -> AUPoint {
+        AUPoint(
+            x: outputPixel.x,
+            y: outputSize.height - outputPixel.y
+        )
+    }
+
     static func sourceTileBounds(for imageBounds: AUPixelBounds, destinationTileBounds: AUPixelBounds, usesIdentityPreview: Bool) -> AUPixelBounds {
         usesIdentityPreview ? destinationTileBounds : imageBounds
     }
@@ -1043,10 +1057,6 @@ enum AnyUprightGeometry {
             )
         }
 
-        let currentOutputToCorrectionOutput = identityOutputToSourceMatrix(
-            outputSize: outputSize,
-            sourceSize: correctionOutputSize
-        )
         let correctionOutputToCorrectionSource = uprightAppliedOutputToSourceMatrix(
             vertical: vertical,
             horizontal: horizontal,
@@ -1055,6 +1065,53 @@ enum AnyUprightGeometry {
             outputSize: correctionOutputSize,
             sourceSize: correctionSourceSize
         )
+        return appliedOutputToCurrentSourceMatrix(
+            correctionOutputToCorrectionSource,
+            fillFrame: false,
+            outputSize: outputSize,
+            sourceSize: sourceSize,
+            correctionOutputSize: correctionOutputSize,
+            correctionSourceSize: correctionSourceSize
+        )
+    }
+
+    static func appliedOutputToCurrentSourceMatrix(
+        _ correctionOutputToCorrectionSource: simd_float3x3,
+        fillFrame: Bool,
+        outputSize: AUSize,
+        sourceSize: AUSize,
+        correctionOutputSize: AUSize,
+        correctionSourceSize: AUSize
+    ) -> simd_float3x3 {
+        guard outputSize.width > 0.0,
+              outputSize.height > 0.0,
+              sourceSize.width > 0.0,
+              sourceSize.height > 0.0,
+              correctionOutputSize.width > 0.0,
+              correctionOutputSize.height > 0.0,
+              correctionSourceSize.width > 0.0,
+              correctionSourceSize.height > 0.0 else {
+            let stableCorrection = fillFrame
+                ? autoCropOutputToSourceMatrix(
+                    correctionOutputToCorrectionSource,
+                    outputSize: correctionOutputSize,
+                    sourceSize: correctionSourceSize
+                )
+                : correctionOutputToCorrectionSource
+            return stableCorrection
+        }
+
+        let stableCorrection = fillFrame
+            ? autoCropOutputToSourceMatrix(
+                correctionOutputToCorrectionSource,
+                outputSize: correctionOutputSize,
+                sourceSize: correctionSourceSize
+            )
+            : correctionOutputToCorrectionSource
+        let currentOutputToCorrectionOutput = identityOutputToSourceMatrix(
+            outputSize: outputSize,
+            sourceSize: correctionOutputSize
+        )
         let correctionSourceToCurrentSource = identityOutputToSourceMatrix(
             outputSize: correctionSourceSize,
             sourceSize: sourceSize
@@ -1062,8 +1119,72 @@ enum AnyUprightGeometry {
 
         return multiply(
             correctionSourceToCurrentSource,
-            multiply(correctionOutputToCorrectionSource, currentOutputToCorrectionOutput)
+            multiply(stableCorrection, currentOutputToCorrectionOutput)
         )
+    }
+
+    static func guidedVerticalOutputToSourceMatrix(
+        fromNormalizedImageLines lines: [AULineSegment],
+        size: AUSize
+    ) -> simd_float3x3? {
+        guard size.width > 1.0, size.height > 1.0 else {
+            return nil
+        }
+
+        let imageLines = lines
+            .map { scaledLine($0, size: size) }
+            .filter { $0.length > 1.0 }
+        guard imageLines.count >= 2 else {
+            return nil
+        }
+
+        let referenceLines = Array(imageLines.prefix(2))
+        guard let verticalVanishingPoint = intersection(of: referenceLines[0], and: referenceLines[1]),
+              verticalVanishingPoint.x.isFinite,
+              verticalVanishingPoint.y.isFinite else {
+            return nil
+        }
+
+        let anchorY = size.height / 2.0
+        let distanceToVanishingPoint = verticalVanishingPoint.y - anchorY
+        guard abs(distanceToVanishingPoint) > 1.0 else {
+            return nil
+        }
+
+        return verticalVanishingPointOutputToSourceMatrix(
+            vanishingPoint: verticalVanishingPoint,
+            anchorY: anchorY
+        )
+    }
+
+    private static func scaledLine(_ line: AULineSegment, size: AUSize) -> AULineSegment {
+        AULineSegment(
+            start: AUPoint(x: line.start.x * size.width, y: line.start.y * size.height),
+            end: AUPoint(x: line.end.x * size.width, y: line.end.y * size.height)
+        )
+    }
+
+    private static func verticalVanishingPointOutputToSourceMatrix(
+        vanishingPoint: AUPoint,
+        anchorY: Double
+    ) -> simd_float3x3 {
+        let verticalStrength = 1.0 / (vanishingPoint.y - anchorY)
+        let toAnchor = matrix(
+            1.0, 0.0, -vanishingPoint.x,
+            0.0, 1.0, -anchorY,
+            0.0, 0.0, 1.0
+        )
+        let perspective = matrix(
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, verticalStrength, 1.0
+        )
+        let fromAnchor = matrix(
+            1.0, 0.0, vanishingPoint.x,
+            0.0, 1.0, anchorY,
+            0.0, 0.0, 1.0
+        )
+        return multiply(multiply(fromAnchor, perspective), toAnchor)
     }
 
     static func lineCandidates(

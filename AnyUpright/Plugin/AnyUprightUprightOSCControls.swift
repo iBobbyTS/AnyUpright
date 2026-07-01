@@ -308,7 +308,8 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             horizontalLines: horizontalLines,
             correctionMode: correctionMode,
             settingAPI: settingAPI,
-            time: time
+            time: time,
+            referenceSize: objectPixelSizeForOSC(defaultSize: AUSize(width: 1000.0, height: 1000.0))
         )
     }
 
@@ -320,7 +321,8 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             horizontalLines: horizontalLines,
             correctionMode: correctionMode,
             settingAPI: settingAPI,
-            time: time
+            time: time,
+            referenceSize: objectPixelSizeForOSC(defaultSize: AUSize(width: 1000.0, height: 1000.0))
         )
     }
 

@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import simd
 
 let uprightCandidateOSCPartBase = 1000
 
@@ -250,9 +251,13 @@ enum AnyUprightUprightCandidates {
     static func correctionValues(
         verticalLines: [AULineSegment],
         horizontalLines: [AULineSegment],
-        correctionMode: UprightCorrectionMode
+        correctionMode: UprightCorrectionMode,
+        referenceSize: AUSize = AUSize(width: 1000.0, height: 1000.0)
     ) -> UprightCorrectionValues {
-        let solverSize = AUSize(width: 1000.0, height: 1000.0)
+        let solverSize = AUSize(
+            width: max(1.0, referenceSize.width),
+            height: max(1.0, referenceSize.height)
+        )
         let scaledVerticalLines = verticalLines.map {
             scaledLine($0, size: solverSize)
         }
@@ -282,12 +287,13 @@ enum AnyUprightUprightCandidates {
 
         let rotation: Double
         if correctionMode == .full {
-            let rotationLines = scaledHorizontalLines.isEmpty ? scaledVerticalLines : scaledHorizontalLines
-            let rotationOrientation: AUReferenceOrientation = scaledHorizontalLines.isEmpty ? .vertical : .horizontal
-            rotation = AnyUprightGeometry.rotationCorrectionRadians(
-                from: rotationLines,
-                orientation: rotationOrientation
-            ) ?? 0.0
+            rotation = residualRotationCorrectionRadians(
+                verticalLines: scaledVerticalLines,
+                horizontalLines: scaledHorizontalLines,
+                vertical: vertical,
+                horizontal: horizontal,
+                size: solverSize
+            )
         } else {
             rotation = 0.0
         }
@@ -304,6 +310,36 @@ enum AnyUprightUprightCandidates {
             start: AUPoint(x: line.start.x * size.width, y: line.start.y * size.height),
             end: AUPoint(x: line.end.x * size.width, y: line.end.y * size.height)
         )
+    }
+
+    private static func residualRotationCorrectionRadians(
+        verticalLines: [AULineSegment],
+        horizontalLines: [AULineSegment],
+        vertical: Double,
+        horizontal: Double,
+        size: AUSize
+    ) -> Double {
+        let perspectiveSourceToOutput = simd_inverse(
+            AnyUprightGeometry.uprightOutputToSourceMatrix(
+                vertical: vertical,
+                horizontal: horizontal,
+                size: size
+            )
+        )
+        let perspectiveVerticalLines = verticalLines.map {
+            AnyUprightGeometry.transform($0, by: perspectiveSourceToOutput)
+        }
+        let perspectiveHorizontalLines = horizontalLines.map {
+            AnyUprightGeometry.transform($0, by: perspectiveSourceToOutput)
+        }
+
+        let rotationLines = perspectiveHorizontalLines.isEmpty ? perspectiveVerticalLines : perspectiveHorizontalLines
+        let rotationOrientation: AUReferenceOrientation = perspectiveHorizontalLines.isEmpty ? .vertical : .horizontal
+
+        return AnyUprightGeometry.rotationCorrectionRadians(
+            from: rotationLines,
+            orientation: rotationOrientation
+        ) ?? 0.0
     }
 
     static func candidateIndex(for activePart: Int) -> Int? {

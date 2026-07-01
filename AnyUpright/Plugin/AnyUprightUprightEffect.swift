@@ -15,6 +15,10 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private let analysisContext = CIContext(options: nil)
     private var analysisState = UprightAnalysisScratchState()
 
+    override var needsFullBuffer: Bool {
+        true
+    }
+
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         addUprightWorkflowParameters(paramAPI, defaultFlags: defaultFlags())
         addHiddenCorrectionResultParameters(paramAPI)
@@ -65,6 +69,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
         var result = AnyUprightParameterState(effectKind: AnyUprightEffectKind.upright.rawValue)
+        populateStableRenderSizes(&result, at: renderTime)
         guard let paramAPI = parameterRetrievalAPI() else {
             return result
         }

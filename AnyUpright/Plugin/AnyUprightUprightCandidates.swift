@@ -228,8 +228,8 @@ enum AnyUprightUprightCandidates {
 
     static func imageLine(fromManualGuide line: AULineSegment, size: AUSize) -> AULineSegment {
         AULineSegment(
-            start: AUPoint(x: line.start.x * size.width, y: line.start.y * size.height),
-            end: AUPoint(x: line.end.x * size.width, y: line.end.y * size.height)
+            start: AUPoint(x: line.start.x * size.width, y: (1.0 - line.start.y) * size.height),
+            end: AUPoint(x: line.end.x * size.width, y: (1.0 - line.end.y) * size.height)
         )
     }
 

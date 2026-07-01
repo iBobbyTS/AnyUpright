@@ -12,6 +12,13 @@ For coordinate bugs, pair this host-state checklist with `quad-coordinate-layer-
 
 - After changing plugin registration, template publication, OSC class shape, or parameter surface, restart Motion/Final Cut or delete and re-add the effect.
 - If PlugInKit identity looks stale, quit host apps, kill stale wrapper/XPC processes, rebuild/register the intended wrapper, and re-add the effect.
+- Before judging a Motion/FCP rendering or OSC fix, verify there is exactly one PlugInKit entry for the plug-in bundle ID and that its path is the intended build:
+
+```bash
+pluginkit -m -ADv -i AnyUpright-XPC-Service
+```
+
+- If multiple entries with the same bundle ID exist, remove stale ones with `pluginkit -r /path/to/AnyUpright.app/Contents/PlugIns/AnyUpright\ XPC\ Service.pluginkit`, unregister stale wrappers with `lsregister -u /path/to/AnyUpright.app`, then register the intended wrapper.
 - Avoid testing an old already-open effect instance after changing template state.
 - Avoid stacking another effect instance over the old one as a shortcut. It can create misleading black or duplicated viewer states.
 - For Final Cut OSC dragging, confirm Motion template publication includes the built-in `Publish OSC` setting enabled.
@@ -22,6 +29,7 @@ For coordinate bugs, pair this host-state checklist with `quad-coordinate-layer-
 These observations are not Apple API guarantees. They were measured on macOS 26.5 with Motion Studio 6.2 and Final Cut Pro 12.2:
 
 - Existing Motion/Final Cut instances and already-applied effects could keep stale template, PlugInKit, or XPC state after code/template changes. Re-add the effect and restart/kill stale processes before changing coordinate math.
+- Motion could keep using an older build when two PlugInKit entries shared `AnyUpright-XPC-Service`. In the observed case, `pluginkit -m -v` showed only the older Debug path, while `pluginkit -m -ADv -i AnyUpright-XPC-Service` revealed both Debug and Release entries. Removing the stale entry and restarting Motion made the XPC process launch from the intended Release path.
 - Final Cut templates needed Motion's built-in `Publish OSC` parameter enabled for the FxPlug filter. Custom published parameters alone were not enough to prove OSC callbacks would dispatch.
 - Accessibility showed `OZFxPlugOnscreenControl` even when that did not prove the plug-in's specific OSC callbacks were firing.
 - Point-parameter writeback accepted during a Motion OSC drag did not persist in the tested path; float-parameter writeback did.

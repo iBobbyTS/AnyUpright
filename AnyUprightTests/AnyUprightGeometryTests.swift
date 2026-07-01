@@ -60,6 +60,10 @@ struct AnyUprightGeometryTests {
         try testOutputCoordinatesKeepHostTilePaddingImageRelative()
         try testInputTextureCoordinatesRespectHostTilePadding()
         try testInnerStretchEditPreviewRequestsDestinationTile()
+        try testUprightStableIdealizedImageSizeUsesPixelTransformScale()
+        try testUprightStableIdealizedImageSizeUsesPixelTransformCenterRounding()
+        try testUprightStableIdealizedImageSizeMergesMotionPreviewRounding()
+        try testUprightStableIdealizedImageSizeMergesMotionPanRounding()
         try testQuadInnerStretchModeShowsAdjusterBeforeApplyingWarp()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
         try testAutoCropScalesWarpedOutputIntoSourceFrame()
@@ -80,11 +84,11 @@ struct AnyUprightGeometryTests {
         try testUprightCandidateToggleSelectionStopsAtTwoPerOrientation()
         try testUprightCandidateDisplayHonorsControlAndCorrectionMode()
         try testUprightCandidateObjectLineClampsAndFlipsY()
-        try testUprightManualGuideImageLineDoesNotFlipY()
+        try testUprightManualGuideImageLineFlipsObjectY()
         try testUprightCandidateHitTestingUsesPixelDistance()
         try testUprightCorrectionValuesDeriveFromCurrentReferences()
         try testVerticalUprightCorrectionStraightensReferenceLines()
-        try testMotionManualVerticalGuidesUsePreviewImageY()
+        try testMotionManualVerticalGuidesUseObjectY()
         try testVerticalUprightCorrectionKeepsNormalizedGuideMeaningAcrossAspectRatios()
         try testHorizontalUprightCorrectionKeepsNormalizedGuideMeaningAcrossAspectRatios()
         try testUprightAppliedCorrectionIsStableAcrossPreviewOutputSizes()
@@ -1084,6 +1088,86 @@ struct AnyUprightGeometryTests {
         )
     }
 
+    static func testUprightStableIdealizedImageSizeUsesPixelTransformScale() throws {
+        let size = try unwrap(
+            AnyUprightGeometry.stableIdealizedImageSize(
+                imageBounds: AUPixelBounds(left: 0, bottom: 0, right: 112, top: 84),
+                pixelTransformScaleX: 0.019608,
+                pixelTransformScaleY: 0.019608
+            ),
+            "stable idealized size"
+        )
+
+        try assertApprox(size.width, 5712.0, "idealized width")
+        try assertApprox(size.height, 4284.0, "idealized height")
+    }
+
+    static func testUprightStableIdealizedImageSizeUsesPixelTransformCenterRounding() throws {
+        let size = try unwrap(
+            AnyUprightGeometry.stableIdealizedImageSize(
+                imageBounds: AUPixelBounds(left: 180, bottom: 5, right: 1093, top: 689),
+                pixelTransformScaleX: 0.159664,
+                pixelTransformScaleY: 0.159664,
+                pixelTransformTranslateX: 636.999992,
+                pixelTransformTranslateY: 346.999996
+            ),
+            "center-rounded stable idealized size"
+        )
+
+        try assertApprox(size.width, 5712.0, "center-rounded idealized width")
+        try assertApprox(size.height, 4284.0, "center-rounded idealized height")
+    }
+
+    static func testUprightStableIdealizedImageSizeMergesMotionPreviewRounding() throws {
+        let cached = try unwrap(
+            AnyUprightGeometry.stableIdealizedImageSize(
+                imageBounds: AUPixelBounds(left: 0, bottom: 0, right: 112, top: 84),
+                pixelTransformScaleX: 0.019608,
+                pixelTransformScaleY: 0.019608
+            ),
+            "cached stable idealized size"
+        )
+        let roundedPreview = try unwrap(
+            AnyUprightGeometry.stableIdealizedImageSize(
+                imageBounds: AUPixelBounds(left: 180, bottom: 5, right: 1093, top: 689),
+                pixelTransformScaleX: 0.159664,
+                pixelTransformScaleY: 0.159664
+            ),
+            "rounded preview stable idealized size"
+        )
+
+        try assertApprox(roundedPreview.width, 5712.0, "rounded preview width before merge")
+        try assertApprox(roundedPreview.height, 4284.0, "rounded preview height before merge")
+
+        let merged = AnyUprightGeometry.mergedStableIdealizedImageSize(cached: cached, candidate: roundedPreview)
+        try assertApprox(merged.width, 5712.0, "merged stable width")
+        try assertApprox(merged.height, 4284.0, "merged stable height")
+    }
+
+    static func testUprightStableIdealizedImageSizeMergesMotionPanRounding() throws {
+        let sourceSize = AUSize(width: 5712.0, height: 4284.0)
+        let panRoundedPreview = try unwrap(
+            AnyUprightGeometry.stableIdealizedImageSize(
+                imageBounds: AUPixelBounds(left: 129, bottom: 77, right: 1570, top: 1158),
+                pixelTransformScaleX: 0.252101,
+                pixelTransformScaleY: 0.252101,
+                pixelTransformTranslateX: 849.250336,
+                pixelTransformTranslateY: 617.899994
+            ),
+            "pan-rounded preview stable idealized size"
+        )
+
+        try assertApprox(panRoundedPreview.width, 5712.0, "pan-rounded preview width before merge")
+        try assertApprox(panRoundedPreview.height, 4284.0, "pan-rounded preview height before merge")
+
+        let merged = AnyUprightGeometry.mergedStableIdealizedImageSize(
+            cached: sourceSize,
+            candidate: panRoundedPreview
+        )
+        try assertApprox(merged.width, 5712.0, "merged pan-rounded stable width")
+        try assertApprox(merged.height, 4284.0, "merged pan-rounded stable height")
+    }
+
     static func testQuadInnerStretchModeShowsAdjusterBeforeApplyingWarp() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
@@ -1594,7 +1678,7 @@ struct AnyUprightGeometryTests {
         try assertEqual(objectLine.end, AUPoint(x: 1.0, y: 0.0), "object candidate end")
     }
 
-    static func testUprightManualGuideImageLineDoesNotFlipY() throws {
+    static func testUprightManualGuideImageLineFlipsObjectY() throws {
         let manualLine = AULineSegment(
             start: AUPoint(x: 0.2, y: 0.3),
             end: AUPoint(x: 0.4, y: 0.8)
@@ -1605,8 +1689,8 @@ struct AnyUprightGeometryTests {
             size: AUSize(width: 100.0, height: 200.0)
         )
 
-        try assertEqual(imageLine.start, AUPoint(x: 20.0, y: 60.0), "manual guide image start")
-        try assertEqual(imageLine.end, AUPoint(x: 40.0, y: 160.0), "manual guide image end")
+        try assertEqual(imageLine.start, AUPoint(x: 20.0, y: 140.0), "manual guide image start")
+        try assertEqual(imageLine.end, AUPoint(x: 40.0, y: 40.0), "manual guide image end")
     }
 
     static func testUprightCandidateHitTestingUsesPixelDistance() throws {
@@ -1710,7 +1794,7 @@ struct AnyUprightGeometryTests {
         )
     }
 
-    static func testMotionManualVerticalGuidesUsePreviewImageY() throws {
+    static func testMotionManualVerticalGuidesUseObjectY() throws {
         let manualGuideLines = [
             AULineSegment(
                 start: AUPoint(x: 0.12000582870687918, y: 0.4439647351031818),
@@ -1721,7 +1805,7 @@ struct AnyUprightGeometryTests {
                 end: AUPoint(x: 0.87551399334079938, y: 0.78371711509750985)
             )
         ]
-        let flippedObjectInterpretation = manualGuideLines.map {
+        let imageLines = manualGuideLines.map {
             AULineSegment(
                 start: AUPoint(x: $0.start.x, y: 1.0 - $0.start.y),
                 end: AUPoint(x: $0.end.x, y: 1.0 - $0.end.y)
@@ -1729,21 +1813,21 @@ struct AnyUprightGeometryTests {
         }
 
         let manualCorrection = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: imageLines,
+            horizontalLines: [],
+            correctionMode: .vertical
+        )
+        let unflippedCorrection = AnyUprightUprightCandidates.correctionValues(
             verticalLines: manualGuideLines,
             horizontalLines: [],
             correctionMode: .vertical
         )
-        let flippedCorrection = AnyUprightUprightCandidates.correctionValues(
-            verticalLines: flippedObjectInterpretation,
-            horizontalLines: [],
-            correctionMode: .vertical
-        )
 
-        try assertTrue(manualCorrection.verticalPerspective < 0.0, "manual preview-image guides produce negative vertical correction")
-        try assertTrue(flippedCorrection.verticalPerspective > 0.0, "object-space interpretation would produce the old opposite sign")
+        try assertTrue(manualCorrection.verticalPerspective > 0.0, "manual object-space guides produce positive vertical correction")
+        try assertTrue(unflippedCorrection.verticalPerspective < 0.0, "image-space interpretation would produce the old opposite sign")
 
         let size = AUSize(width: 1920.0, height: 1080.0)
-        let sourceLines = manualGuideLines.map {
+        let sourceLines = imageLines.map {
             AULineSegment(
                 start: AUPoint(x: $0.start.x * size.width, y: $0.start.y * size.height),
                 end: AUPoint(x: $0.end.x * size.width, y: $0.end.y * size.height)
@@ -1755,7 +1839,7 @@ struct AnyUprightGeometryTests {
             size: size
         ))
         let oldSourceToOutput = simd_inverse(AnyUprightGeometry.uprightOutputToSourceMatrix(
-            vertical: flippedCorrection.verticalPerspective,
+            vertical: unflippedCorrection.verticalPerspective,
             horizontal: 0.0,
             size: size
         ))
@@ -1771,11 +1855,11 @@ struct AnyUprightGeometryTests {
 
         try assertTrue(
             correctedDeviation < originalDeviation * 0.50,
-            "manual preview-image guide correction should make Motion guide lines substantially more vertical"
+            "manual object-space guide correction should make Motion guide lines substantially more vertical"
         )
         try assertTrue(
             oldCorrectedDeviation > originalDeviation,
-            "old object-space Y interpretation should worsen the current Motion guide lines"
+            "old image-space Y interpretation should worsen the current Motion guide lines"
         )
     }
 

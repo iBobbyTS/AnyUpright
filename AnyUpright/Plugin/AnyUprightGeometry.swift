@@ -495,6 +495,104 @@ enum AnyUprightGeometry {
         usesIdentityPreview ? destinationTileBounds : imageBounds
     }
 
+    static func stableIdealizedImageSize(
+        imageBounds: AUPixelBounds,
+        pixelTransformScaleX: Double,
+        pixelTransformScaleY: Double,
+        pixelTransformTranslateX: Double? = nil,
+        pixelTransformTranslateY: Double? = nil
+    ) -> AUSize? {
+        guard imageBounds.width > 0.0,
+              imageBounds.height > 0.0,
+              pixelTransformScaleX.isFinite,
+              pixelTransformScaleY.isFinite,
+              abs(pixelTransformScaleX) > 0.000001,
+              abs(pixelTransformScaleY) > 0.000001 else {
+            return nil
+        }
+
+        let adjustedWidth = stablePixelExtent(
+            imageBounds.width,
+            boundsStart: Double(imageBounds.left),
+            pixelTransformScale: abs(pixelTransformScaleX),
+            pixelTransformTranslate: pixelTransformTranslateX
+        )
+        let adjustedHeight = stablePixelExtent(
+            imageBounds.height,
+            boundsStart: Double(imageBounds.bottom),
+            pixelTransformScale: abs(pixelTransformScaleY),
+            pixelTransformTranslate: pixelTransformTranslateY
+        )
+
+        return AUSize(
+            width: max(1.0, (adjustedWidth / abs(pixelTransformScaleX)).rounded()),
+            height: max(1.0, (adjustedHeight / abs(pixelTransformScaleY)).rounded())
+        )
+    }
+
+    static func mergedStableIdealizedImageSize(cached: AUSize?, candidate: AUSize, relativeTolerance: Double = 0.02) -> AUSize {
+        guard let cached,
+              candidate.width > 0.0,
+              candidate.height > 0.0,
+              cached.width > 0.0,
+              cached.height > 0.0 else {
+            return candidate
+        }
+
+        let widthRatio = abs(candidate.width - cached.width) / max(candidate.width, cached.width)
+        let heightRatio = abs(candidate.height - cached.height) / max(candidate.height, cached.height)
+        if candidate.width < cached.width,
+           candidate.height < cached.height,
+           (widthRatio >= relativeTolerance || heightRatio >= relativeTolerance) {
+            return cached
+        }
+
+        guard widthRatio < relativeTolerance,
+              heightRatio < relativeTolerance else {
+            return candidate
+        }
+
+        return AUSize(
+            width: min(candidate.width, cached.width),
+            height: min(candidate.height, cached.height)
+        )
+    }
+
+    private static func stablePixelExtent(
+        _ extent: Double,
+        boundsStart: Double,
+        pixelTransformScale: Double,
+        pixelTransformTranslate: Double?
+    ) -> Double {
+        guard extent > 1.0,
+              abs(boundsStart) > 0.000001,
+              pixelTransformScale > 0.000001 else {
+            return extent
+        }
+
+        let currentRounded = (extent / pixelTransformScale).rounded()
+        let currentError = abs(extent - currentRounded * pixelTransformScale)
+        let trimmedExtent = extent - 1.0
+        let trimmedRounded = (trimmedExtent / pixelTransformScale).rounded()
+        let trimmedError = abs(trimmedExtent - trimmedRounded * pixelTransformScale)
+
+        if trimmedError + 0.005 < currentError {
+            return extent - 1.0
+        }
+
+        guard let pixelTransformTranslate else {
+            return extent
+        }
+
+        let boundsCenter = boundsStart + extent / 2.0
+        let centerDelta = abs(pixelTransformTranslate - boundsCenter)
+        if abs(centerDelta - 0.5) < 0.01 {
+            return extent - 1.0
+        }
+
+        return extent
+    }
+
     static func quad(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
         quad(from: offsets, base: AUQuad.fullFrame(size), size: size)
     }
@@ -915,6 +1013,57 @@ enum AnyUprightGeometry {
             : correction
 
         return multiply(stableCorrection, outputToSourceFrame)
+    }
+
+    static func uprightAppliedOutputToCurrentSourceMatrix(
+        vertical: Double,
+        horizontal: Double,
+        rotationRadians: Double,
+        fillFrame: Bool,
+        outputSize: AUSize,
+        sourceSize: AUSize,
+        correctionOutputSize: AUSize,
+        correctionSourceSize: AUSize
+    ) -> simd_float3x3 {
+        guard outputSize.width > 0.0,
+              outputSize.height > 0.0,
+              sourceSize.width > 0.0,
+              sourceSize.height > 0.0,
+              correctionOutputSize.width > 0.0,
+              correctionOutputSize.height > 0.0,
+              correctionSourceSize.width > 0.0,
+              correctionSourceSize.height > 0.0 else {
+            return uprightAppliedOutputToSourceMatrix(
+                vertical: vertical,
+                horizontal: horizontal,
+                rotationRadians: rotationRadians,
+                fillFrame: fillFrame,
+                outputSize: outputSize,
+                sourceSize: sourceSize
+            )
+        }
+
+        let currentOutputToCorrectionOutput = identityOutputToSourceMatrix(
+            outputSize: outputSize,
+            sourceSize: correctionOutputSize
+        )
+        let correctionOutputToCorrectionSource = uprightAppliedOutputToSourceMatrix(
+            vertical: vertical,
+            horizontal: horizontal,
+            rotationRadians: rotationRadians,
+            fillFrame: fillFrame,
+            outputSize: correctionOutputSize,
+            sourceSize: correctionSourceSize
+        )
+        let correctionSourceToCurrentSource = identityOutputToSourceMatrix(
+            outputSize: correctionSourceSize,
+            sourceSize: sourceSize
+        )
+
+        return multiply(
+            correctionSourceToCurrentSource,
+            multiply(correctionOutputToCorrectionSource, currentOutputToCorrectionOutput)
+        )
     }
 
     static func lineCandidates(

@@ -1,10 +1,12 @@
 # FxPlug Preview Render Stability For Global Warps
 
-Last updated: 2026-06-30 18:11 MDT
-Reference commit: d6d426ae4c8d07be95c84686c8931cfbf35b8a69
+Last updated: 2026-07-01 16:46 MDT
+Reference commit: 23c5dcf48b242464e584b38ea59b2f05653f67f3
 Observed versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 (447036), Xcode 26.5 (17F42), FxPlug SDK package 4.3.4.1.1769575879
 
-This note records transferable lessons for FxPlug effects that apply a global affine, projective, perspective, or upright-style warp and then flicker or jump while the host viewer is panned or zoomed. It does not cover transform sign, reference-line interpretation, product workflow, or inspector parameter design.
+This note records transferable lessons for FxPlug effects that apply a global affine, projective, perspective, or upright-style warp and then flicker or jump while the host viewer is panned or zoomed. It does not cover transform sign, reference-line interpretation, Metal texture Y-boundary handling, product workflow, or inspector parameter design.
+
+For guided reference-line geometry, see `guided-upright-projective-geometry.md`. For shader/image/texture boundary matrices, see `fxplug-metal-render-boundary-matrices.md`.
 
 ## Official API Baseline
 
@@ -54,6 +56,7 @@ For a global warp, the safe model is:
   - If only destination tile bounds move while the correction matrix and stable size stay fixed, suspect a partial-tile render path for a full-frame effect.
   - If the correction matrix or stable size changes between adjacent preview requests, suspect preview-boundary size recovery.
   - If only the displayed OSC overlay moves while filter output is stable, debug OSC canvas mapping instead of render sampling.
+  - If offline CPU geometry is stable and matches the logged project matrix but live Metal is flipped or inverted, suspect image-to-texture or output-coordinate render boundaries instead of preview-size recovery.
 - Check whether the effect actually needs full-buffer rendering. Use it only for global operations that cannot produce stable output from independent tiles.
 - Confirm pixel-transform support is not over-declared. Do not advertise full perspective host-transform support unless render code implements that support.
 - After changing static properties or registration, restart/re-add the effect and verify that only the intended plug-in build is registered.
@@ -80,3 +83,4 @@ For a global warp, the safe model is:
 - Masking samples against the clipped source texture coverage looked plausible when logs showed changing source tile coverage, but it did not fix the flicker and introduced a zoom/scale regression. Tile texture coverage is a sampling concern; it should not be used to redefine the global correction frame without a narrower repro.
 - Testing an already-applied effect after changing full-buffer behavior produced misleading results because the host could keep old properties or old plug-in identity alive.
 - Leaving verbose render logging enabled during interactive validation is risky. Logging should be flag-controlled and absent during final subjective flicker checks.
+- Reusing this flicker checklist for every wrong-looking projective result is too broad. A stable but vertically flipped render belongs to render-boundary debugging, and a stable but geometrically wrong guided correction belongs to reference-line solver debugging.

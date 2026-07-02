@@ -95,6 +95,8 @@ struct AnyUprightGeometryTests {
         try testVerticalUprightCorrectionStraightensReferenceLines()
         try testVerticalUprightCorrectionDoesNotAddResidualRotationForOffCenterGuides()
         try testGuidedVerticalMatrixStraightensOffCenterMotionGuidesWithoutSkewingScanlines()
+        try testGuidedHorizontalMatrixStraightensOffCenterMotionGuidesWithoutSkewingScanlines()
+        try testMotionManualHorizontalGuidesUseDirectMatrix()
         try testManualGuidedVerticalMatrixIgnoresAutoCropWhenAdaptedToPreviewSize()
         try testManualGuidedVerticalMatrixIsStableAcrossMotionPreviewSizes()
         try testMotionManualVerticalGuidesUseObjectY()
@@ -2041,6 +2043,122 @@ struct AnyUprightGeometryTests {
         try assertTrue(
             meanHorizontalDeviation(correctedScanlines) < degreesToRadians(0.05),
             "vertical-only guided matrix should not introduce visible rotation or vertical shear into source scanlines"
+        )
+    }
+
+    static func testGuidedHorizontalMatrixStraightensOffCenterMotionGuidesWithoutSkewingScanlines() throws {
+        let size = AUSize(width: 5712.0, height: 4284.0)
+        let normalizedImageLines = [
+            AULineSegment(
+                start: AUPoint(x: 0.100000, y: 0.200000),
+                end: AUPoint(x: 0.550000, y: 0.251923)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.120000, y: 0.650000),
+                end: AUPoint(x: 0.570000, y: 0.544687)
+            )
+        ]
+        let sourceLines = normalizedImageLines.map {
+            AULineSegment(
+                start: AUPoint(x: $0.start.x * size.width, y: $0.start.y * size.height),
+                end: AUPoint(x: $0.end.x * size.width, y: $0.end.y * size.height)
+            )
+        }
+
+        let outputToSource = try unwrap(
+            AnyUprightGeometry.guidedHorizontalOutputToSourceMatrix(
+                fromNormalizedImageLines: normalizedImageLines,
+                size: size
+            ),
+            "guided horizontal output-to-source"
+        )
+        let correctedLines = sourceLines.map {
+            AnyUprightGeometry.transform($0, by: simd_inverse(outputToSource))
+        }
+
+        try assertTrue(
+            meanHorizontalDeviation(correctedLines) < degreesToRadians(0.05),
+            "guided horizontal matrix should make off-center Motion guides horizontal without a residual rotation parameter"
+        )
+
+        let sourceScanlines = [
+            AULineSegment(
+                start: AUPoint(x: 1000.0, y: 500.0),
+                end: AUPoint(x: 1000.0, y: 3800.0)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 2856.0, y: 500.0),
+                end: AUPoint(x: 2856.0, y: 3800.0)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 4700.0, y: 500.0),
+                end: AUPoint(x: 4700.0, y: 3800.0)
+            )
+        ]
+        let correctedScanlines = sourceScanlines.map {
+            AnyUprightGeometry.transform($0, by: simd_inverse(outputToSource))
+        }
+
+        try assertTrue(
+            meanVerticalDeviation(correctedScanlines) < degreesToRadians(0.05),
+            "horizontal-only guided matrix should not introduce visible rotation or horizontal shear into source scanlines"
+        )
+    }
+
+    static func testMotionManualHorizontalGuidesUseDirectMatrix() throws {
+        let size = AUSize(width: 5712.0, height: 4284.0)
+        let normalizedImageLines = [
+            AULineSegment(
+                start: AUPoint(x: 0.115150, y: 0.531439),
+                end: AUPoint(x: 0.415055, y: 0.460389)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.084905, y: 0.234260),
+                end: AUPoint(x: 0.419045, y: 0.222487)
+            )
+        ]
+        let sourceLines = normalizedImageLines.map {
+            AULineSegment(
+                start: AUPoint(x: $0.start.x * size.width, y: $0.start.y * size.height),
+                end: AUPoint(x: $0.end.x * size.width, y: $0.end.y * size.height)
+            )
+        }
+        let directMatrix = try unwrap(
+            AnyUprightGeometry.guidedHorizontalOutputToSourceMatrix(
+                fromNormalizedImageLines: normalizedImageLines,
+                size: size
+            ),
+            "Motion horizontal direct matrix"
+        )
+        let directSourceToOutput = simd_inverse(directMatrix)
+        let directCorrected = sourceLines.map {
+            AnyUprightGeometry.transform($0, by: directSourceToOutput)
+        }
+
+        let scalarCorrection = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: [],
+            horizontalLines: normalizedImageLines,
+            correctionMode: .horizontal,
+            referenceSize: AUSize(width: 1000.0, height: 1000.0)
+        )
+        let scalarSourceToOutput = simd_inverse(
+            AnyUprightGeometry.uprightOutputToSourceMatrix(
+                vertical: 0.0,
+                horizontal: scalarCorrection.horizontalPerspective,
+                size: size
+            )
+        )
+        let scalarCorrected = sourceLines.map {
+            AnyUprightGeometry.transform($0, by: scalarSourceToOutput)
+        }
+
+        try assertTrue(
+            meanHorizontalDeviation(directCorrected) < degreesToRadians(0.05),
+            "current Motion horizontal guide lines should become horizontal with direct matrix"
+        )
+        try assertTrue(
+            meanHorizontalDeviation(scalarCorrected) > meanHorizontalDeviation(directCorrected) * 20.0,
+            "old scalar horizontal perspective should remain visibly worse for the current off-center Motion guides"
         )
     }
 

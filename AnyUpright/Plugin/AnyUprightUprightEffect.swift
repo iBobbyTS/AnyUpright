@@ -424,12 +424,22 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         to state: inout AnyUprightParameterState
     ) -> Bool {
         state.uprightManualMatrixEnabled = 0
-        guard correctionMode == .vertical,
-              references.vertical.count >= 2,
-              let matrix = AnyUprightGeometry.guidedVerticalOutputToSourceMatrix(
+        let matrix: simd_float3x3?
+        switch correctionMode {
+        case .vertical:
+            matrix = AnyUprightGeometry.guidedVerticalOutputToSourceMatrix(
                 fromNormalizedImageLines: references.vertical,
                 size: referenceSize
-              ) else {
+            )
+        case .horizontal:
+            matrix = AnyUprightGeometry.guidedHorizontalOutputToSourceMatrix(
+                fromNormalizedImageLines: references.horizontal,
+                size: referenceSize
+            )
+        case .full:
+            matrix = nil
+        }
+        guard let matrix else {
             return false
         }
 

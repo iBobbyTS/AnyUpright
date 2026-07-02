@@ -1,7 +1,7 @@
 # Guided Upright Projective Geometry
 
-Last updated: 2026-07-01 16:46 MDT
-Reference commit: 23c5dcf48b242464e584b38ea59b2f05653f67f3
+Last updated: 2026-07-01 20:02 MDT
+Reference commit: af9d8c4e02afbf7fac398a149bdba46796f76fb9
 Observed versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 (447036), Xcode 26.5 (17F42), FxPlug SDK package 4.3.4.1.1769575879
 
 This note records transferable geometry lessons for guided upright or perspective-correction tools that let a user draw reference lines which should become vertical or horizontal after correction. It is not a product feature description. Current product behavior and parameter names should live in project implementation docs.
@@ -49,9 +49,9 @@ These observations were measured on the versions above and should be treated as 
 
 - A live Motion render can make a correct solver look wrong when the host is still using a stale effect instance or stale XPC service. Verify host freshness before changing the line solver.
 - Endpoint-only validation can pass while the user's intended visible edge still looks wrong. Check the actual source feature after render, not just the persisted guide segment.
-- A direct four-point mapping built from two guide segments can pass guide-line verticality checks while introducing scanline shear. Include a scanline-preservation regression for vertical-only modes.
+- A direct four-point mapping built from two guide segments can pass guide-line straightness checks while introducing scanline shear. Include a scanline-preservation regression for axis-only modes.
 
-## Vertical-Only Guided Model
+## Axis-Only Guided Model
 
 For two vertical source reference lines, a robust vertical-only model is based on their vertical vanishing point:
 
@@ -63,7 +63,15 @@ For two vertical source reference lines, a robust vertical-only model is based o
 
 This model lets off-center guide pairs converge to a vanishing point that is not on the image center axis. A centered keystone parameter cannot represent that geometry without leaving residual tilt.
 
-For a vertical-only correction, avoid consuming a residual rotation value. If the reference lines become more vertical only because the whole image rotates, the mode is mixing concerns. Reserve rotation for a mode that explicitly owns it.
+For two horizontal source reference lines, use the symmetric horizontal model:
+
+1. Convert both stored guide segments into image-space lines.
+2. Intersect the supporting lines to obtain the horizontal vanishing point.
+3. Build a projective transform that sends that vanishing point to horizontal infinity.
+4. Anchor the correction around an explicit vertical line, commonly the image centerline.
+5. Preserve vertical scanlines as vertical in the source-to-output transform.
+
+For axis-only correction, avoid consuming a residual rotation value. If reference lines become straighter only because the whole image rotates, the mode is mixing concerns. Reserve rotation for a mode that explicitly owns it.
 
 ## Validation Surfaces
 
@@ -71,6 +79,8 @@ Checking only the fitted guide endpoints is insufficient. A geometry regression 
 
 - each selected guide line transformed through the source-to-output matrix and measured for near-zero output `dx`;
 - horizontal source scanlines transformed through the same matrix and measured for near-zero output `dy` in vertical-only mode;
+- horizontal guides transformed through the source-to-output matrix and measured for near-zero output `dy`;
+- vertical source scanlines transformed through the same matrix and measured for near-zero output `dx` in horizontal-only mode;
 - stable-size adaptation checks that the same normalized output samples map consistently across preview sizes;
 - render-path checks that the matrix handed to the shader has not been reinterpreted across an image-to-texture boundary;
 - visual validation on the actual source feature the user used as a guide, not only the persisted endpoint coordinates.
@@ -91,7 +101,7 @@ The source feature check matters because a short drawn segment may lie near a vi
 
 - Keep guide interpretation independent from render tiles and host preview zoom.
 - Store or recompute a matrix for guide configurations that cannot be represented by a centered scalar keystone.
-- For vertical-only guided correction, solve from the vertical vanishing point and keep scanlines horizontal.
+- For axis-only guided correction, solve from the axis vanishing point and keep the perpendicular scanlines straight.
 - Treat scalar centered perspective parameters as fallback or simpler-path state, not as the only representation of guided geometry.
 - Add regression tests for both guide straightening and scanline preservation.
 - Run an offline render or deterministic sample calculation before judging a live host result, then verify the live host is loading the intended build.
@@ -100,6 +110,6 @@ The source feature check matters because a short drawn segment may lie near a vi
 
 - Treating the two guide segments as if they defined the new output frame side angles was wrong. The guides are source lines that should become vertical or horizontal after correction.
 - Reversing a scalar perspective sign without checking the transformed guide lines was wrong. The sign may appear plausible in one aspect ratio or coordinate convention while still failing the source-line contract.
-- Using one centered vertical keystone for off-center guide pairs was under-expressive. It reduced deviation but left both corrected lines tilted because the real vanishing point was off axis.
+- Using one centered vertical or horizontal keystone for off-center guide pairs was under-expressive. It reduced deviation but left both corrected lines tilted because the real vanishing point was off axis.
 - Deriving a four-point homography directly from two guide segments over-constrained the problem. It can make the finite guide segments vertical while introducing visible scanline shear or rotation.
 - Verifying only persisted guide endpoints produced false confidence. The visible source edge and the corrected scanline behavior must also be checked.

@@ -1175,6 +1175,40 @@ enum AnyUprightGeometry {
         )
     }
 
+    static func guidedHorizontalOutputToSourceMatrix(
+        fromNormalizedImageLines lines: [AULineSegment],
+        size: AUSize
+    ) -> simd_float3x3? {
+        guard size.width > 1.0, size.height > 1.0 else {
+            return nil
+        }
+
+        let imageLines = lines
+            .map { scaledLine($0, size: size) }
+            .filter { $0.length > 1.0 }
+        guard imageLines.count >= 2 else {
+            return nil
+        }
+
+        let referenceLines = Array(imageLines.prefix(2))
+        guard let horizontalVanishingPoint = intersection(of: referenceLines[0], and: referenceLines[1]),
+              horizontalVanishingPoint.x.isFinite,
+              horizontalVanishingPoint.y.isFinite else {
+            return nil
+        }
+
+        let anchorX = size.width / 2.0
+        let distanceToVanishingPoint = horizontalVanishingPoint.x - anchorX
+        guard abs(distanceToVanishingPoint) > 1.0 else {
+            return nil
+        }
+
+        return horizontalVanishingPointOutputToSourceMatrix(
+            vanishingPoint: horizontalVanishingPoint,
+            anchorX: anchorX
+        )
+    }
+
     private static func scaledLine(_ line: AULineSegment, size: AUSize) -> AULineSegment {
         AULineSegment(
             start: AUPoint(x: line.start.x * size.width, y: line.start.y * size.height),
@@ -1200,6 +1234,29 @@ enum AnyUprightGeometry {
         let fromAnchor = matrix(
             1.0, 0.0, vanishingPoint.x,
             0.0, 1.0, anchorY,
+            0.0, 0.0, 1.0
+        )
+        return multiply(multiply(fromAnchor, perspective), toAnchor)
+    }
+
+    private static func horizontalVanishingPointOutputToSourceMatrix(
+        vanishingPoint: AUPoint,
+        anchorX: Double
+    ) -> simd_float3x3 {
+        let horizontalStrength = 1.0 / (vanishingPoint.x - anchorX)
+        let toAnchor = matrix(
+            1.0, 0.0, -anchorX,
+            0.0, 1.0, -vanishingPoint.y,
+            0.0, 0.0, 1.0
+        )
+        let perspective = matrix(
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            horizontalStrength, 0.0, 1.0
+        )
+        let fromAnchor = matrix(
+            1.0, 0.0, anchorX,
+            0.0, 1.0, vanishingPoint.y,
             0.0, 0.0, 1.0
         )
         return multiply(multiply(fromAnchor, perspective), toAnchor)

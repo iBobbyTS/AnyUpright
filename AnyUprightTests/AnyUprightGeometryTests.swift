@@ -97,6 +97,10 @@ struct AnyUprightGeometryTests {
         try testGuidedVerticalMatrixStraightensOffCenterMotionGuidesWithoutSkewingScanlines()
         try testGuidedHorizontalMatrixStraightensOffCenterMotionGuidesWithoutSkewingScanlines()
         try testGuidedFullMatrixUsesSameDirectAxisAlgorithms()
+        try testGuidedManualMatrixSupportsZeroOneAndTwoLineSingleAxisModes()
+        try testGuidedManualFullMatrixKeepsVerifiedTwoAndFourLineResults()
+        try testGuidedManualFullMatrixSupportsOneVerticalOneHorizontal()
+        try testGuidedManualFullMatrixSupportsThreeLineCombinations()
         try testMotionManualHorizontalGuidesUseDirectMatrix()
         try testManualGuidedVerticalMatrixIgnoresAutoCropWhenAdaptedToPreviewSize()
         try testManualGuidedVerticalMatrixIsStableAcrossMotionPreviewSizes()
@@ -2198,6 +2202,203 @@ struct AnyUprightGeometryTests {
         )
     }
 
+    static func testGuidedManualMatrixSupportsZeroOneAndTwoLineSingleAxisModes() throws {
+        let size = AUSize(width: 5712.0, height: 4284.0)
+        let verticalLines = motionVerticalGuides()
+        let horizontalLines = motionHorizontalGuides()
+
+        try assertTrue(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: [],
+                horizontalLines: [],
+                mode: .vertical,
+                size: size
+            ) == nil,
+            "vertical manual mode should skip zero active vertical guides"
+        )
+        try assertTrue(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: [],
+                horizontalLines: [],
+                mode: .horizontal,
+                size: size
+            ) == nil,
+            "horizontal manual mode should skip zero active horizontal guides"
+        )
+
+        let verticalOne = try unwrap(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: [verticalLines[0]],
+                horizontalLines: [],
+                mode: .vertical,
+                size: size
+            ),
+            "one vertical guide rotation matrix"
+        )
+        try assertLinesVertical([verticalLines[0]], after: verticalOne, size: size, label: "one vertical guide")
+
+        let horizontalOne = try unwrap(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: [],
+                horizontalLines: [horizontalLines[0]],
+                mode: .horizontal,
+                size: size
+            ),
+            "one horizontal guide rotation matrix"
+        )
+        try assertLinesHorizontal([horizontalLines[0]], after: horizontalOne, size: size, label: "one horizontal guide")
+
+        let verticalTwo = try unwrap(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: verticalLines,
+                horizontalLines: horizontalLines,
+                mode: .vertical,
+                size: size
+            ),
+            "two vertical guide matrix"
+        )
+        let legacyVerticalTwo = try unwrap(
+            AnyUprightGeometry.guidedVerticalOutputToSourceMatrix(
+                fromNormalizedImageLines: verticalLines,
+                size: size
+            ),
+            "legacy two vertical guide matrix"
+        )
+        try assertMatrixApprox(verticalTwo, legacyVerticalTwo, "vertical two-line unified matrix")
+
+        let horizontalTwo = try unwrap(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: verticalLines,
+                horizontalLines: horizontalLines,
+                mode: .horizontal,
+                size: size
+            ),
+            "two horizontal guide matrix"
+        )
+        let legacyHorizontalTwo = try unwrap(
+            AnyUprightGeometry.guidedHorizontalOutputToSourceMatrix(
+                fromNormalizedImageLines: horizontalLines,
+                size: size
+            ),
+            "legacy two horizontal guide matrix"
+        )
+        try assertMatrixApprox(horizontalTwo, legacyHorizontalTwo, "horizontal two-line unified matrix")
+    }
+
+    static func testGuidedManualFullMatrixKeepsVerifiedTwoAndFourLineResults() throws {
+        let size = AUSize(width: 5712.0, height: 4284.0)
+        let verticalLines = motionVerticalGuides()
+        let horizontalLines = motionHorizontalGuides()
+
+        let fullTwoVertical = try unwrap(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: verticalLines,
+                horizontalLines: [],
+                mode: .full,
+                size: size
+            ),
+            "full two vertical guide matrix"
+        )
+        let legacyVertical = try unwrap(
+            AnyUprightGeometry.guidedVerticalOutputToSourceMatrix(
+                fromNormalizedImageLines: verticalLines,
+                size: size
+            ),
+            "legacy vertical guide matrix"
+        )
+        try assertMatrixApprox(fullTwoVertical, legacyVertical, "full two-vertical unified matrix")
+
+        let fullTwoHorizontal = try unwrap(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: [],
+                horizontalLines: horizontalLines,
+                mode: .full,
+                size: size
+            ),
+            "full two horizontal guide matrix"
+        )
+        let legacyHorizontal = try unwrap(
+            AnyUprightGeometry.guidedHorizontalOutputToSourceMatrix(
+                fromNormalizedImageLines: horizontalLines,
+                size: size
+            ),
+            "legacy horizontal guide matrix"
+        )
+        try assertMatrixApprox(fullTwoHorizontal, legacyHorizontal, "full two-horizontal unified matrix")
+
+        let fullFour = try unwrap(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: verticalLines,
+                horizontalLines: horizontalLines,
+                mode: .full,
+                size: size
+            ),
+            "full four guide matrix"
+        )
+        let legacyFull = try unwrap(
+            AnyUprightGeometry.guidedFullOutputToSourceMatrix(
+                fromNormalizedVerticalLines: verticalLines,
+                horizontalLines: horizontalLines,
+                size: size
+            ),
+            "legacy full guide matrix"
+        )
+        try assertMatrixApprox(fullFour, legacyFull, "full four-line unified matrix")
+    }
+
+    static func testGuidedManualFullMatrixSupportsOneVerticalOneHorizontal() throws {
+        let size = AUSize(width: 5712.0, height: 4284.0)
+        let verticalLine = motionVerticalGuides()[0]
+        let horizontalLine = motionHorizontalGuides()[0]
+
+        let matrix = try unwrap(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: [verticalLine],
+                horizontalLines: [horizontalLine],
+                mode: .full,
+                size: size
+            ),
+            "full one vertical one horizontal matrix"
+        )
+
+        try assertLinesVertical([verticalLine], after: matrix, size: size, label: "full one vertical guide")
+        try assertLinesHorizontal([horizontalLine], after: matrix, size: size, label: "full one horizontal guide")
+        try assertTrue(
+            sourceToOutputLinearDeterminant(fromOutputToSource: matrix) > 0.0,
+            "full one vertical one horizontal matrix should keep a non-mirrored axis basis"
+        )
+    }
+
+    static func testGuidedManualFullMatrixSupportsThreeLineCombinations() throws {
+        let size = AUSize(width: 5712.0, height: 4284.0)
+        let verticalLines = motionVerticalGuides()
+        let horizontalLines = motionHorizontalGuides()
+
+        let twoVerticalOneHorizontal = try unwrap(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: verticalLines,
+                horizontalLines: [horizontalLines[0]],
+                mode: .full,
+                size: size
+            ),
+            "full two vertical one horizontal matrix"
+        )
+        try assertLinesVertical(verticalLines, after: twoVerticalOneHorizontal, size: size, label: "full two vertical one horizontal vertical guides")
+        try assertLinesHorizontal([horizontalLines[0]], after: twoVerticalOneHorizontal, size: size, label: "full two vertical one horizontal horizontal guide")
+
+        let oneVerticalTwoHorizontal = try unwrap(
+            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+                verticalLines: [verticalLines[0]],
+                horizontalLines: horizontalLines,
+                mode: .full,
+                size: size
+            ),
+            "full one vertical two horizontal matrix"
+        )
+        try assertLinesVertical([verticalLines[0]], after: oneVerticalTwoHorizontal, size: size, label: "full one vertical two horizontal vertical guide")
+        try assertLinesHorizontal(horizontalLines, after: oneVerticalTwoHorizontal, size: size, label: "full one vertical two horizontal horizontal guides")
+    }
+
     static func testMotionManualHorizontalGuidesUseDirectMatrix() throws {
         let size = AUSize(width: 5712.0, height: 4284.0)
         let normalizedImageLines = [
@@ -2692,6 +2893,95 @@ struct AnyUprightGeometryTests {
             return partial + atan2(dy, max(dx, 0.000001))
         }
         return total / Double(lines.count)
+    }
+
+    static func motionVerticalGuides() -> [AULineSegment] {
+        [
+            AULineSegment(
+                start: AUPoint(x: 0.125237, y: 0.539607),
+                end: AUPoint(x: 0.090030, y: 0.231790)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.795013, y: 0.532354),
+                end: AUPoint(x: 0.865249, y: 0.223977)
+            )
+        ]
+    }
+
+    static func motionHorizontalGuides() -> [AULineSegment] {
+        [
+            AULineSegment(
+                start: AUPoint(x: 0.115150, y: 0.531439),
+                end: AUPoint(x: 0.415055, y: 0.460389)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.084905, y: 0.234260),
+                end: AUPoint(x: 0.419045, y: 0.222487)
+            )
+        ]
+    }
+
+    static func scaledLines(_ lines: [AULineSegment], size: AUSize) -> [AULineSegment] {
+        lines.map {
+            AULineSegment(
+                start: AUPoint(x: $0.start.x * size.width, y: $0.start.y * size.height),
+                end: AUPoint(x: $0.end.x * size.width, y: $0.end.y * size.height)
+            )
+        }
+    }
+
+    static func correctedLines(_ lines: [AULineSegment], matrix: simd_float3x3, size: AUSize) -> [AULineSegment] {
+        let sourceToOutput = simd_inverse(matrix)
+        return scaledLines(lines, size: size).map {
+            AnyUprightGeometry.transform($0, by: sourceToOutput)
+        }
+    }
+
+    static func assertLinesVertical(
+        _ lines: [AULineSegment],
+        after matrix: simd_float3x3,
+        size: AUSize,
+        label: String
+    ) throws {
+        try assertTrue(
+            meanVerticalDeviation(correctedLines(lines, matrix: matrix, size: size)) < degreesToRadians(0.05),
+            "\(label) should be vertical after correction"
+        )
+    }
+
+    static func assertLinesHorizontal(
+        _ lines: [AULineSegment],
+        after matrix: simd_float3x3,
+        size: AUSize,
+        label: String
+    ) throws {
+        try assertTrue(
+            meanHorizontalDeviation(correctedLines(lines, matrix: matrix, size: size)) < degreesToRadians(0.05),
+            "\(label) should be horizontal after correction"
+        )
+    }
+
+    static func sourceToOutputLinearDeterminant(fromOutputToSource matrix: simd_float3x3) -> Double {
+        let sourceToOutput = simd_inverse(matrix)
+        return Double(sourceToOutput[0][0] * sourceToOutput[1][1] - sourceToOutput[1][0] * sourceToOutput[0][1])
+    }
+
+    static func assertMatrixApprox(
+        _ actual: simd_float3x3,
+        _ expected: simd_float3x3,
+        _ label: String,
+        accuracy: Double = 0.0001
+    ) throws {
+        for column in 0..<3 {
+            for row in 0..<3 {
+                try assertApprox(
+                    Double(actual[column][row]),
+                    Double(expected[column][row]),
+                    "\(label) [\(column),\(row)]",
+                    accuracy: accuracy
+                )
+            }
+        }
     }
 
     static func assertEqual(_ actual: AUPoint, _ expected: AUPoint, _ label: String) throws {

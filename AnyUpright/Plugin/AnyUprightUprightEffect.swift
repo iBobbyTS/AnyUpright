@@ -424,25 +424,12 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         to state: inout AnyUprightParameterState
     ) -> Bool {
         state.uprightManualMatrixEnabled = 0
-        let matrix: simd_float3x3?
-        switch correctionMode {
-        case .vertical:
-            matrix = AnyUprightGeometry.guidedVerticalOutputToSourceMatrix(
-                fromNormalizedImageLines: references.vertical,
-                size: referenceSize
-            )
-        case .horizontal:
-            matrix = AnyUprightGeometry.guidedHorizontalOutputToSourceMatrix(
-                fromNormalizedImageLines: references.horizontal,
-                size: referenceSize
-            )
-        case .full:
-            matrix = AnyUprightGeometry.guidedFullOutputToSourceMatrix(
-                fromNormalizedVerticalLines: references.vertical,
-                horizontalLines: references.horizontal,
-                size: referenceSize
-            )
-        }
+        let matrix = AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            verticalLines: references.vertical,
+            horizontalLines: references.horizontal,
+            mode: guidedUprightMode(from: correctionMode),
+            size: referenceSize
+        )
         guard let matrix else {
             return false
         }
@@ -453,6 +440,17 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         state.horizontalPerspective = 0.0
         state.rotationRadians = 0.0
         return true
+    }
+
+    private func guidedUprightMode(from correctionMode: UprightCorrectionMode) -> AUGuidedUprightMode {
+        switch correctionMode {
+        case .vertical:
+            return .vertical
+        case .horizontal:
+            return .horizontal
+        case .full:
+            return .full
+        }
     }
 
     private func storeManualMatrix(_ matrix: simd_float3x3, in state: inout AnyUprightParameterState) {

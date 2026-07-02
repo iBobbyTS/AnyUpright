@@ -94,6 +94,12 @@ enum AUReferenceOrientation {
     case vertical
 }
 
+enum AUGuidedUprightMode {
+    case vertical
+    case horizontal
+    case full
+}
+
 enum AUStretchTransformMode: Int32 {
     case outputCorners = 0
     case innerStretch = 1
@@ -1243,6 +1249,150 @@ enum AnyUprightGeometry {
         }
     }
 
+    static func guidedManualOutputToSourceMatrix(
+        verticalLines: [AULineSegment],
+        horizontalLines: [AULineSegment],
+        mode: AUGuidedUprightMode,
+        size: AUSize
+    ) -> simd_float3x3? {
+        guard size.width > 1.0, size.height > 1.0 else {
+            return nil
+        }
+
+        let verticalLines = Array(validNormalizedImageLines(verticalLines, size: size).prefix(2))
+        let horizontalLines = Array(validNormalizedImageLines(horizontalLines, size: size).prefix(2))
+
+        switch mode {
+        case .vertical:
+            return guidedSingleAxisOutputToSourceMatrix(
+                lines: verticalLines,
+                orientation: .vertical,
+                size: size
+            )
+
+        case .horizontal:
+            return guidedSingleAxisOutputToSourceMatrix(
+                lines: horizontalLines,
+                orientation: .horizontal,
+                size: size
+            )
+
+        case .full:
+            return guidedFullManualOutputToSourceMatrix(
+                verticalLines: verticalLines,
+                horizontalLines: horizontalLines,
+                size: size
+            )
+        }
+    }
+
+    private static func guidedSingleAxisOutputToSourceMatrix(
+        lines: [AULineSegment],
+        orientation: AUReferenceOrientation,
+        size: AUSize
+    ) -> simd_float3x3? {
+        switch lines.count {
+        case 0:
+            return nil
+        case 1:
+            return rotationOnlyOutputToSourceMatrix(
+                fromNormalizedImageLines: lines,
+                orientation: orientation,
+                size: size
+            )
+        default:
+            switch orientation {
+            case .vertical:
+                return guidedVerticalOutputToSourceMatrix(fromNormalizedImageLines: lines, size: size)
+            case .horizontal:
+                return guidedHorizontalOutputToSourceMatrix(fromNormalizedImageLines: lines, size: size)
+            }
+        }
+    }
+
+    private static func guidedFullManualOutputToSourceMatrix(
+        verticalLines: [AULineSegment],
+        horizontalLines: [AULineSegment],
+        size: AUSize
+    ) -> simd_float3x3? {
+        switch (verticalLines.count, horizontalLines.count) {
+        case (0, 0):
+            return nil
+
+        case (1, 0):
+            return rotationOnlyOutputToSourceMatrix(
+                fromNormalizedImageLines: verticalLines,
+                orientation: .vertical,
+                size: size
+            )
+
+        case (0, 1):
+            return rotationOnlyOutputToSourceMatrix(
+                fromNormalizedImageLines: horizontalLines,
+                orientation: .horizontal,
+                size: size
+            )
+
+        case (1, 1):
+            return affineAxisRectificationOutputToSourceMatrix(
+                verticalLine: verticalLines[0],
+                horizontalLine: horizontalLines[0],
+                size: size
+            ) ?? rotationOnlyOutputToSourceMatrix(
+                fromNormalizedImageLines: horizontalLines + verticalLines,
+                orientation: .horizontal,
+                size: size
+            )
+
+        case (2, 0):
+            return guidedVerticalOutputToSourceMatrix(fromNormalizedImageLines: verticalLines, size: size)
+
+        case (0, 2):
+            return guidedHorizontalOutputToSourceMatrix(fromNormalizedImageLines: horizontalLines, size: size)
+
+        case (2, 1):
+            guard let vertical = guidedVerticalOutputToSourceMatrix(
+                fromNormalizedImageLines: verticalLines,
+                size: size
+            ) else {
+                return rotationOnlyOutputToSourceMatrix(
+                    fromNormalizedImageLines: horizontalLines,
+                    orientation: .horizontal,
+                    size: size
+                )
+            }
+            return appendHorizontalShear(
+                afterOutputToSource: vertical,
+                horizontalLine: horizontalLines[0],
+                size: size
+            ) ?? vertical
+
+        case (1, 2):
+            guard let horizontal = guidedHorizontalOutputToSourceMatrix(
+                fromNormalizedImageLines: horizontalLines,
+                size: size
+            ) else {
+                return rotationOnlyOutputToSourceMatrix(
+                    fromNormalizedImageLines: verticalLines,
+                    orientation: .vertical,
+                    size: size
+                )
+            }
+            return appendVerticalShear(
+                afterOutputToSource: horizontal,
+                verticalLine: verticalLines[0],
+                size: size
+            ) ?? horizontal
+
+        default:
+            return guidedFullOutputToSourceMatrix(
+                fromNormalizedVerticalLines: verticalLines,
+                horizontalLines: horizontalLines,
+                size: size
+            )
+        }
+    }
+
     private static func vanishingPoint(fromNormalizedImageLines lines: [AULineSegment], size: AUSize) -> AUPoint? {
         let imageLines = lines
             .map { scaledLine($0, size: size) }
@@ -1261,11 +1411,166 @@ enum AnyUprightGeometry {
         return vanishingPoint
     }
 
+    private static func validNormalizedImageLines(_ lines: [AULineSegment], size: AUSize) -> [AULineSegment] {
+        lines.filter {
+            scaledLine($0, size: size).length > 1.0
+        }
+    }
+
     private static func scaledLine(_ line: AULineSegment, size: AUSize) -> AULineSegment {
         AULineSegment(
             start: AUPoint(x: line.start.x * size.width, y: line.start.y * size.height),
             end: AUPoint(x: line.end.x * size.width, y: line.end.y * size.height)
         )
+    }
+
+    private static func rotationOnlyOutputToSourceMatrix(
+        fromNormalizedImageLines lines: [AULineSegment],
+        orientation: AUReferenceOrientation,
+        size: AUSize
+    ) -> simd_float3x3? {
+        let imageLines = lines.map { scaledLine($0, size: size) }
+        guard let correction = rotationCorrectionRadians(from: imageLines, orientation: orientation) else {
+            return nil
+        }
+        return rotationOutputToSource(angleRadians: correction, fillFrame: false, size: size)
+    }
+
+    private static func affineAxisRectificationOutputToSourceMatrix(
+        verticalLine: AULineSegment,
+        horizontalLine: AULineSegment,
+        size: AUSize
+    ) -> simd_float3x3? {
+        let vertical = scaledLine(verticalLine, size: size)
+        let horizontal = scaledLine(horizontalLine, size: size)
+        let verticalVector = normalizedVector(from: vertical)
+        let horizontalVector = normalizedVector(from: horizontal)
+        guard var verticalVector,
+              var horizontalVector else {
+            return nil
+        }
+        if horizontalVector.x < 0.0 {
+            horizontalVector = -horizontalVector
+        }
+        if horizontalVector.x * verticalVector.y - horizontalVector.y * verticalVector.x < 0.0 {
+            verticalVector = -verticalVector
+        }
+
+        let determinant = horizontalVector.x * verticalVector.y - horizontalVector.y * verticalVector.x
+        guard abs(determinant) > 0.001 else {
+            return nil
+        }
+
+        let inverseBasis = matrix(
+            verticalVector.y / determinant,
+            -verticalVector.x / determinant,
+            0.0,
+            -horizontalVector.y / determinant,
+            horizontalVector.x / determinant,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+        )
+        let center = AUPoint(x: size.width / 2.0, y: size.height / 2.0)
+        let toCenter = matrix(
+            1.0, 0.0, -center.x,
+            0.0, 1.0, -center.y,
+            0.0, 0.0, 1.0
+        )
+        let fromCenter = matrix(
+            1.0, 0.0, center.x,
+            0.0, 1.0, center.y,
+            0.0, 0.0, 1.0
+        )
+        let sourceToOutput = multiply(fromCenter, multiply(inverseBasis, toCenter))
+        guard matrixMapsFiniteFrame(sourceToOutput, size: size) else {
+            return nil
+        }
+        return simd_inverse(sourceToOutput)
+    }
+
+    private static func appendHorizontalShear(
+        afterOutputToSource outputToSource: simd_float3x3,
+        horizontalLine: AULineSegment,
+        size: AUSize
+    ) -> simd_float3x3? {
+        let line = scaledLine(horizontalLine, size: size)
+        let corrected = transform(line, by: simd_inverse(outputToSource))
+        let dx = corrected.end.x - corrected.start.x
+        guard abs(dx) > 0.000001 else {
+            return nil
+        }
+        let dy = corrected.end.y - corrected.start.y
+        let shear = dy / dx
+        guard shear.isFinite else {
+            return nil
+        }
+
+        let sourceToOutput = multiply(horizontalShearSourceToOutput(shear: shear, size: size), simd_inverse(outputToSource))
+        return simd_inverse(sourceToOutput)
+    }
+
+    private static func appendVerticalShear(
+        afterOutputToSource outputToSource: simd_float3x3,
+        verticalLine: AULineSegment,
+        size: AUSize
+    ) -> simd_float3x3? {
+        let line = scaledLine(verticalLine, size: size)
+        let corrected = transform(line, by: simd_inverse(outputToSource))
+        let dy = corrected.end.y - corrected.start.y
+        guard abs(dy) > 0.000001 else {
+            return nil
+        }
+        let dx = corrected.end.x - corrected.start.x
+        let shear = dx / dy
+        guard shear.isFinite else {
+            return nil
+        }
+
+        let sourceToOutput = multiply(verticalShearSourceToOutput(shear: shear, size: size), simd_inverse(outputToSource))
+        return simd_inverse(sourceToOutput)
+    }
+
+    private static func horizontalShearSourceToOutput(shear: Double, size: AUSize) -> simd_float3x3 {
+        let centerX = size.width / 2.0
+        return matrix(
+            1.0, 0.0, 0.0,
+            -shear, 1.0, shear * centerX,
+            0.0, 0.0, 1.0
+        )
+    }
+
+    private static func verticalShearSourceToOutput(shear: Double, size: AUSize) -> simd_float3x3 {
+        let centerY = size.height / 2.0
+        return matrix(
+            1.0, -shear, shear * centerY,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0
+        )
+    }
+
+    private static func normalizedVector(from line: AULineSegment) -> SIMD2<Double>? {
+        let dx = line.end.x - line.start.x
+        let dy = line.end.y - line.start.y
+        let length = hypot(dx, dy)
+        guard length > 0.000001 else {
+            return nil
+        }
+        return SIMD2<Double>(dx / length, dy / length)
+    }
+
+    private static func matrixMapsFiniteFrame(_ matrix: simd_float3x3, size: AUSize) -> Bool {
+        [
+            AUPoint(x: 0.0, y: 0.0),
+            AUPoint(x: size.width, y: 0.0),
+            AUPoint(x: size.width, y: size.height),
+            AUPoint(x: 0.0, y: size.height),
+            AUPoint(x: size.width / 2.0, y: size.height / 2.0)
+        ].allSatisfy {
+            let mapped = transform($0, by: matrix)
+            return mapped.x.isFinite && mapped.y.isFinite
+        }
     }
 
     private static func verticalVanishingPointOutputToSourceMatrix(

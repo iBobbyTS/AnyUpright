@@ -59,7 +59,7 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             AUOSCStyledSegment(start: $0.start, end: $0.end, style: guideStyle($0.guide, activePart: activePart))
         })
         let handles = canvasGuides.flatMap {
-            let colorOverride: SIMD4<Float>? = $0.guide.enabled ? nil : disabledGuideColor()
+            let colorOverride = $0.guide.enabled ? guideColor($0.guide) : disabledGuideColor()
             return [
                 AUOSCHandle(point: $0.start, part: $0.guide.spec.startPart.rawValue, colorOverride: colorOverride),
                 AUOSCHandle(point: $0.end, part: $0.guide.spec.endPart.rawValue, colorOverride: colorOverride)
@@ -256,6 +256,9 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
     private func guideStyle(_ guide: UprightGuideLine, activePart: Int) -> AUOSCOverlayStyle {
         var style = AUOSCOverlayStyle()
+        let color = guideColor(guide)
+        style.lineColor = color
+        style.handleColor = color
         if !guide.enabled {
             style.lineColor = disabledGuideColor()
             style.handleColor = disabledGuideColor()
@@ -266,6 +269,15 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             style.lineColor = style.activeHandleColor
         }
         return style
+    }
+
+    private func guideColor(_ guide: UprightGuideLine) -> SIMD4<Float> {
+        switch guide.orientation {
+        case .vertical:
+            return SIMD4<Float>(1.0, 0.22, 0.28, 1.0)
+        case .horizontal:
+            return SIMD4<Float>(0.15, 0.9, 0.45, 1.0)
+        }
     }
 
     private func candidateStyle(_ candidate: UprightCandidateLine, activePart: Int) -> AUOSCOverlayStyle {

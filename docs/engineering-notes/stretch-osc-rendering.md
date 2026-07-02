@@ -1,12 +1,12 @@
-# Quad OSC And Overlay Rendering
+# Stretch OSC And Overlay Rendering
 
 Last updated: 2026-06-10 15:47 MDT
 Reference commit: 11aa3148242f9743c8c48903739c604f84dd2e66
 Observed host versions: macOS 26.5, Motion Studio 6.2, Final Cut Pro 12.2
 
-This note records reusable OSC overlay rendering lessons for four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../quad-implementation-notes.md`.
+This note records reusable OSC overlay rendering lessons for four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../stretch-implementation-notes.md`.
 
-For a host-neutral coordinate inventory, start with `quad-coordinate-layer-contract.md`. This file focuses on drawing interactive OSC geometry once the canvas points have already been chosen.
+For a host-neutral coordinate inventory, start with `stretch-coordinate-layer-contract.md`. This file focuses on drawing interactive OSC geometry once the canvas points have already been chosen.
 
 ## Coordinate Rules
 
@@ -43,7 +43,7 @@ These observations are not Apple API guarantees. They were measured on macOS 26.
 
 Useful draw diagnostics include:
 
-- host callback dimensions, surface, object bounds, frame, and quad;
+- host callback dimensions, surface, object bounds, frame, and stretch;
 - canvas, direct, center-relative, and frame-fit point mappings;
 - IOSurface/texture/image/tile target state;
 - local, direct, frame-local, centered, and clip mappings;
@@ -55,7 +55,7 @@ If these markers are absent after a rebuild, the host is probably running an old
 ## Previous Wrong Attempts
 
 - Drawing source-selection controls only in the filter output made them visible in Final Cut but did not by itself make them draggable.
-- Drawing two visible layers, one filter-output layer and one host OSC layer, caused confusing duplicate quads. The fix was to make the OSC layer use the same preview-aligned geometry as hit testing and dragging.
+- Drawing two visible layers, one filter-output layer and one host OSC layer, caused confusing duplicate stretch outlines. The fix was to make the OSC layer use the same preview-aligned geometry as hit testing and dragging.
 - Full frame-center compensation, backing-scale residual formulas, and canvas-frame aspect-fit remapping all overfit the Final Cut pan symptom and broke other viewer states.
 - Leaving overlay vertices on an `(x - width / 2, y - height / 2)` conversion misplaced Y in Metal when the intended centered vertex space was Y-up. The correct boundary conversion in that setup is `(x - width / 2, height / 2 - y)`.
 - Treating `setVertexBytes` as safe for all overlay sizes was wrong. Larger persistent OSC controls need `MTLBuffer`.

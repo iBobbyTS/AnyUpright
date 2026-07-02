@@ -33,13 +33,13 @@ struct AuditFeatureSurface {
                 "AnyUprightHorizonEffect.swift"
             ]
         )
-        let quadEffects = try pluginSwiftSources(
+        let stretchEffects = try pluginSwiftSources(
             at: pluginDirectory,
             relativePaths: [
                 "AnyUprightStretchEffects.swift",
-                "AnyUprightQuadOSCControls.swift",
-                "AnyUprightQuadOSCParameterWriter.swift",
-                "AnyUprightQuadParameters.swift"
+                "AnyUprightStretchOSCControls.swift",
+                "AnyUprightStretchOSCParameterWriter.swift",
+                "AnyUprightStretchParameters.swift"
             ]
         )
         let uprightEffects = try pluginSwiftSources(
@@ -58,7 +58,7 @@ struct AuditFeatureSurface {
 
         try auditRegisteredPlugins(infoPlist)
         try auditHorizon(horizonEffect)
-        try auditQuad(quadEffects, geometry: geometry, overlay: overlay, metal: metal)
+        try auditStretch(stretchEffects, geometry: geometry, overlay: overlay, metal: metal)
         try auditUpright(uprightEffects, geometry: geometry, warp: warp, candidates: candidates)
 
         print("AnyUpright feature surface audit passed")
@@ -106,11 +106,11 @@ struct AuditFeatureSurface {
         try require(effects, "singleFrameAnalysisRange", "Horizon analysis targets a representative frame")
     }
 
-    private static func auditQuad(_ effects: String, geometry: String, overlay: String, metal: String) throws {
-        try require(effects, "class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn", "Inner Stretch is registered as its own filter")
-        try require(effects, "class AnyUprightOuterStretchPlugIn: AnyUprightQuadModePlugIn", "Outer Stretch is registered as its own filter")
+    private static func auditStretch(_ effects: String, geometry: String, overlay: String, metal: String) throws {
+        try require(effects, "class AnyUprightInnerStretchPlugIn: AnyUprightStretchModePlugIn", "Inner Stretch is registered as its own filter")
+        try require(effects, "class AnyUprightOuterStretchPlugIn: AnyUprightStretchModePlugIn", "Outer Stretch is registered as its own filter")
         try require(effects, "FxAnalyzer", "Inner Stretch supports explicit frame analysis")
-        try require(effects, "Detect Edge and Corner", "Inner Stretch exposes explicit input-quadrilateral detection")
+        try require(effects, "Detect Edge and Corner", "Inner Stretch exposes explicit input-four-corner selection detection")
         try require(effects, "addPushButton", "Inner Stretch detection uses a native FxPlug push button")
         try require(effects, "selector: #selector(detectInnerStretch)", "Inner Stretch push button dispatches to detection")
         try reject(effects, "addCustomParameter", "Inner Stretch detection should not use a custom parameter for button UI")
@@ -124,29 +124,29 @@ struct AuditFeatureSurface {
         try require(effects, "Score Threshold", "Inner Stretch exposes a normalized detection-score threshold")
         try require(effects, "Choose from detections", "Inner Stretch can switch OSC hit testing from manual handles to detected primitives")
         try require(effects, "chooseFromDetections", "Inner Stretch exposes detection-choice mode as a persistent FxPlug parameter")
-        try require(effects, "writeQuadInnerStretchDetectionPrimitives", "Inner Stretch detection writes primitive slots instead of moving the current quad")
-        try require(effects, "quadInnerStretchDetectionEdges", "Inner Stretch OSC reads detected edge primitives")
-        try require(effects, "quadInnerStretchDetectionCorners", "Inner Stretch OSC reads detected corner primitives")
+        try require(effects, "writeInnerStretchDetectionPrimitives", "Inner Stretch detection writes primitive slots instead of moving the current stretch")
+        try require(effects, "stretchInnerStretchDetectionEdges", "Inner Stretch OSC reads detected edge primitives")
+        try require(effects, "stretchInnerStretchDetectionCorners", "Inner Stretch OSC reads detected corner primitives")
         try require(effects, "sourceDetectionOverlaySegments", "Inner Stretch OSC draws detected edge/corner overlays")
         try require(effects, "toggleDetectionSelection", "Inner Stretch OSC can select detected edges/corners for writeback")
         try reject(effects, "VNDetectRectanglesRequest()", "Inner Stretch detection overlay should not be limited to closed rectangle observations")
-        try reject(effects, "writeDetectedInnerStretchOffsets", "Inner Stretch detection should not directly move the existing quad")
-        try require(effects, "override var fixedQuadMode: AUQuadTransformMode", "Quad filters choose fixed modes")
+        try reject(effects, "writeDetectedInnerStretchOffsets", "Inner Stretch detection should not directly move the existing stretch")
+        try require(effects, "override var fixedStretchMode: AUStretchTransformMode", "Stretch filters choose fixed modes")
         try require(effects, "class AnyUprightOuterStretchOSCPlugIn: AnyUprightInnerStretchOSCPlugIn", "Outer Stretch exposes its own onscreen control")
-        try require(effects, "parameterFlags: hiddenFlags()", "Quad fixed mode parameter is hidden from the inspector")
-        try require(effects, "Edit Mode", "Quad exposes edit mode for inner-stretch handles without applying the warp")
+        try require(effects, "parameterFlags: hiddenFlags()", "Stretch fixed mode parameter is hidden from the inspector")
+        try require(effects, "Edit Mode", "Stretch exposes edit mode for inner-stretch handles without applying the warp")
         try require(effects, "class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Inner Stretch exposes onscreen controls as a separate FxPlug class")
         try require(effects, "renderOutputCornersOSC", "Outer Stretch draws host onscreen output-corner controls")
         try require(effects, "hiddenCollapsedFlags", "Inner Stretch hides the offset controls while keeping them as persistent state")
         try require(effects, "sourceCornerPercentOffset", "Inner Stretch OSC writes hidden source-corner percent offsets")
-        try require(effects, "overlayRenderer.clear", "Quad OSC clears its host overlay surface while the effect render output owns the visible Inner Stretch adjuster")
-        try require(geometry, "quadOutputToSourceMatrix", "Quad render matrix is centralized in geometry")
-        try require(geometry, "quadSelectionToOutputRectMatrix", "Inner Stretch edit preview identifies the selected source area")
-        try require(geometry, "innerStretchDefault", "Inner Stretch defines its default input quadrilateral")
+        try require(effects, "overlayRenderer.clear", "Stretch OSC clears its host overlay surface while the effect render output owns the visible Inner Stretch adjuster")
+        try require(geometry, "stretchOutputToSourceMatrix", "Stretch render matrix is centralized in geometry")
+        try require(geometry, "stretchSelectionToOutputRectMatrix", "Inner Stretch edit preview identifies the selected source area")
+        try require(geometry, "innerStretchDefault", "Inner Stretch defines its default input selection")
         try require(geometry, "innerStretchInset = 0.10", "Inner Stretch defaults to the central 80 percent of the source frame")
         try require(geometry, "innerStretchObjectPoints", "Inner Stretch converts persistent offsets into object-space handles")
-        try require(geometry, "imageQuad(fromNormalizedObjectPoints", "Detected corner selections can be ordered into an inner stretch")
-        try require(geometry, "imageQuad(fromNormalizedObjectLines", "Detected edge selections can be intersected into an inner stretch")
+        try require(geometry, "imageSelection(fromNormalizedObjectPoints", "Detected corner selections can be ordered into an inner stretch")
+        try require(geometry, "imageSelection(fromNormalizedObjectLines", "Detected edge selections can be intersected into an inner stretch")
         try require(geometry, "guard !showCornerAdjuster else", "Inner Stretch mode can preview handles without warping")
         try require(geometry, "sourceCornerPercentOffset", "Inner Stretch OSC writes resolution-independent corner offsets")
         try require(geometry, "cornerPixelOffset", "Outer Stretch OSC writes stable corner pixel offsets")
@@ -157,8 +157,8 @@ struct AuditFeatureSurface {
         try require(overlay, "outputTexture.pixelFormat", "OSC renderer uses the actual Metal texture pixel format")
         try require(overlay, "MTLCreateSystemDefaultDevice", "OSC renderer can fall back when the destination registry ID is unavailable")
         try require(metal, "AURM_InnerStretchAdjusterPreview", "Inner Stretch edit overlay is rendered into the effect output")
-        try require(metal, "color.rgb *= 0.70", "Inner Stretch edit preview dims pixels outside the selected quad")
-        try require(metal, "warpState->outputToSource * float3(outputCoordinate, 1.0)", "Quad warps use the primary output-to-source matrix")
+        try require(metal, "color.rgb *= 0.70", "Inner Stretch edit preview dims pixels outside the selected stretch")
+        try require(metal, "warpState->outputToSource * float3(outputCoordinate, 1.0)", "Stretch warps use the primary output-to-source matrix")
     }
 
     private static func auditUpright(_ effects: String, geometry: String, warp: String, candidates: String) throws {

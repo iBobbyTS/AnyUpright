@@ -120,7 +120,7 @@ final class AnyUprightOSCOverlayRenderer {
         commandBuffer.waitUntilCompleted()
     }
 
-    func renderQuad(
+    func renderStretch(
         points: [AUPoint],
         handles: [AUOSCHandle],
         activePart: Int,
@@ -151,7 +151,7 @@ final class AnyUprightOSCOverlayRenderer {
         )
     }
 
-    func renderQuadAdjuster(
+    func renderStretchAdjuster(
         points: [AUPoint],
         handles: [AUOSCHandle],
         activePart: Int,
@@ -163,7 +163,7 @@ final class AnyUprightOSCOverlayRenderer {
         style: AUOSCOverlayStyle = AUOSCOverlayStyle()
     ) {
         guard points.count == 4 else {
-            renderQuad(
+            renderStretch(
                 points: points,
                 handles: handles,
                 activePart: activePart,
@@ -190,7 +190,7 @@ final class AnyUprightOSCOverlayRenderer {
             canvasFrame: canvasFrame,
             coordinateSpace: coordinateSpace,
             handleStyle: style,
-            dimmingQuads: outsideDimmingQuads(around: points, frame: dimmingFrame)
+            dimmingRegions: outsideDimmingRegions(around: points, frame: dimmingFrame)
         )
     }
 
@@ -225,7 +225,7 @@ final class AnyUprightOSCOverlayRenderer {
         canvasFrame: [AUPoint]? = nil,
         coordinateSpace: AUOSCOverlayCoordinateSpace = .normalized,
         handleStyle: AUOSCOverlayStyle = AUOSCOverlayStyle(),
-        dimmingQuads: [[AUPoint]] = [],
+        dimmingRegions: [[AUPoint]] = [],
         debugLog: ((String) -> Void)? = nil
     ) {
         guard !segments.isEmpty || !handles.isEmpty else {
@@ -291,8 +291,8 @@ final class AnyUprightOSCOverlayRenderer {
             log: debugLog
         )
 
-        for quad in dimmingQuads where quad.count == 4 {
-            appendCoordinateQuad(quad, color: handleStyle.dimOutsideColor, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
+        for region in dimmingRegions where region.count == 4 {
+            appendCoordinateStretch(region, color: handleStyle.dimOutsideColor, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
         }
         for segment in segments {
             appendLine(
@@ -364,7 +364,7 @@ final class AnyUprightOSCOverlayRenderer {
         commandBuffer.waitUntilCompleted()
     }
 
-    private func outsideDimmingQuads(around points: [AUPoint], frame: [AUPoint]? = nil) -> [[AUPoint]] {
+    private func outsideDimmingRegions(around points: [AUPoint], frame: [AUPoint]? = nil) -> [[AUPoint]] {
         let topLeft = points[0]
         let topRight = points[1]
         let bottomRight = points[2]
@@ -458,7 +458,7 @@ final class AnyUprightOSCOverlayRenderer {
         let metalLength = max(0.0001, hypot(metalDelta.x, metalDelta.y))
         let metalAxis = SIMD2<Float>(Float(metalDelta.x / metalLength), Float(metalDelta.y / metalLength))
 
-        appendPrimitiveQuad(
+        appendPrimitiveStretch(
             p0: centerPixel - axis * (halfLength + padding) + normal * (halfThickness + padding),
             p1: centerPixel + axis * (halfLength + padding) + normal * (halfThickness + padding),
             p2: centerPixel + axis * (halfLength + padding) - normal * (halfThickness + padding),
@@ -487,7 +487,7 @@ final class AnyUprightOSCOverlayRenderer {
     ) {
         let centerPixel = localPixel(from: center, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
         let padding = antialiasPadding()
-        appendPrimitiveQuad(
+        appendPrimitiveStretch(
             p0: centerPixel + SIMD2<Double>(-(radius + padding), -(radius + padding)),
             p1: centerPixel + SIMD2<Double>(radius + padding, -(radius + padding)),
             p2: centerPixel + SIMD2<Double>(radius + padding, radius + padding),
@@ -556,7 +556,7 @@ final class AnyUprightOSCOverlayRenderer {
     ) {
         let centerPixel = localPixel(from: center, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height)
         let padding = antialiasPadding()
-        appendPrimitiveQuad(
+        appendPrimitiveStretch(
             p0: centerPixel + SIMD2<Double>(-(radius + padding), -(radius + padding)),
             p1: centerPixel + SIMD2<Double>(radius + padding, -(radius + padding)),
             p2: centerPixel + SIMD2<Double>(radius + padding, radius + padding),
@@ -572,7 +572,7 @@ final class AnyUprightOSCOverlayRenderer {
         )
     }
 
-    private func appendCoordinateQuad(
+    private func appendCoordinateStretch(
         _ points: [AUPoint],
         color: SIMD4<Float>,
         coordinateSpace: AUOSCOverlayCoordinateSpace,
@@ -583,7 +583,7 @@ final class AnyUprightOSCOverlayRenderer {
         to vertices: inout [AnyUprightOverlayVertex2D]
     ) {
         let pixels = points.map { localPixel(from: $0, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: pixelFrame, width: width, height: height) }
-        appendPrimitiveQuad(
+        appendPrimitiveStretch(
             p0: pixels[0],
             p1: pixels[1],
             p2: pixels[2],
@@ -1044,7 +1044,7 @@ final class AnyUprightOSCOverlayRenderer {
         )
     }
 
-    private func appendPrimitiveQuad(
+    private func appendPrimitiveStretch(
         p0: SIMD2<Double>,
         p1: SIMD2<Double>,
         p2: SIMD2<Double>,

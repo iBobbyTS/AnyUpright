@@ -7,9 +7,9 @@ import Foundation
 import CoreImage
 import IOSurface
 
-class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
-    var fixedQuadMode: AUQuadTransformMode {
-        fatalError("Subclasses must choose a fixed Quad mode.")
+class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
+    var fixedStretchMode: AUStretchTransformMode {
+        fatalError("Subclasses must choose a fixed Stretch mode.")
     }
 
     override var needsFullBuffer: Bool {
@@ -17,11 +17,11 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
     }
 
     var showsSourceEditMode: Bool {
-        fixedQuadMode == .innerStretch
+        fixedStretchMode == .innerStretch
     }
 
     var showsCornerParameters: Bool {
-        fixedQuadMode == .outputCorners
+        fixedStretchMode == .outputCorners
     }
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
@@ -30,35 +30,35 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
         if showsSourceEditMode {
             paramAPI.addToggleButton(
                 withName: "Edit Mode",
-                parameterID: QuadParam.showCornerAdjuster.rawValue,
+                parameterID: StretchParam.showCornerAdjuster.rawValue,
                 defaultValue: true,
                 parameterFlags: defaultFlags()
             )
-            addQuadChooseFromDetections(paramAPI, parameterFlags: defaultFlags())
-            addQuadInnerStretchDetectionScoreThreshold(paramAPI, parameterFlags: defaultFlags())
+            addStretchChooseFromDetections(paramAPI, parameterFlags: defaultFlags())
+            addInnerStretchDetectionScoreThreshold(paramAPI, parameterFlags: defaultFlags())
         } else {
             paramAPI.addToggleButton(
                 withName: "Edit Mode",
-                parameterID: QuadParam.showCornerAdjuster.rawValue,
+                parameterID: StretchParam.showCornerAdjuster.rawValue,
                 defaultValue: false,
                 parameterFlags: hiddenFlags()
             )
-            addQuadChooseFromDetections(paramAPI, parameterFlags: hiddenFlags())
+            addStretchChooseFromDetections(paramAPI, parameterFlags: hiddenFlags())
         }
 
         let cornerGroupFlags = showsCornerParameters ? collapsedFlags() : hiddenCollapsedFlags()
-        addCornerParameters(paramAPI, title: "Top Left", groupID: QuadGroup.topLeft.rawValue, percentX: .topLeftPercentX, percentY: .topLeftPercentY, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY, groupFlags: cornerGroupFlags)
-        addCornerParameters(paramAPI, title: "Top Right", groupID: QuadGroup.topRight.rawValue, percentX: .topRightPercentX, percentY: .topRightPercentY, pixelX: .topRightPixelX, pixelY: .topRightPixelY, groupFlags: cornerGroupFlags)
-        addCornerParameters(paramAPI, title: "Bottom Right", groupID: QuadGroup.bottomRight.rawValue, percentX: .bottomRightPercentX, percentY: .bottomRightPercentY, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
-        addCornerParameters(paramAPI, title: "Bottom Left", groupID: QuadGroup.bottomLeft.rawValue, percentX: .bottomLeftPercentX, percentY: .bottomLeftPercentY, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Top Left", groupID: StretchGroup.topLeft.rawValue, percentX: .topLeftPercentX, percentY: .topLeftPercentY, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Top Right", groupID: StretchGroup.topRight.rawValue, percentX: .topRightPercentX, percentY: .topRightPercentY, pixelX: .topRightPixelX, pixelY: .topRightPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Bottom Right", groupID: StretchGroup.bottomRight.rawValue, percentX: .bottomRightPercentX, percentY: .bottomRightPercentY, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Bottom Left", groupID: StretchGroup.bottomLeft.rawValue, percentX: .bottomLeftPercentX, percentY: .bottomLeftPercentY, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
 
         if showsSourceEditMode {
-            addQuadInnerStretchDetectionPrimitiveParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), hiddenFlags: hiddenFlags())
+            addInnerStretchDetectionPrimitiveParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), hiddenFlags: hiddenFlags())
         }
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
-        var result = quadParameterState(at: renderTime, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
+        var result = stretchParameterState(at: renderTime, paramAPI: parameterRetrievalAPI(), fixedMode: fixedStretchMode)
         populateStableRenderSizes(&result, at: renderTime)
         return result
     }
@@ -66,14 +66,14 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
     private func addFixedModeParameter(_ paramAPI: FxParameterCreationAPI_v5) {
         paramAPI.addPopupMenu(
             withName: "Mode",
-            parameterID: QuadParam.mode.rawValue,
-            defaultValue: UInt32(fixedQuadMode.rawValue),
+            parameterID: StretchParam.mode.rawValue,
+            defaultValue: UInt32(fixedStretchMode.rawValue),
             menuEntries: ["Outer Stretch", "Inner Stretch"],
             parameterFlags: hiddenFlags()
         )
     }
 
-    private func addCornerParameters(_ paramAPI: FxParameterCreationAPI_v5, title: String, groupID: UInt32, percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam, groupFlags: FxParameterFlags) {
+    private func addCornerParameters(_ paramAPI: FxParameterCreationAPI_v5, title: String, groupID: UInt32, percentX: StretchParam, percentY: StretchParam, pixelX: StretchParam, pixelY: StretchParam, groupFlags: FxParameterFlags) {
         paramAPI.startParameterSubGroup(title, parameterID: groupID, parameterFlags: groupFlags)
         addPercentSlider(paramAPI, name: "\(title) X %", id: percentX.rawValue)
         addPercentSlider(paramAPI, name: "\(title) Y %", id: percentY.rawValue)
@@ -120,22 +120,22 @@ class AnyUprightQuadModePlugIn: AnyUprightWarpEffect {
 }
 
 @objc(AnyUprightInnerStretchPlugIn)
-class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
+class AnyUprightInnerStretchPlugIn: AnyUprightStretchModePlugIn, FxAnalyzer {
     private let analysisLock = NSLock()
     private let analysisContext = CIContext(options: nil)
-    private var analysisState = QuadAnalysisScratchState()
+    private var analysisState = InnerStretchAnalysisScratchState()
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         paramAPI.addPushButton(
             withName: "Detect Edge and Corner",
-            parameterID: QuadParam.detectInnerStretch.rawValue,
+            parameterID: StretchParam.detectInnerStretch.rawValue,
             selector: #selector(detectInnerStretch),
             parameterFlags: defaultFlags()
         )
         try super.addEffectParameters(paramAPI)
     }
 
-    override var fixedQuadMode: AUQuadTransformMode {
+    override var fixedStretchMode: AUStretchTransformMode {
         .innerStretch
     }
 
@@ -146,13 +146,13 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
     private func startInnerStretchDetection(at time: CMTime) {
         analysisLock.lock()
         analysisState.hasPendingInnerStretchDetection = true
-        analysisState.detectedSourcePrimitives = QuadDetectedSourcePrimitives()
+        analysisState.detectedSourcePrimitives = InnerStretchDetectedSourcePrimitives()
         analysisState.requestedAnalysisTime = time.isValid && time.isNumeric ? time : currentParameterTime()
         analysisLock.unlock()
-        quadAnalysisDebugLog("start requested=\(analysisState.requestedAnalysisTime)")
+        stretchAnalysisDebugLog("start requested=\(analysisState.requestedAnalysisTime)")
 
         guard let analysisAPI = _apiManager.api(for: FxAnalysisAPI.self) as? FxAnalysisAPI else {
-            quadAnalysisDebugLog("start missing FxAnalysisAPI")
+            stretchAnalysisDebugLog("start missing FxAnalysisAPI")
             return
         }
 
@@ -168,7 +168,7 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
 
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
         analysisLock.lock()
-        analysisState.detectedSourcePrimitives = QuadDetectedSourcePrimitives()
+        analysisState.detectedSourcePrimitives = InnerStretchDetectedSourcePrimitives()
         analysisState.detectedSourceSize = AUSize(width: 1.0, height: 1.0)
         analysisState.detectedInnerStretchTime = analysisRange.start
         analysisLock.unlock()
@@ -184,12 +184,12 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
         }
 
         guard let image = AnyUprightAnalysisImage.grayscaleImage(from: frame, maxDimension: 540, context: analysisContext) else {
-            quadAnalysisDebugLog("analyze no grayscale frame")
+            stretchAnalysisDebugLog("analyze no grayscale frame")
             return
         }
         let size = AUSize(width: Double(image.width), height: Double(image.height))
         let primitives = detectedSourcePrimitives(in: image)
-        quadAnalysisDebugLog("analyze image=\(image.width)x\(image.height) edges=\(primitives.edges.count) corners=\(primitives.corners.count)")
+        stretchAnalysisDebugLog("analyze image=\(image.width)x\(image.height) edges=\(primitives.edges.count) corners=\(primitives.corners.count)")
 
         analysisLock.lock()
         analysisState.detectedSourcePrimitives = primitives
@@ -215,22 +215,22 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
         }
 
         performParameterAction {
-            settingAPI.setBoolValue(true, toParameter: QuadParam.showCornerAdjuster.rawValue, at: writeTime)
-            settingAPI.setBoolValue(true, toParameter: QuadParam.chooseFromDetections.rawValue, at: writeTime)
-            writeQuadInnerStretchDetectionPrimitives(primitives, size: detectedSize, settingAPI: settingAPI, time: writeTime)
+            settingAPI.setBoolValue(true, toParameter: StretchParam.showCornerAdjuster.rawValue, at: writeTime)
+            settingAPI.setBoolValue(true, toParameter: StretchParam.chooseFromDetections.rawValue, at: writeTime)
+            writeInnerStretchDetectionPrimitives(primitives, size: detectedSize, settingAPI: settingAPI, time: writeTime)
         }
-        quadAnalysisDebugLog("cleanup pending=\(pending) writeTime=\(writeTime) edges=\(primitives.edges.count) corners=\(primitives.corners.count)")
+        stretchAnalysisDebugLog("cleanup pending=\(pending) writeTime=\(writeTime) edges=\(primitives.edges.count) corners=\(primitives.corners.count)")
     }
 
-    private func detectedSourcePrimitives(in image: AUGrayscaleImage) -> QuadDetectedSourcePrimitives {
+    private func detectedSourcePrimitives(in image: AUGrayscaleImage) -> InnerStretchDetectedSourcePrimitives {
         let vertical = detectedSourceEdges(in: image, orientation: .vertical)
         let horizontal = detectedSourceEdges(in: image, orientation: .horizontal)
         let selectedEdges = Array((vertical + horizontal)
             .sorted { $0.score > $1.score }
-            .prefix(AnyUprightQuadInnerStretchDetectionEdges.slotCount))
+            .prefix(AnyUprightInnerStretchDetectionEdges.slotCount))
         let maxEdgeScore = selectedEdges.reduce(0.0) { max($0, $1.score) }
         let normalizedEdges = selectedEdges.map { edge in
-            QuadDetectedSourceEdge(
+            InnerStretchDetectedSourceEdge(
                 line: edge.line,
                 score: AnyUprightGeometry.normalizedScore(edge.score, maximum: maxEdgeScore)
             )
@@ -238,13 +238,13 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
         let corners = detectedSourceCorners(from: selectedEdges, size: AUSize(width: Double(image.width), height: Double(image.height)))
         let maxCornerScore = corners.reduce(0.0) { max($0, $1.score) }
         let normalizedCorners = corners.map { corner in
-            QuadDetectedSourceCorner(
+            InnerStretchDetectedSourceCorner(
                 point: corner.point,
                 score: AnyUprightGeometry.normalizedScore(corner.score, maximum: maxCornerScore)
             )
         }
 
-        return QuadDetectedSourcePrimitives(edges: normalizedEdges, corners: normalizedCorners)
+        return InnerStretchDetectedSourcePrimitives(edges: normalizedEdges, corners: normalizedCorners)
     }
 
     private func detectedSourceEdges(in image: AUGrayscaleImage, orientation: AUReferenceOrientation) -> [AUDetectedLineSegment] {
@@ -266,7 +266,7 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
                 maxDeviationRadians: .pi / 5.0,
                 edgeThreshold: 36.0,
                 voteThreshold: voteThreshold,
-                maxLines: max(12, AnyUprightQuadInnerStretchDetectionEdges.slotCount / 2),
+                maxLines: max(12, AnyUprightInnerStretchDetectionEdges.slotCount / 2),
                 nonMaximumThetaRadius: 3,
                 nonMaximumRhoRadius: 6
             )
@@ -274,12 +274,12 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
         .filter { $0.line.length >= minimumLength }
     }
 
-    private func detectedSourceCorners(from edges: [AUDetectedLineSegment], size: AUSize) -> [QuadDetectedSourceCorner] {
+    private func detectedSourceCorners(from edges: [AUDetectedLineSegment], size: AUSize) -> [InnerStretchDetectedSourceCorner] {
         let vertical = edges.filter { $0.orientation == .vertical }
         let horizontal = edges.filter { $0.orientation == .horizontal }
         let tolerance = max(10.0, min(size.width, size.height) * 0.035)
         let mergeRadius = max(6.0, min(size.width, size.height) * 0.018)
-        var rawCorners: [QuadDetectedSourceCorner] = []
+        var rawCorners: [InnerStretchDetectedSourceCorner] = []
 
         for verticalEdge in vertical {
             for horizontalEdge in horizontal {
@@ -299,14 +299,14 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
                 }
 
                 let proximity = max(0.25, 1.0 - distance / tolerance)
-                rawCorners.append(QuadDetectedSourceCorner(
+                rawCorners.append(InnerStretchDetectedSourceCorner(
                     point: point,
                     score: (verticalEdge.score + horizontalEdge.score) * 0.5 * proximity
                 ))
             }
         }
 
-        var selected: [QuadDetectedSourceCorner] = []
+        var selected: [InnerStretchDetectedSourceCorner] = []
         for corner in rawCorners.sorted(by: { $0.score > $1.score }) {
             let duplicate = selected.contains { existing in
                 hypot(existing.point.x - corner.point.x, existing.point.y - corner.point.y) <= mergeRadius
@@ -316,7 +316,7 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
             }
 
             selected.append(corner)
-            if selected.count >= AnyUprightQuadInnerStretchDetectionCorners.slotCount {
+            if selected.count >= AnyUprightInnerStretchDetectionCorners.slotCount {
                 break
             }
         }
@@ -324,13 +324,13 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
         return selected
     }
 
-    private func quadAnalysisDebugLog(_ message: String) {
-        let flagPath = "/tmp/AnyUprightQuadOSC.debug"
+    private func stretchAnalysisDebugLog(_ message: String) {
+        let flagPath = "/tmp/AnyUprightStretchOSC.debug"
         guard FileManager.default.fileExists(atPath: flagPath) else {
             return
         }
 
-        let logPath = "/tmp/AnyUprightQuadOSC.log"
+        let logPath = "/tmp/AnyUprightStretchOSC.log"
         let line = "[\(Date().timeIntervalSince1970)] analysis \(message)\n"
         guard let data = line.data(using: .utf8) else {
             return
@@ -348,8 +348,8 @@ class AnyUprightInnerStretchPlugIn: AnyUprightQuadModePlugIn, FxAnalyzer {
 }
 
 @objc(AnyUprightOuterStretchPlugIn)
-class AnyUprightOuterStretchPlugIn: AnyUprightQuadModePlugIn {
-    override var fixedQuadMode: AUQuadTransformMode {
+class AnyUprightOuterStretchPlugIn: AnyUprightStretchModePlugIn {
+    override var fixedStretchMode: AUStretchTransformMode {
         .outputCorners
     }
 }

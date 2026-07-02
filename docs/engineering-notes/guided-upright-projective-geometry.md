@@ -6,7 +6,7 @@ Observed versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 (447036), Xco
 
 This note records transferable geometry lessons for guided upright or perspective-correction tools that let a user draw reference lines which should become vertical or horizontal after correction. It is not a product feature description. Current product behavior and parameter names should live in project implementation docs.
 
-For coordinate-layer and Y-axis rules, read `quad-coordinate-layer-contract.md` and `y-axis-coordinate-conventions.md` first. This file focuses on the geometric contract once reference lines are already expressed in one consistent image/output coordinate system.
+For coordinate-layer and Y-axis rules, read `stretch-coordinate-layer-contract.md` and `y-axis-coordinate-conventions.md` first. This file focuses on the geometric contract once reference lines are already expressed in one consistent image/output coordinate system.
 
 ## Official API Baseline
 

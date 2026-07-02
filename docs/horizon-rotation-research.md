@@ -1,6 +1,6 @@
 # Horizon Rotation Research Notes
 
-This note records research for the `AnyUpright Horizon` effect only. It is intentionally scoped to roll estimation and centered affine rotation. Plane rectification, four-corner correction, keystone, input quadrilateral selection, camera pitch correction, FoV recovery, and homography validation belong to the Quad or Upright workstreams.
+This note records research for the `AnyUpright Horizon` effect only. It is intentionally scoped to roll estimation and centered affine rotation. Plane rectification, four-corner correction, keystone, input selection selection, camera pitch correction, FoV recovery, and homography validation belong to the Stretch or Upright workstreams.
 
 ## Product Boundary
 
@@ -8,8 +8,8 @@ This note records research for the `AnyUpright Horizon` effect only. It is inten
 | --- | --- | --- | --- |
 | The camera was rolled a little; make the image level. | `AnyUpright Horizon` | `Rotation`, optionally `Fill Frame` | In scope. Estimate roll angle and render a centered affine rotation. |
 | Vertical or horizontal perspective needs correction. | `AnyUpright Upright` | `Vertical Perspective`, `Horizontal Perspective`, optionally `Rotation` | Out of scope for this note. Use separate guide-line and perspective validation. |
-| A screen, sign, page, or facade should be mapped to a rectangle. | `AnyUpright Inner Stretch` | Source quadrilateral hidden corner offsets | Out of scope for this note. Validate with corner and homography metrics. |
-| The output frame corners should be warped manually. | `AnyUpright Outer Stretch` | Output-corner offsets | Out of scope for this note. Validate with destination quad mapping. |
+| A screen, sign, page, or facade should be mapped to a rectangle. | `AnyUpright Inner Stretch` | Source selection hidden corner offsets | Out of scope for this note. Validate with corner and homography metrics. |
+| The output frame corners should be warped manually. | `AnyUpright Outer Stretch` | Output-corner offsets | Out of scope for this note. Validate with destination stretch mapping. |
 
 For the Horizon effect, a detector may internally estimate a horizon line, gravity/up direction, pitch, or FoV if that helps obtain a better roll estimate. The effect should consume only the roll correction and discard the other degrees of freedom.
 
@@ -131,7 +131,7 @@ Project integration and host validation:
 - Secondary metric: failure handling. Count low-confidence or no-result frames separately from wrong high-confidence corrections.
 - Rendering metric: after writing `Rotation`, the rendered frame should be a centered affine rotation. `Fill Frame` may zoom to hide black edges, but it must not introduce a perspective warp.
 - Regression fixtures: include small known rotations around zero, mild user-like corrections such as +/-0.5, +/-1, +/-2, and +/-5 degrees, plus a few larger stress rotations.
-- Current out-of-scope metrics: corner error, quadrilateral IoU, homography reprojection error, vertical convergence correction, pitch error, and FoV error.
+- Current out-of-scope metrics: corner error, four-corner selection IoU, homography reprojection error, vertical convergence correction, pitch error, and FoV error.
 
 ## Implementation Notes For AnyUpright
 

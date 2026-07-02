@@ -69,8 +69,8 @@ struct RenderWarpPreviews {
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
         try renderHorizonPreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
-        try renderQuadInnerStretchPreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
-        try renderQuadOutputPreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
+        try renderInnerStretchPreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
+        try renderStretchOutputPreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
         try renderUprightPreview(assetDirectory: assetDirectory, outputDirectory: outputDirectory)
 
         print("Rendered AnyUpright warp previews in \(outputDirectory.path)")
@@ -85,17 +85,17 @@ struct RenderWarpPreviews {
         try saveWarped(image, outputSize: size, outputToSource: matrix, url: outputDirectory.appendingPathComponent("horizon-fill-preview.png"))
     }
 
-    private static func renderQuadInnerStretchPreview(assetDirectory: URL, outputDirectory: URL) throws {
-        let image = try loadRGBA(assetDirectory.appendingPathComponent("quad-phone-screen.png"))
+    private static func renderInnerStretchPreview(assetDirectory: URL, outputDirectory: URL) throws {
+        let image = try loadRGBA(assetDirectory.appendingPathComponent("stretch-phone-screen.png"))
         let size = AUSize(width: Double(image.width), height: Double(image.height))
-        let innerStretch = AUQuad(
+        let innerStretch = AUStretchCorners(
             topLeft: AUPoint(x: 520.0, y: 210.0),
             topRight: AUPoint(x: 1390.0, y: 305.0),
             bottomRight: AUPoint(x: 1285.0, y: 890.0),
             bottomLeft: AUPoint(x: 430.0, y: 790.0)
         )
         let offsets = pixelOffsets(for: innerStretch, base: AnyUprightGeometry.innerStretchDefault(size), size: size)
-        let previewMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
+        let previewMatrix = AnyUprightGeometry.stretchOutputToSourceMatrix(
             from: offsets,
             mode: .innerStretch,
             showCornerAdjuster: true,
@@ -104,7 +104,7 @@ struct RenderWarpPreviews {
         )
         try assertMaps(previewMatrix, AUPoint(x: 321.0, y: 654.0), to: AUPoint(x: 321.0, y: 654.0), label: "inner stretch edit preview should keep image still")
 
-        let selectionToRect = AnyUprightGeometry.quadSelectionToOutputRectMatrix(
+        let selectionToRect = AnyUprightGeometry.stretchSelectionToOutputRectMatrix(
             from: offsets,
             outputSize: size,
             sourceSize: size
@@ -117,10 +117,10 @@ struct RenderWarpPreviews {
             selectionToRect: selectionToRect,
             innerStretchHandles: innerStretch,
             outputToSource: previewMatrix,
-            url: outputDirectory.appendingPathComponent("quad-inner-stretch-adjuster-preview.png")
+            url: outputDirectory.appendingPathComponent("stretch-inner-stretch-adjuster-preview.png")
         )
 
-        let appliedMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
+        let appliedMatrix = AnyUprightGeometry.stretchOutputToSourceMatrix(
             from: offsets,
             mode: .innerStretch,
             showCornerAdjuster: false,
@@ -129,61 +129,61 @@ struct RenderWarpPreviews {
         )
         try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: innerStretch.topLeft, label: "inner stretch top-left maps to source")
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: innerStretch.bottomRight, label: "inner stretch bottom-right maps to source")
-        try saveWarped(image, outputSize: size, outputToSource: appliedMatrix, url: outputDirectory.appendingPathComponent("quad-inner-stretch-apply-preview.png"))
+        try saveWarped(image, outputSize: size, outputToSource: appliedMatrix, url: outputDirectory.appendingPathComponent("stretch-inner-stretch-apply-preview.png"))
 
     }
 
-    private static func renderQuadOutputPreview(assetDirectory: URL, outputDirectory: URL) throws {
-        let image = try loadRGBA(assetDirectory.appendingPathComponent("quad-phone-screen.png"))
+    private static func renderStretchOutputPreview(assetDirectory: URL, outputDirectory: URL) throws {
+        let image = try loadRGBA(assetDirectory.appendingPathComponent("stretch-phone-screen.png"))
         let size = AUSize(width: Double(image.width), height: Double(image.height))
         var offsets = AUCornerOffsets()
         offsets.topLeftPixels = AUPoint(x: 180.0, y: -80.0)
         offsets.topRightPixels = AUPoint(x: -120.0, y: -40.0)
         offsets.bottomRightPixels = AUPoint(x: -260.0, y: 140.0)
         offsets.bottomLeftPixels = AUPoint(x: 120.0, y: 60.0)
-        let outputQuad = AnyUprightGeometry.quad(from: offsets, size: size)
-        let matrix = AnyUprightGeometry.quadOutputToSourceMatrix(
+        let outputStretch = AnyUprightGeometry.stretch(from: offsets, size: size)
+        let matrix = AnyUprightGeometry.stretchOutputToSourceMatrix(
             from: offsets,
             mode: .outputCorners,
             showCornerAdjuster: false,
             outputSize: size,
             sourceSize: size
         )
-        try assertMaps(matrix, outputQuad.topLeft, to: AUPoint(x: 0.0, y: 0.0), label: "output corner top-left maps to source frame")
-        try saveWarped(image, outputSize: size, outputToSource: matrix, url: outputDirectory.appendingPathComponent("quad-output-corners-preview.png"))
+        try assertMaps(matrix, outputStretch.topLeft, to: AUPoint(x: 0.0, y: 0.0), label: "output corner top-left maps to source frame")
+        try saveWarped(image, outputSize: size, outputToSource: matrix, url: outputDirectory.appendingPathComponent("stretch-output-corners-preview.png"))
     }
 
     private static func renderUprightPreview(assetDirectory: URL, outputDirectory: URL) throws {
         let image = try loadRGBA(assetDirectory.appendingPathComponent("upright-facade-perspective.png"))
         let size = AUSize(width: Double(image.width), height: Double(image.height))
-        let outputQuad = AnyUprightGeometry.uprightQuad(vertical: 0.45, horizontal: -0.25, size: size)
-        let verticalOnlyQuad = AnyUprightGeometry.uprightQuad(vertical: 0.45, horizontal: 0.0, size: size)
-        let horizontalOnlyQuad = AnyUprightGeometry.uprightQuad(vertical: 0.0, horizontal: -0.25, size: size)
+        let outputStretch = AnyUprightGeometry.uprightOutputCorners(vertical: 0.45, horizontal: -0.25, size: size)
+        let verticalOnlyStretch = AnyUprightGeometry.uprightOutputCorners(vertical: 0.45, horizontal: 0.0, size: size)
+        let horizontalOnlyStretch = AnyUprightGeometry.uprightOutputCorners(vertical: 0.0, horizontal: -0.25, size: size)
         let perspective = AnyUprightGeometry.uprightOutputToSourceMatrix(vertical: 0.45, horizontal: -0.25, size: size)
         let rotation = AnyUprightGeometry.rotationOutputToSource(angleRadians: degreesToRadians(-2.0), fillFrame: false, size: size)
         let matrix = AnyUprightGeometry.multiply(perspective, rotation)
 
-        try assertTrue(verticalOnlyQuad.topLeft.x > 0.0 && verticalOnlyQuad.bottomLeft.x < 0.0, "positive vertical perspective should move top inward and bottom outward")
-        try assertTrue(horizontalOnlyQuad.topRight.y < 0.0 && horizontalOnlyQuad.bottomRight.y > size.height, "negative horizontal perspective should move right side outward around centerline")
+        try assertTrue(verticalOnlyStretch.topLeft.x > 0.0 && verticalOnlyStretch.bottomLeft.x < 0.0, "positive vertical perspective should move top inward and bottom outward")
+        try assertTrue(horizontalOnlyStretch.topRight.y < 0.0 && horizontalOnlyStretch.bottomRight.y > size.height, "negative horizontal perspective should move right side outward around centerline")
         try assertMaps(perspective, AUPoint(x: size.width / 2.0, y: size.height / 2.0), to: AUPoint(x: size.width / 2.0, y: size.height / 2.0), label: "upright perspective should keep center anchored")
-        try assertMaps(AnyUprightGeometry.homography(from: outputQuad, to: AUQuad.fullFrame(size)), AUPoint(x: size.width / 2.0, y: size.height / 2.0), to: AUPoint(x: size.width / 2.0, y: size.height / 2.0), label: "derived upright quad should keep center anchored")
+        try assertMaps(AnyUprightGeometry.homography(from: outputStretch, to: AUStretchCorners.fullFrame(size)), AUPoint(x: size.width / 2.0, y: size.height / 2.0), to: AUPoint(x: size.width / 2.0, y: size.height / 2.0), label: "derived upright stretch should keep center anchored")
         try saveWarped(image, outputSize: size, outputToSource: matrix, url: outputDirectory.appendingPathComponent("upright-centered-preview.png"))
     }
 
-    private static func pixelOffsets(for quad: AUQuad, size: AUSize) -> AUCornerOffsets {
-        pixelOffsets(for: quad, base: AUQuad.fullFrame(size), size: size)
+    private static func pixelOffsets(for stretch: AUStretchCorners, size: AUSize) -> AUCornerOffsets {
+        pixelOffsets(for: stretch, base: AUStretchCorners.fullFrame(size), size: size)
     }
 
-    private static func pixelOffsets(for quad: AUQuad, base: AUQuad, size: AUSize) -> AUCornerOffsets {
+    private static func pixelOffsets(for stretch: AUStretchCorners, base: AUStretchCorners, size: AUSize) -> AUCornerOffsets {
         func offset(base: AUPoint, target: AUPoint) -> AUPoint {
             AUPoint(x: target.x - base.x, y: base.y - target.y)
         }
 
         var offsets = AUCornerOffsets()
-        offsets.topLeftPixels = offset(base: base.topLeft, target: quad.topLeft)
-        offsets.topRightPixels = offset(base: base.topRight, target: quad.topRight)
-        offsets.bottomRightPixels = offset(base: base.bottomRight, target: quad.bottomRight)
-        offsets.bottomLeftPixels = offset(base: base.bottomLeft, target: quad.bottomLeft)
+        offsets.topLeftPixels = offset(base: base.topLeft, target: stretch.topLeft)
+        offsets.topRightPixels = offset(base: base.topRight, target: stretch.topRight)
+        offsets.bottomRightPixels = offset(base: base.bottomRight, target: stretch.bottomRight)
+        offsets.bottomLeftPixels = offset(base: base.bottomLeft, target: stretch.bottomLeft)
         return offsets
     }
 
@@ -211,7 +211,7 @@ struct RenderWarpPreviews {
         _ image: RGBAImage,
         outputSize: AUSize,
         selectionToRect: simd_float3x3,
-        innerStretchHandles: AUQuad,
+        innerStretchHandles: AUStretchCorners,
         outputToSource: simd_float3x3,
         url: URL
     ) throws {
@@ -271,12 +271,12 @@ struct RenderWarpPreviews {
         return (channel(a.0, b.0), channel(a.1, b.1), channel(a.2, b.2), a.3)
     }
 
-    private static func selectionBorderCoverage(outputPoint: AUPoint, handles: AUQuad, radius: Double) -> Double {
-        let distance = AnyUprightGeometry.distanceToQuadEdge(from: outputPoint, quad: handles)
+    private static func selectionBorderCoverage(outputPoint: AUPoint, handles: AUStretchCorners, radius: Double) -> Double {
+        let distance = AnyUprightGeometry.distanceToSelectionEdge(from: outputPoint, stretch: handles)
         return coverage(distance: distance, radius: radius)
     }
 
-    private static func selectionHandleCoverage(_ point: AUPoint, handles: AUQuad, radius: Double) -> Double {
+    private static func selectionHandleCoverage(_ point: AUPoint, handles: AUStretchCorners, radius: Double) -> Double {
         let corners = [
             handles.topLeft,
             handles.topRight,

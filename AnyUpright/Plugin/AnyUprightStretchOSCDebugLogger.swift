@@ -1,5 +1,5 @@
 //
-//  AnyUprightQuadOSCDebugLogger.swift
+//  AnyUprightStretchOSCDebugLogger.swift
 //  AnyUpright
 //
 
@@ -11,12 +11,12 @@ import Vision
 
 extension AnyUprightInnerStretchOSCPlugIn {
     func debugLog(_ message: String) {
-        let flagPath = "/tmp/AnyUprightQuadOSC.debug"
+        let flagPath = "/tmp/AnyUprightStretchOSC.debug"
         guard FileManager.default.fileExists(atPath: flagPath) else {
             return
         }
 
-        let logPath = "/tmp/AnyUprightQuadOSC.log"
+        let logPath = "/tmp/AnyUprightStretchOSC.log"
         let timestamp = String(format: "%.3f", Date().timeIntervalSince1970)
         guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
             return
@@ -35,12 +35,12 @@ extension AnyUprightInnerStretchOSCPlugIn {
     func debugOSCEventResolution(
         label: String,
         eventPoint: AUPoint,
-        resolved: QuadOSCEventResolution,
-        part: QuadOSCPart?,
-        mode: AUQuadTransformMode,
+        resolved: StretchOSCEventResolution,
+        part: StretchOSCPart?,
+        mode: AUStretchTransformMode,
         size: AUSize
     ) {
-        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadOSC.debug") else {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightStretchOSC.debug") else {
             return
         }
 
@@ -71,14 +71,14 @@ extension AnyUprightInnerStretchOSCPlugIn {
 
     func debugOSCDragDelta(
         label: String,
-        previous: QuadOSCEventResolution,
-        current: QuadOSCEventResolution,
+        previous: StretchOSCEventResolution,
+        current: StretchOSCEventResolution,
         previousObject: AUPoint,
         currentObject: AUPoint,
         pixelDelta: AUPoint,
         size: AUSize
     ) {
-        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadOSC.debug") else {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightStretchOSC.debug") else {
             return
         }
 
@@ -120,7 +120,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
     }
 
     func nextDebugDrawSequence() -> Int {
-        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadOSC.debug") else {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightStretchOSC.debug") else {
             return 0
         }
 
@@ -181,11 +181,11 @@ extension AnyUprightInnerStretchOSCPlugIn {
         destinationImage: FxImageTile,
         outputSize: AUSize,
         objectSize: AUSize,
-        quad: [AUPoint],
-        objectCanvasQuad: [AUPoint],
+        stretch: [AUPoint],
+        objectCanvasStretch: [AUPoint],
         canvasFrame: [AUPoint]
     ) {
-        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadOSC.debug") else {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightStretchOSC.debug") else {
             return
         }
 
@@ -199,7 +199,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
             y: surfaceSize.height / max(frameBounds?.height ?? 1.0, 1.0)
         )
 
-        let pointRows = quad.enumerated().map { index, point -> String in
+        let pointRows = stretch.enumerated().map { index, point -> String in
             let normalizedInFrame = AUPoint(
                 x: (point.x - (frameBounds?.minX ?? 0.0)) / max(frameBounds?.width ?? 1.0, 1.0),
                 y: (point.y - (frameBounds?.minY ?? 0.0)) / max(frameBounds?.height ?? 1.0, 1.0)
@@ -235,18 +235,18 @@ extension AnyUprightInnerStretchOSCPlugIn {
             )
         }.joined(separator: " | ")
 
-        debugCanvasMetrics(label: "draw-source seq=\(sequence)", width: width, height: height, destinationImage: destinationImage, quad: quad, canvasFrame: canvasFrame)
+        debugCanvasMetrics(label: "draw-source seq=\(sequence)", width: width, height: height, destinationImage: destinationImage, stretch: stretch, canvasFrame: canvasFrame)
         debugLog(
             String(
-                format: "draw-source seq=%d output=(%.2f,%.2f) surface=(%.2f,%.2f) frameBounds=%@ quadBounds=%@ objectQuad=%@ frameCenter=(%.2f,%.2f) surfaceCenter=(%.2f,%.2f) frameToSurfaceDelta=(%.2f,%.2f) surfacePerFrame=(%.6f,%.6f)",
+                format: "draw-source seq=%d output=(%.2f,%.2f) surface=(%.2f,%.2f) frameBounds=%@ stretchBounds=%@ objectStretch=%@ frameCenter=(%.2f,%.2f) surfaceCenter=(%.2f,%.2f) frameToSurfaceDelta=(%.2f,%.2f) surfacePerFrame=(%.6f,%.6f)",
                 sequence,
                 outputSize.width,
                 outputSize.height,
                 surfaceSize.width,
                 surfaceSize.height,
                 debugBoundsDescription(of: canvasFrame),
-                debugBoundsDescription(of: quad),
-                debugDescription(of: objectCanvasQuad),
+                debugBoundsDescription(of: stretch),
+                debugDescription(of: objectCanvasStretch),
                 frameCenter.x,
                 frameCenter.y,
                 surfaceCenter.x,
@@ -272,8 +272,8 @@ extension AnyUprightInnerStretchOSCPlugIn {
         debugLog("draw-source seq=\(sequence) point-map \(pointRows)")
     }
 
-    func debugCanvasMetrics(label: String, width: Int? = nil, height: Int? = nil, destinationImage: FxImageTile? = nil, eventPoint: AUPoint? = nil, quad: [AUPoint]? = nil, canvasFrame: [AUPoint]? = nil) {
-        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadOSC.debug") else {
+    func debugCanvasMetrics(label: String, width: Int? = nil, height: Int? = nil, destinationImage: FxImageTile? = nil, eventPoint: AUPoint? = nil, stretch: [AUPoint]? = nil, canvasFrame: [AUPoint]? = nil) {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightStretchOSC.debug") else {
             return
         }
 
@@ -292,10 +292,10 @@ extension AnyUprightInnerStretchOSCPlugIn {
         }
         let eventDescription = eventPoint.map { String(format: " event=(%.1f,%.1f)", $0.x, $0.y) } ?? ""
         let frameDescription = canvasFrame.map { " frame=\(debugDescription(of: $0))" } ?? ""
-        let quadDescription = quad.map { " quad=\(debugDescription(of: $0))" } ?? ""
+        let stretchDescription = stretch.map { " stretch=\(debugDescription(of: $0))" } ?? ""
         let sizeDescription = width.flatMap { widthValue in height.map { " wh=\(widthValue)x\($0)" } } ?? ""
         let boundsDescription = String(format: " objectBounds=(%.1f,%.1f,%.1f,%.1f)", objectBounds.origin.x, objectBounds.origin.y, objectBounds.size.width, objectBounds.size.height)
 
-        debugLog("\(label)\(sizeDescription) surface=\(surfaceDescription) zoom=\(zoom) backing=\(backingScale)\(boundsDescription)\(eventDescription)\(frameDescription)\(quadDescription)")
+        debugLog("\(label)\(sizeDescription) surface=\(surfaceDescription) zoom=\(zoom) backing=\(backingScale)\(boundsDescription)\(eventDescription)\(frameDescription)\(stretchDescription)")
     }
 }

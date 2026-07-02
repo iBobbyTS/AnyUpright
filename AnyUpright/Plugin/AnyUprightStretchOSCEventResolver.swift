@@ -1,5 +1,5 @@
 //
-//  AnyUprightQuadOSCEventResolver.swift
+//  AnyUprightStretchOSCEventResolver.swift
 //  AnyUpright
 //
 
@@ -9,31 +9,31 @@ import CoreImage
 import IOSurface
 import Vision
 
-enum QuadOSCPart: Int {
+enum StretchOSCPart: Int {
     case none = 0
     case topLeft = 1
     case topRight = 2
     case bottomRight = 3
     case bottomLeft = 4
-    case quad = 5
+    case stretch = 5
     case topEdge = 6
     case rightEdge = 7
     case bottomEdge = 8
     case leftEdge = 9
 }
 
-struct QuadOSCDragState {
-    var part: QuadOSCPart
+struct StretchOSCDragState {
+    var part: StretchOSCPart
     var lastCanvasPoint: AUPoint
-    var eventCoordinateMode: QuadOSCEventCoordinateMode
+    var eventCoordinateMode: StretchOSCEventCoordinateMode
 }
 
-enum QuadOSCEventCoordinateMode {
+enum StretchOSCEventCoordinateMode {
     case rawCanvas
     case mappedSurface
 }
 
-extension QuadOSCEventCoordinateMode: CustomStringConvertible {
+extension StretchOSCEventCoordinateMode: CustomStringConvertible {
     var description: String {
         switch self {
         case .rawCanvas:
@@ -44,22 +44,22 @@ extension QuadOSCEventCoordinateMode: CustomStringConvertible {
     }
 }
 
-struct QuadOSCEventResolution {
+struct StretchOSCEventResolution {
     var canvasPoint: AUPoint
-    var coordinateMode: QuadOSCEventCoordinateMode
+    var coordinateMode: StretchOSCEventCoordinateMode
 }
 
-struct QuadOSCHitGeometry {
+struct StretchOSCHitGeometry {
     var handles: [AUOSCHandle]
-    var quad: [AUPoint]
+    var stretch: [AUPoint]
     var rawCanvasHandles: [AUOSCHandle]
-    var rawCanvasQuad: [AUPoint]
+    var rawCanvasStretch: [AUPoint]
     var usesRawCanvasHitLayer: Bool
 }
 
 extension AnyUprightInnerStretchOSCPlugIn {
-    func quadCanvasPoints(from objectPoints: AUQuad) -> AUQuad {
-        AUQuad(
+    func stretchCanvasPoints(from objectPoints: AUStretchCorners) -> AUStretchCorners {
+        AUStretchCorners(
             topLeft: canvasPoint(fromObjectPoint: objectPoints.topLeft),
             topRight: canvasPoint(fromObjectPoint: objectPoints.topRight),
             bottomRight: canvasPoint(fromObjectPoint: objectPoints.bottomRight),
@@ -67,38 +67,38 @@ extension AnyUprightInnerStretchOSCPlugIn {
         )
     }
 
-    func rawHitTestCanvasPoints(from objectPoints: AUQuad, mode: AUQuadTransformMode) -> AUQuad {
+    func rawHitTestCanvasPoints(from objectPoints: AUStretchCorners, mode: AUStretchTransformMode) -> AUStretchCorners {
         switch mode {
         case .outputCorners:
-            return quadCanvasPoints(from: objectPoints)
+            return stretchCanvasPoints(from: objectPoints)
         case .innerStretch:
             // Inner Stretch's render preview is top-origin image/output geometry; raw Final Cut canvas events need that same visible layer.
-            return quadCanvasPoints(from: AnyUprightGeometry.verticallyFlippedObjectQuad(objectPoints))
+            return stretchCanvasPoints(from: AnyUprightGeometry.verticallyFlippedObjectSelection(objectPoints))
         }
     }
 
-    func hitGeometry(from state: AnyUprightParameterState, size: AUSize, mode: AUQuadTransformMode) -> QuadOSCHitGeometry {
-        let objectPoints = quadObjectPoints(from: state, size: size, mode: mode)
-        let canvasPoints = quadCanvasPoints(from: objectPoints)
+    func hitGeometry(from state: AnyUprightParameterState, size: AUSize, mode: AUStretchTransformMode) -> StretchOSCHitGeometry {
+        let objectPoints = stretchObjectPoints(from: state, size: size, mode: mode)
+        let canvasPoints = stretchCanvasPoints(from: objectPoints)
         let rawCanvasPoints = rawHitTestCanvasPoints(from: objectPoints, mode: mode)
         let handles = [
-            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
-            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+            AUOSCHandle(point: canvasPoints.topLeft, part: StretchOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: canvasPoints.topRight, part: StretchOSCPart.topRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomRight, part: StretchOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomLeft, part: StretchOSCPart.bottomLeft.rawValue)
         ]
         let rawHandles = [
-            AUOSCHandle(point: rawCanvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: rawCanvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
-            AUOSCHandle(point: rawCanvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: rawCanvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+            AUOSCHandle(point: rawCanvasPoints.topLeft, part: StretchOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: rawCanvasPoints.topRight, part: StretchOSCPart.topRight.rawValue),
+            AUOSCHandle(point: rawCanvasPoints.bottomRight, part: StretchOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: rawCanvasPoints.bottomLeft, part: StretchOSCPart.bottomLeft.rawValue)
         ]
 
-        return QuadOSCHitGeometry(
+        return StretchOSCHitGeometry(
             handles: handles,
-            quad: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
+            stretch: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
             rawCanvasHandles: rawHandles,
-            rawCanvasQuad: [rawCanvasPoints.topLeft, rawCanvasPoints.topRight, rawCanvasPoints.bottomRight, rawCanvasPoints.bottomLeft],
+            rawCanvasStretch: [rawCanvasPoints.topLeft, rawCanvasPoints.topRight, rawCanvasPoints.bottomRight, rawCanvasPoints.bottomLeft],
             usesRawCanvasHitLayer: mode == .innerStretch
         )
     }
@@ -150,32 +150,32 @@ extension AnyUprightInnerStretchOSCPlugIn {
     func hitTestPart(
         forEventPoint eventPoint: AUPoint,
         handles: [AUOSCHandle],
-        quad: [AUPoint],
+        stretch: [AUPoint],
         rawCanvasHandles: [AUOSCHandle],
-        rawCanvasQuad: [AUPoint],
+        rawCanvasStretch: [AUPoint],
         useRawCanvasHitLayer: Bool,
         canvasFrame: [AUPoint],
         rawCanvasHitPadding: Double,
-        preferredMode: QuadOSCEventCoordinateMode?
-    ) -> (part: QuadOSCPart, resolution: QuadOSCEventResolution)? {
+        preferredMode: StretchOSCEventCoordinateMode?
+    ) -> (part: StretchOSCPart, resolution: StretchOSCEventResolution)? {
         let resolutions = eventResolutions(
             fromEventPoint: eventPoint,
             canvasFrame: canvasFrame,
-            rawCanvasQuad: rawCanvasQuad,
+            rawCanvasStretch: rawCanvasStretch,
             rawCanvasHitPadding: rawCanvasHitPadding,
             preferredMode: preferredMode
         )
         let hitRadius = 24.0
-        var closestHandleHit: (part: QuadOSCPart, resolution: QuadOSCEventResolution, distance: Double)?
+        var closestHandleHit: (part: StretchOSCPart, resolution: StretchOSCEventResolution, distance: Double)?
 
-        for candidate in hitCandidates(for: resolutions, handles: handles, quad: quad, rawCanvasHandles: rawCanvasHandles, rawCanvasQuad: rawCanvasQuad, useRawCanvasHitLayer: useRawCanvasHitLayer) {
+        for candidate in hitCandidates(for: resolutions, handles: handles, stretch: stretch, rawCanvasHandles: rawCanvasHandles, rawCanvasStretch: rawCanvasStretch, useRawCanvasHitLayer: useRawCanvasHitLayer) {
             let resolution = candidate.resolution
             for handle in candidate.handles {
                 let dx = resolution.canvasPoint.x - handle.point.x
                 let dy = resolution.canvasPoint.y - handle.point.y
                 let distance = hypot(dx, dy)
                 if distance <= hitRadius,
-                   let part = QuadOSCPart(rawValue: handle.part) {
+                   let part = StretchOSCPart(rawValue: handle.part) {
                     if closestHandleHit == nil || distance < closestHandleHit!.distance {
                         closestHandleHit = (part, resolution, distance)
                     }
@@ -188,14 +188,14 @@ extension AnyUprightInnerStretchOSCPlugIn {
         }
 
         let edgeHitRadius = 14.0
-        var closestEdgeHit: (part: QuadOSCPart, resolution: QuadOSCEventResolution, distance: Double)?
-        for candidate in hitCandidates(for: resolutions, handles: handles, quad: quad, rawCanvasHandles: rawCanvasHandles, rawCanvasQuad: rawCanvasQuad, useRawCanvasHitLayer: useRawCanvasHitLayer) {
+        var closestEdgeHit: (part: StretchOSCPart, resolution: StretchOSCEventResolution, distance: Double)?
+        for candidate in hitCandidates(for: resolutions, handles: handles, stretch: stretch, rawCanvasHandles: rawCanvasHandles, rawCanvasStretch: rawCanvasStretch, useRawCanvasHitLayer: useRawCanvasHitLayer) {
             let resolution = candidate.resolution
-            let edges: [(QuadOSCPart, AUPoint, AUPoint)] = [
-                (.topEdge, candidate.quad[0], candidate.quad[1]),
-                (.rightEdge, candidate.quad[1], candidate.quad[2]),
-                (.bottomEdge, candidate.quad[3], candidate.quad[2]),
-                (.leftEdge, candidate.quad[0], candidate.quad[3])
+            let edges: [(StretchOSCPart, AUPoint, AUPoint)] = [
+                (.topEdge, candidate.stretch[0], candidate.stretch[1]),
+                (.rightEdge, candidate.stretch[1], candidate.stretch[2]),
+                (.bottomEdge, candidate.stretch[3], candidate.stretch[2]),
+                (.leftEdge, candidate.stretch[0], candidate.stretch[3])
             ]
             for edge in edges {
                 let distance = distance(from: resolution.canvasPoint, toSegmentStart: edge.1, end: edge.2)
@@ -211,9 +211,9 @@ extension AnyUprightInnerStretchOSCPlugIn {
             return (closestEdgeHit.part, closestEdgeHit.resolution)
         }
 
-        for candidate in hitCandidates(for: resolutions, handles: handles, quad: quad, rawCanvasHandles: rawCanvasHandles, rawCanvasQuad: rawCanvasQuad, useRawCanvasHitLayer: useRawCanvasHitLayer) {
-            if isPoint(candidate.resolution.canvasPoint, insideQuad: candidate.quad) {
-                return (.quad, candidate.resolution)
+        for candidate in hitCandidates(for: resolutions, handles: handles, stretch: stretch, rawCanvasHandles: rawCanvasHandles, rawCanvasStretch: rawCanvasStretch, useRawCanvasHitLayer: useRawCanvasHitLayer) {
+            if isPoint(candidate.resolution.canvasPoint, insideStretch: candidate.stretch) {
+                return (.stretch, candidate.resolution)
             }
         }
 
@@ -221,34 +221,34 @@ extension AnyUprightInnerStretchOSCPlugIn {
     }
 
     func hitCandidates(
-        for resolutions: [QuadOSCEventResolution],
+        for resolutions: [StretchOSCEventResolution],
         handles: [AUOSCHandle],
-        quad: [AUPoint],
+        stretch: [AUPoint],
         rawCanvasHandles: [AUOSCHandle],
-        rawCanvasQuad: [AUPoint],
+        rawCanvasStretch: [AUPoint],
         useRawCanvasHitLayer: Bool
-    ) -> [(resolution: QuadOSCEventResolution, handles: [AUOSCHandle], quad: [AUPoint])] {
+    ) -> [(resolution: StretchOSCEventResolution, handles: [AUOSCHandle], stretch: [AUPoint])] {
         resolutions.map { resolution in
             if resolution.coordinateMode == .rawCanvas || useRawCanvasHitLayer {
-                return (resolution, rawCanvasHandles, rawCanvasQuad)
+                return (resolution, rawCanvasHandles, rawCanvasStretch)
             }
-            return (resolution, handles, quad)
+            return (resolution, handles, stretch)
         }
     }
 
     func eventResolutions(
         fromEventPoint eventPoint: AUPoint,
         canvasFrame: [AUPoint],
-        rawCanvasQuad: [AUPoint],
+        rawCanvasStretch: [AUPoint],
         rawCanvasHitPadding: Double,
-        preferredMode: QuadOSCEventCoordinateMode?
-    ) -> [QuadOSCEventResolution] {
-        let raw = QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvas)
+        preferredMode: StretchOSCEventCoordinateMode?
+    ) -> [StretchOSCEventResolution] {
+        let raw = StretchOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvas)
         guard let mapper = eventMapper(for: canvasFrame) else {
             return [raw]
         }
 
-        let mapped = QuadOSCEventResolution(canvasPoint: mapper.canvasPoint(fromEventPoint: eventPoint), coordinateMode: .mappedSurface)
+        let mapped = StretchOSCEventResolution(canvasPoint: mapper.canvasPoint(fromEventPoint: eventPoint), coordinateMode: .mappedSurface)
         if let preferredMode {
             switch preferredMode {
             case .rawCanvas:
@@ -262,7 +262,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
             forInitialEventPoint: eventPoint,
             mappedCanvasPoint: mapped.canvasPoint,
             canvasFrame: canvasFrame,
-            visibleControlPoints: rawCanvasQuad,
+            visibleControlPoints: rawCanvasStretch,
             hitPadding: rawCanvasHitPadding,
             hostBundleIdentifier: AnyUprightHostContext.hostBundleIdentifier
         )
@@ -273,28 +273,28 @@ extension AnyUprightInnerStretchOSCPlugIn {
     func resolvedCanvasPoint(
         fromEventPoint eventPoint: AUPoint,
         canvasFrame: [AUPoint],
-        rawCanvasQuad: [AUPoint],
+        rawCanvasStretch: [AUPoint],
         rawCanvasHitPadding: Double,
-        preferredMode: QuadOSCEventCoordinateMode?
-    ) -> QuadOSCEventResolution {
+        preferredMode: StretchOSCEventCoordinateMode?
+    ) -> StretchOSCEventResolution {
         return eventResolutions(
             fromEventPoint: eventPoint,
             canvasFrame: canvasFrame,
-            rawCanvasQuad: rawCanvasQuad,
+            rawCanvasStretch: rawCanvasStretch,
             rawCanvasHitPadding: rawCanvasHitPadding,
             preferredMode: preferredMode
         ).first
-            ?? QuadOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvas)
+            ?? StretchOSCEventResolution(canvasPoint: eventPoint, coordinateMode: .rawCanvas)
     }
 
-    func validDragPart(from rawValue: Int) -> QuadOSCPart? {
-        guard let part = QuadOSCPart(rawValue: rawValue), part != .none else {
+    func validDragPart(from rawValue: Int) -> StretchOSCPart? {
+        guard let part = StretchOSCPart(rawValue: rawValue), part != .none else {
             return nil
         }
         return part
     }
 
-    func corners(forEdgePart part: QuadOSCPart) -> [AUQuadCorner]? {
+    func corners(forEdgePart part: StretchOSCPart) -> [AUStretchCorner]? {
         switch part {
         case .topEdge:
             return [.topLeft, .topRight]
@@ -309,12 +309,12 @@ extension AnyUprightInnerStretchOSCPlugIn {
         }
     }
 
-    func dragObjectPoint(from resolution: QuadOSCEventResolution, mode: AUQuadTransformMode, sourceSize: AUSize) -> AUPoint {
+    func dragObjectPoint(from resolution: StretchOSCEventResolution, mode: AUStretchTransformMode, sourceSize: AUSize) -> AUPoint {
         let rawObjectPoint = objectPoint(fromCanvasPoint: resolution.canvasPoint)
         return innerStretchDragPoint(from: rawObjectPoint, mode: mode, coordinateMode: resolution.coordinateMode)
     }
 
-    func innerStretchDragPoint(from point: AUPoint, mode: AUQuadTransformMode, coordinateMode: QuadOSCEventCoordinateMode) -> AUPoint {
+    func innerStretchDragPoint(from point: AUPoint, mode: AUStretchTransformMode, coordinateMode: StretchOSCEventCoordinateMode) -> AUPoint {
         guard mode == .innerStretch,
               coordinateMode == .rawCanvas else {
             return point
@@ -336,16 +336,16 @@ extension AnyUprightInnerStretchOSCPlugIn {
         return hypot(point.x - closest.x, point.y - closest.y)
     }
 
-    func isPoint(_ point: AUPoint, insideQuad quad: [AUPoint]) -> Bool {
-        guard quad.count == 4 else {
+    func isPoint(_ point: AUPoint, insideStretch stretch: [AUPoint]) -> Bool {
+        guard stretch.count == 4 else {
             return false
         }
 
         var hasPositive = false
         var hasNegative = false
-        for index in 0..<quad.count {
-            let current = quad[index]
-            let next = quad[(index + 1) % quad.count]
+        for index in 0..<stretch.count {
+            let current = stretch[index]
+            let next = stretch[(index + 1) % stretch.count]
             let cross = (next.x - current.x) * (point.y - current.y) - (next.y - current.y) * (point.x - current.x)
             hasPositive = hasPositive || cross > 0.0
             hasNegative = hasNegative || cross < 0.0

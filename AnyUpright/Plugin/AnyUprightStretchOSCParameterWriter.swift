@@ -1,5 +1,5 @@
 //
-//  AnyUprightQuadOSCParameterWriter.swift
+//  AnyUprightStretchOSCParameterWriter.swift
 //  AnyUpright
 //
 
@@ -10,8 +10,8 @@ import IOSurface
 import Vision
 
 extension AnyUprightInnerStretchOSCPlugIn {
-    func setInnerStretch(_ quad: AUQuad, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
-        let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: quad, size: size)
+    func setInnerStretch(_ stretch: AUStretchCorners, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+        let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: stretch, size: size)
         writeSourceCorner(.topLeft, percent: offsets.topLeftPercent, settingAPI: settingAPI, time: time)
         writeSourceCorner(.topRight, percent: offsets.topRightPercent, settingAPI: settingAPI, time: time)
         writeSourceCorner(.bottomRight, percent: offsets.bottomRightPercent, settingAPI: settingAPI, time: time)
@@ -19,19 +19,19 @@ extension AnyUprightInnerStretchOSCPlugIn {
         debugLog(
             String(
                 format: "set-inner-stretch tl=(%.2f,%.2f) tr=(%.2f,%.2f) br=(%.2f,%.2f) bl=(%.2f,%.2f)",
-                quad.topLeft.x,
-                quad.topLeft.y,
-                quad.topRight.x,
-                quad.topRight.y,
-                quad.bottomRight.x,
-                quad.bottomRight.y,
-                quad.bottomLeft.x,
-                quad.bottomLeft.y
+                stretch.topLeft.x,
+                stretch.topLeft.y,
+                stretch.topRight.x,
+                stretch.topRight.y,
+                stretch.bottomRight.x,
+                stretch.bottomRight.y,
+                stretch.bottomLeft.x,
+                stretch.bottomLeft.y
             )
         )
     }
 
-    func setCorner(_ point: AUPoint, part: QuadOSCPart, mode: AUQuadTransformMode, offsets: AUCornerOffsets, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    func setCorner(_ point: AUPoint, part: StretchOSCPart, mode: AUStretchTransformMode, offsets: AUCornerOffsets, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         guard let ids = parameterIDs(forCornerPart: part) else {
             return
         }
@@ -76,8 +76,8 @@ extension AnyUprightInnerStretchOSCPlugIn {
         }
     }
 
-    func translateCorners(from state: AnyUprightParameterState, pixelDelta: AUPoint, corners: [AUQuadCorner], mode: AUQuadTransformMode, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
-        let offsets = quadCornerOffsets(from: state)
+    func translateCorners(from state: AnyUprightParameterState, pixelDelta: AUPoint, corners: [AUStretchCorner], mode: AUStretchTransformMode, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+        let offsets = stretchCornerOffsets(from: state)
 
         if mode == .innerStretch {
             let percentDelta = AUPoint(
@@ -123,7 +123,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
         }
     }
 
-    func parameterIDs(forCornerPart part: QuadOSCPart) -> (corner: AUQuadCorner, percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam)? {
+    func parameterIDs(forCornerPart part: StretchOSCPart) -> (corner: AUStretchCorner, percentX: StretchParam, percentY: StretchParam, pixelX: StretchParam, pixelY: StretchParam)? {
         switch part {
         case .topLeft:
             return (.topLeft, .topLeftPercentX, .topLeftPercentY, .topLeftPixelX, .topLeftPixelY)
@@ -138,7 +138,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
         }
     }
 
-    func parameterIDs(for corner: AUQuadCorner) -> (percentX: QuadParam, percentY: QuadParam, pixelX: QuadParam, pixelY: QuadParam) {
+    func parameterIDs(for corner: AUStretchCorner) -> (percentX: StretchParam, percentY: StretchParam, pixelX: StretchParam, pixelY: StretchParam) {
         switch corner {
         case .topLeft:
             return (.topLeftPercentX, .topLeftPercentY, .topLeftPixelX, .topLeftPixelY)
@@ -151,7 +151,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
         }
     }
 
-    private func writeSourceCorner(_ corner: AUQuadCorner, percent: AUPoint, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    private func writeSourceCorner(_ corner: AUStretchCorner, percent: AUPoint, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         let ids = parameterIDs(for: corner)
         settingAPI.setFloatValue(percent.x, toParameter: ids.percentX.rawValue, at: time)
         settingAPI.setFloatValue(percent.y, toParameter: ids.percentY.rawValue, at: time)
@@ -159,7 +159,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
         settingAPI.setFloatValue(0.0, toParameter: ids.pixelY.rawValue, at: time)
     }
 
-    func percentOffset(for corner: AUQuadCorner, in offsets: AUCornerOffsets) -> AUPoint {
+    func percentOffset(for corner: AUStretchCorner, in offsets: AUCornerOffsets) -> AUPoint {
         switch corner {
         case .topLeft:
             return offsets.topLeftPercent
@@ -172,7 +172,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
         }
     }
 
-    func pixelOffset(for corner: AUQuadCorner, in offsets: AUCornerOffsets) -> AUPoint {
+    func pixelOffset(for corner: AUStretchCorner, in offsets: AUCornerOffsets) -> AUPoint {
         switch corner {
         case .topLeft:
             return offsets.topLeftPixels

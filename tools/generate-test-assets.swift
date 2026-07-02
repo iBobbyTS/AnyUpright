@@ -101,7 +101,7 @@ func strokePolygon(_ context: CGContext, _ points: [Point], width: CGFloat, stro
     context.strokePath()
 }
 
-func interpolateQuad(topLeft: Point, topRight: Point, bottomRight: Point, bottomLeft: Point, u: CGFloat, v: CGFloat) -> Point {
+func interpolateStretch(topLeft: Point, topRight: Point, bottomRight: Point, bottomLeft: Point, u: CGFloat, v: CGFloat) -> Point {
     let top = Point(
         x: topLeft.x + (topRight.x - topLeft.x) * u,
         y: topLeft.y + (topRight.y - topLeft.y) * u
@@ -158,7 +158,7 @@ func generateHorizon() {
     savePNG(context, width: width, height: height, name: "horizon-tilted-8deg.png")
 }
 
-func generateQuadPhone() {
+func generateStretchPhone() {
     let width = 1920
     let height = 1080
     let context = makeContext(width: width, height: height)
@@ -168,28 +168,28 @@ func generateQuadPhone() {
     let topRight = Point(x: 1390, y: 305)
     let bottomRight = Point(x: 1285, y: 890)
     let bottomLeft = Point(x: 430, y: 790)
-    let quad = [topLeft, topRight, bottomRight, bottomLeft]
+    let stretch = [topLeft, topRight, bottomRight, bottomLeft]
 
     strokeLine(context, from: Point(x: 160, y: 185), to: Point(x: 1760, y: 965), width: 3, stroke: color(0.35, 0.35, 0.38, 0.4))
-    fillPolygon(context, quad, fill: color(0.03, 0.08, 0.09))
+    fillPolygon(context, stretch, fill: color(0.03, 0.08, 0.09))
 
     for index in 0...10 {
         let value = CGFloat(index) / 10.0
-        let start = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: value, v: 0)
-        let end = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: value, v: 1)
+        let start = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: value, v: 0)
+        let end = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: value, v: 1)
         strokeLine(context, from: start, to: end, width: index == 0 || index == 10 ? 5 : 2, stroke: color(0.95, 0.97, 1.0))
     }
 
     for index in 0...14 {
         let value = CGFloat(index) / 14.0
-        let start = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: 0, v: value)
-        let end = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: 1, v: value)
+        let start = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: 0, v: value)
+        let end = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: 1, v: value)
         strokeLine(context, from: start, to: end, width: index == 0 || index == 14 ? 5 : 2, stroke: color(0.95, 0.97, 1.0))
     }
 
-    strokePolygon(context, quad, width: 12, stroke: color(0.0, 0.0, 0.0))
-    strokePolygon(context, quad, width: 5, stroke: color(1.0, 0.72, 0.2))
-    savePNG(context, width: width, height: height, name: "quad-phone-screen.png")
+    strokePolygon(context, stretch, width: 12, stroke: color(0.0, 0.0, 0.0))
+    strokePolygon(context, stretch, width: 5, stroke: color(1.0, 0.72, 0.2))
+    savePNG(context, width: width, height: height, name: "stretch-phone-screen.png")
 }
 
 func generateUprightFacade() {
@@ -207,15 +207,15 @@ func generateUprightFacade() {
 
     for index in 0...16 {
         let value = CGFloat(index) / 16.0
-        let start = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: value, v: 0)
-        let end = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: value, v: 1)
+        let start = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: value, v: 0)
+        let end = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: value, v: 1)
         strokeLine(context, from: start, to: end, width: index == 0 || index == 16 ? 5 : 3, stroke: color(0.9, 0.92, 0.92))
     }
 
     for index in 0...12 {
         let value = CGFloat(index) / 12.0
-        let start = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: 0, v: value)
-        let end = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: 1, v: value)
+        let start = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: 0, v: value)
+        let end = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: 1, v: value)
         strokeLine(context, from: start, to: end, width: index == 0 || index == 12 ? 5 : 3, stroke: color(0.86, 0.88, 0.88))
     }
 
@@ -225,10 +225,10 @@ func generateUprightFacade() {
             let u1 = CGFloat(column + 1) / 7.0 - 0.035
             let v0 = CGFloat(row) / 5.0 + 0.04
             let v1 = CGFloat(row + 1) / 5.0 - 0.04
-            let a = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: u0, v: v0)
-            let b = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: u1, v: v0)
-            let c = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: u1, v: v1)
-            let d = interpolateQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: u0, v: v1)
+            let a = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: u0, v: v0)
+            let b = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: u1, v: v0)
+            let c = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: u1, v: v1)
+            let d = interpolateStretch(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft, u: u0, v: v1)
             fillPolygon(context, [a, b, c, d], fill: color(0.05, 0.09, 0.13))
             strokePolygon(context, [a, b, c, d], width: 1.5, stroke: color(0.55, 0.66, 0.72))
         }
@@ -239,7 +239,7 @@ func generateUprightFacade() {
 }
 
 generateHorizon()
-generateQuadPhone()
+generateStretchPhone()
 generateUprightFacade()
 
 print("Generated test assets in \(outputDirectory.path)")

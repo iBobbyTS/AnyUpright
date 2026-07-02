@@ -34,9 +34,9 @@ struct ValidateWarpPreviews {
         let directory = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? ".agent-work/warp-previews")
         let expected = [
             PreviewExpectation(fileName: "horizon-fill-preview.png", minimumLitPixelRatio: 0.20),
-            PreviewExpectation(fileName: "quad-inner-stretch-adjuster-preview.png", minimumLitPixelRatio: 0.10),
-            PreviewExpectation(fileName: "quad-inner-stretch-apply-preview.png", minimumLitPixelRatio: 0.10),
-            PreviewExpectation(fileName: "quad-output-corners-preview.png", minimumLitPixelRatio: 0.10),
+            PreviewExpectation(fileName: "stretch-inner-stretch-adjuster-preview.png", minimumLitPixelRatio: 0.10),
+            PreviewExpectation(fileName: "stretch-inner-stretch-apply-preview.png", minimumLitPixelRatio: 0.10),
+            PreviewExpectation(fileName: "stretch-output-corners-preview.png", minimumLitPixelRatio: 0.10),
             PreviewExpectation(fileName: "upright-centered-preview.png", minimumLitPixelRatio: 0.10)
         ]
 

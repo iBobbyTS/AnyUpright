@@ -9,14 +9,14 @@ import simd
 
 enum AnyUprightEffectKind: Int32 {
     case horizon = 1
-    case quad = 2
+    case stretch = 2
     case upright = 3
 }
 
 struct AnyUprightParameterState {
     var effectKind: Int32 = 0
     var fillFrame: Int32 = 0
-    var quadMode: Int32 = AUQuadTransformMode.innerStretch.rawValue
+    var stretchMode: Int32 = AUStretchTransformMode.innerStretch.rawValue
     var showCornerAdjuster: Int32 = 1
     var uprightCorrectionMode: Int32 = 0
     var uprightControlMode: Int32 = 0
@@ -171,7 +171,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             destinationTileBounds: pixelBounds(from: destinationTileRect),
             usesIdentityPreview: usesIdentityPreview
         )
-        debugLogQuadSourceTile(
+        debugLogStretchSourceTile(
             parameterState: parameterState,
             sourceImage: sourceImages[Int(sourceImageIndex)],
             destinationTileRect: destinationTileRect,
@@ -253,7 +253,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             sourceTexture: inputTexture,
             destinationImage: destinationImage
         )
-        debugLogQuadRender(
+        debugLogStretchRender(
             parameterState: parameterState,
             sourceImage: sourceImage,
             sourceTexture: inputTexture,
@@ -500,10 +500,10 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
                 size: sourceSize
             )
 
-        case .quad:
-            let mode = AUQuadTransformMode(rawValue: state.quadMode) ?? .outputCorners
+        case .stretch:
+            let mode = AUStretchTransformMode(rawValue: state.stretchMode) ?? .outputCorners
             guard state.showCornerAdjuster == 0 else {
-                return AnyUprightGeometry.quadOutputToSourceMatrix(
+                return AnyUprightGeometry.stretchOutputToSourceMatrix(
                     from: cornerOffsets(from: state),
                     mode: mode,
                     showCornerAdjuster: true,
@@ -512,7 +512,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
                 )
             }
 
-            return AnyUprightGeometry.quadOutputToCurrentSourceMatrix(
+            return AnyUprightGeometry.stretchOutputToCurrentSourceMatrix(
                 from: cornerOffsets(from: state),
                 mode: mode,
                 showCornerAdjuster: false,
@@ -552,7 +552,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             )
 
         case .none:
-            return AnyUprightGeometry.homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
+            return AnyUprightGeometry.homography(from: AUStretchCorners.fullFrame(outputSize), to: AUStretchCorners.fullFrame(sourceSize))
         }
     }
 
@@ -589,7 +589,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         renderTime: CMTime
     ) -> AnyUprightParameterState {
         let effectKind = AnyUprightEffectKind(rawValue: state.effectKind)
-        guard effectKind == .upright || effectKind == .quad else {
+        guard effectKind == .upright || effectKind == .stretch else {
             return state
         }
 
@@ -660,22 +660,22 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
     }
 
     private func selectionOutputToRectMatrix(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {
-        guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
-              AUQuadTransformMode(rawValue: state.quadMode) == .innerStretch else {
+        guard AnyUprightEffectKind(rawValue: state.effectKind) == .stretch,
+              AUStretchTransformMode(rawValue: state.stretchMode) == .innerStretch else {
             return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: outputSize)
         }
 
-        return AnyUprightGeometry.quadSelectionToOutputRectMatrix(
+        return AnyUprightGeometry.stretchSelectionToOutputRectMatrix(
             from: cornerOffsets(from: state),
             outputSize: outputSize,
             sourceSize: sourceSize
         )
     }
 
-    private func innerStretchOutputHandles(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> AUQuad {
-        guard AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
-              AUQuadTransformMode(rawValue: state.quadMode) == .innerStretch else {
-            return AUQuad.fullFrame(outputSize)
+    private func innerStretchOutputHandles(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> AUStretchCorners {
+        guard AnyUprightEffectKind(rawValue: state.effectKind) == .stretch,
+              AUStretchTransformMode(rawValue: state.stretchMode) == .innerStretch else {
+            return AUStretchCorners.fullFrame(outputSize)
         }
 
         return AnyUprightGeometry.innerStretchOutputHandles(
@@ -686,8 +686,8 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
     }
 
     private func renderMode(from state: AnyUprightParameterState) -> Int32 {
-        if AnyUprightEffectKind(rawValue: state.effectKind) == .quad,
-           AUQuadTransformMode(rawValue: state.quadMode) == .innerStretch,
+        if AnyUprightEffectKind(rawValue: state.effectKind) == .stretch,
+           AUStretchTransformMode(rawValue: state.stretchMode) == .innerStretch,
            state.showCornerAdjuster != 0 {
             return Int32(AURM_InnerStretchAdjusterPreview)
         }
@@ -819,7 +819,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         debugAppendUprightRenderLog(message)
     }
 
-    private func debugLogQuadSourceTile(
+    private func debugLogStretchSourceTile(
         parameterState: AnyUprightParameterState,
         sourceImage: FxImageTile,
         destinationTileRect: FxRect,
@@ -828,16 +828,16 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         usesIdentityPreview: Bool,
         renderTime: CMTime
     ) {
-        guard AnyUprightEffectKind(rawValue: parameterState.effectKind) == .quad,
-              FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadRender.debug") else {
+        guard AnyUprightEffectKind(rawValue: parameterState.effectKind) == .stretch,
+              FileManager.default.fileExists(atPath: "/tmp/AnyUprightStretchRender.debug") else {
             return
         }
 
-        let mode = AUQuadTransformMode(rawValue: parameterState.quadMode) ?? .outputCorners
+        let mode = AUStretchTransformMode(rawValue: parameterState.stretchMode) ?? .outputCorners
         let message = String(
-            format: "quad-source-tile time=%@ mode=%@ edit=%d identityPreview=%d srcImage=%@ srcTile=%@ dstImage=%@ requestedDstTile=%@ returnedSrcTile=(%d,%d,%d,%d) stableIn=(%.2fx%.2f) stableOut=(%.2fx%.2f)",
+            format: "stretch-source-tile time=%@ mode=%@ edit=%d identityPreview=%d srcImage=%@ srcTile=%@ dstImage=%@ requestedDstTile=%@ returnedSrcTile=(%d,%d,%d,%d) stableIn=(%.2fx%.2f) stableOut=(%.2fx%.2f)",
             debugTime(renderTime),
-            debugQuadMode(mode),
+            debugStretchMode(mode),
             parameterState.showCornerAdjuster,
             usesIdentityPreview ? 1 : 0,
             debugRect(sourceImage.imagePixelBounds),
@@ -853,10 +853,10 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             parameterState.stableOutputWidth,
             parameterState.stableOutputHeight
         )
-        debugAppendQuadRenderLog(message)
+        debugAppendStretchRenderLog(message)
     }
 
-    private func debugLogQuadRender(
+    private func debugLogStretchRender(
         parameterState: AnyUprightParameterState,
         sourceImage: FxImageTile,
         sourceTexture: MTLTexture,
@@ -866,19 +866,19 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         warpState: AnyUprightWarpState,
         renderTime: CMTime
     ) {
-        guard AnyUprightEffectKind(rawValue: parameterState.effectKind) == .quad,
-              FileManager.default.fileExists(atPath: "/tmp/AnyUprightQuadRender.debug") else {
+        guard AnyUprightEffectKind(rawValue: parameterState.effectKind) == .stretch,
+              FileManager.default.fileExists(atPath: "/tmp/AnyUprightStretchRender.debug") else {
             return
         }
 
         let outputSize = AUSize(width: Double(warpState.outputSize.x), height: Double(warpState.outputSize.y))
         let sourceSize = AUSize(width: Double(warpState.inputSize.x), height: Double(warpState.inputSize.y))
-        let mode = AUQuadTransformMode(rawValue: parameterState.quadMode) ?? .outputCorners
+        let mode = AUStretchTransformMode(rawValue: parameterState.stretchMode) ?? .outputCorners
         let stableOutputSize = stableOutputSize(from: parameterState, fallback: outputSize)
         let stableInputSize = stableInputSize(from: parameterState, fallback: sourceSize)
         let offsets = cornerOffsets(from: parameterState)
         let projectMatrix = outputToSourceMatrix(from: parameterState, outputSize: outputSize, sourceSize: sourceSize)
-        let correctionMatrix = AnyUprightGeometry.quadOutputToSourceMatrix(
+        let correctionMatrix = AnyUprightGeometry.stretchOutputToSourceMatrix(
             from: offsets,
             mode: mode,
             showCornerAdjuster: parameterState.showCornerAdjuster != 0,
@@ -915,9 +915,9 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         )
 
         let message = String(
-            format: "quad-render time=%@ mode=%@ edit=%d renderMode=%d stableIn=(%.2fx%.2f) stableOut=(%.2fx%.2f) currentIn=%@ currentOut=%@ srcImage=%@ srcTile=%@ dstImage=%@ dstTile=%@ srcOrigin=%lu dstOrigin=%lu srcPT=%@ srcInvPT=%@ dstPT=%@ dstInvPT=%@ transformSamples=%@ srcTex=%dx%d dstTex=%dx%d outBounds=(l=%.2f,r=%.2f,t=%.2f,b=%.2f) texOrigin=%@ texSize=%@ handles=%@ correctionMatrix=%@ projectMatrix=%@ textureMatrix=%@ projectSamples=%@ textureSamples=%@",
+            format: "stretch-render time=%@ mode=%@ edit=%d renderMode=%d stableIn=(%.2fx%.2f) stableOut=(%.2fx%.2f) currentIn=%@ currentOut=%@ srcImage=%@ srcTile=%@ dstImage=%@ dstTile=%@ srcOrigin=%lu dstOrigin=%lu srcPT=%@ srcInvPT=%@ dstPT=%@ dstInvPT=%@ transformSamples=%@ srcTex=%dx%d dstTex=%dx%d outBounds=(l=%.2f,r=%.2f,t=%.2f,b=%.2f) texOrigin=%@ texSize=%@ handles=%@ correctionMatrix=%@ projectMatrix=%@ textureMatrix=%@ projectSamples=%@ textureSamples=%@",
             debugTime(renderTime),
-            debugQuadMode(mode),
+            debugStretchMode(mode),
             parameterState.showCornerAdjuster,
             warpState.renderMode,
             parameterState.stableInputWidth,
@@ -947,14 +947,14 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             outputBounds.bottom,
             debugVector(warpState.inputImageOriginInTexture),
             debugVector(warpState.inputTextureSize),
-            debugQuad(sourceHandles),
+            debugStretch(sourceHandles),
             debugMatrix(correctionMatrix),
             debugMatrix(projectMatrix),
             debugMatrix(warpState.outputToSource),
             projectSamples,
             textureSamples
         )
-        debugAppendQuadRenderLog(message)
+        debugAppendStretchRenderLog(message)
     }
 
     private func debugTransformSamples(sourceImage: FxImageTile, destinationImage: FxImageTile, outputBounds: AUOutputCoordinateBounds) -> String {
@@ -993,8 +993,8 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         debugAppendLog(message, to: "/tmp/AnyUprightUprightRender.log")
     }
 
-    private func debugAppendQuadRenderLog(_ message: String) {
-        debugAppendLog(message, to: "/tmp/AnyUprightQuadRender.log")
+    private func debugAppendStretchRenderLog(_ message: String) {
+        debugAppendLog(message, to: "/tmp/AnyUprightStretchRender.log")
     }
 
     private func debugAppendLog(_ message: String, to logPath: String) {
@@ -1086,17 +1086,17 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         String(format: "(%.2fx%.2f)", size.width, size.height)
     }
 
-    private func debugQuad(_ quad: AUQuad) -> String {
+    private func debugStretch(_ stretch: AUStretchCorners) -> String {
         String(
             format: "tl=%@ tr=%@ br=%@ bl=%@",
-            debugPoint(quad.topLeft),
-            debugPoint(quad.topRight),
-            debugPoint(quad.bottomRight),
-            debugPoint(quad.bottomLeft)
+            debugPoint(stretch.topLeft),
+            debugPoint(stretch.topRight),
+            debugPoint(stretch.bottomRight),
+            debugPoint(stretch.bottomLeft)
         )
     }
 
-    private func debugQuadMode(_ mode: AUQuadTransformMode) -> String {
+    private func debugStretchMode(_ mode: AUStretchTransformMode) -> String {
         switch mode {
         case .outputCorners:
             return "outputCorners"

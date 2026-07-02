@@ -1,4 +1,4 @@
-# Quad Coordinate Layer Contract
+# Stretch Coordinate Layer Contract
 
 Last updated: 2026-06-10 15:40 MDT
 Reference commit: 11aa3148242f9743c8c48903739c604f84dd2e66
@@ -109,7 +109,7 @@ A useful coordinate log should include all values needed to disprove a bad conve
 - host-canvas points after `convertPoint`;
 - mapped-surface candidate if one is used, and why it was accepted or rejected;
 - selected event interpretation stored for an active drag;
-- final visible hit quad, storage/writeback quad, and active part;
+- final visible hit stretch, storage/writeback stretch, and active part;
 - overlay local surface points and final Metal-centered vertices.
 
 Do not log only the final point. Most repeated fixes failed because the final point looked plausible while one upstream layer had already crossed a Y boundary.

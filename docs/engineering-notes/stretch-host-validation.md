@@ -1,12 +1,12 @@
-# Quad Host Validation Notes
+# Stretch Host Validation Notes
 
 Last updated: 2026-07-01 17:39 MDT
 Reference commit: 23c5dcf48b242464e584b38ea59b2f05653f67f3
 Observed host versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 (447036), Final Cut Pro 12.2, Xcode 26.5 (17F42), FxPlug SDK package 4.3.4.1.1769575879
 
-This note records reusable host-state validation practices and host pitfalls found while debugging four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../quad-implementation-notes.md`.
+This note records reusable host-state validation practices and host pitfalls found while debugging four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../stretch-implementation-notes.md`.
 
-For coordinate bugs, pair this host-state checklist with `quad-coordinate-layer-contract.md`. Many apparent math failures were stale-host or missing-OSC-publication failures.
+For coordinate bugs, pair this host-state checklist with `stretch-coordinate-layer-contract.md`. Many apparent math failures were stale-host or missing-OSC-publication failures.
 
 ## Host Validation Rules
 
@@ -66,4 +66,4 @@ These observations are not Apple API guarantees. They were measured on macOS 26.
 - Judging a render-matrix or shader fix while Motion still held the previous effect instance was wrong. A stale host can make correct code look mathematically wrong.
 - Treating "new XPC binary is running" as proof that static effect properties have refreshed was wrong. Binary reload and effect-instance/property refresh are separate host-state layers.
 - Assuming the Publishing pane exposes OSC state was wrong in the observed Motion path. The Motion Filters inspector `Publish OSC` checkbox controlled whether Final Cut users got onscreen controls.
-- Assuming FxPlug angle writeback uses degrees was wrong in the validated Motion path; angle parameter reads/writes behaved as radians. That note matters for angle-writing effects, but not directly for Quad.
+- Assuming FxPlug angle writeback uses degrees was wrong in the validated Motion path; angle parameter reads/writes behaved as radians. That note matters for angle-writing effects, but not directly for Stretch.

@@ -50,9 +50,9 @@ struct UprightAnalysisScratchState {
     var requestedAnalysisTime = CMTime.zero
 }
 
-struct QuadAnalysisScratchState {
+struct InnerStretchAnalysisScratchState {
     var hasPendingInnerStretchDetection = false
-    var detectedSourcePrimitives = QuadDetectedSourcePrimitives()
+    var detectedSourcePrimitives = InnerStretchDetectedSourcePrimitives()
     var detectedSourceSize = AUSize(width: 1.0, height: 1.0)
     var detectedInnerStretchTime = CMTime.zero
     var requestedAnalysisTime = CMTime.zero

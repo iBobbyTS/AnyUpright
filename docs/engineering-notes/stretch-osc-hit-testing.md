@@ -1,12 +1,12 @@
-# Quad OSC Hit Testing And Dragging
+# Stretch OSC Hit Testing And Dragging
 
 Last updated: 2026-06-10 15:47 MDT
 Reference commit: 11aa3148242f9743c8c48903739c604f84dd2e66
 Observed host versions: macOS 26.5, Motion Studio 6.2, Final Cut Pro 12.2
 
-This note records reusable OSC hit-test and drag lessons for four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../quad-implementation-notes.md`.
+This note records reusable OSC hit-test and drag lessons for four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../stretch-implementation-notes.md`.
 
-For a reusable layer-by-layer model, start with `quad-coordinate-layer-contract.md`. This file focuses on the hit-test and drag questions that Apple leaves to the plug-in and host behavior.
+For a reusable layer-by-layer model, start with `stretch-coordinate-layer-contract.md`. This file focuses on the hit-test and drag questions that Apple leaves to the plug-in and host behavior.
 
 ## Event Interpretation
 
@@ -37,8 +37,8 @@ These observations are not Apple API guarantees. They were measured on macOS 26.
 ## Hit Priority
 
 - Handles should win over edges.
-- Edges should win over the quad body.
-- The whole quad body can start a drag and translate all four corners.
+- Edges should win over the stretch body.
+- The whole stretch body can start a drag and translate all four corners.
 - Edge parts should translate their two adjacent corners.
 - Corner parts should write one corner.
 - If the host provides a nonzero active part, decide explicitly whether it wins. If the host passes none/zero, local hit testing may still need to start the drag to avoid losing host paths with stale or absent active-part dispatch.
@@ -67,4 +67,4 @@ These observations are not Apple API guarantees. They were measured on macOS 26.
 - Hidden render parameters for hover were unreliable in Final Cut. FCP delivered hover callbacks, but transient parameter writeback and filter-output refresh lagged or failed to clear. Hover/active feedback belongs in the OSC overlay path.
 - Testing an old already-open effect instance after code/template changes repeatedly produced false negatives. Fresh instance and host/XPC restart are part of the validation protocol.
 - Adding `FxOnScreenControl` methods to the filter class itself, changing the OSC class to direct `NSObject`, or tweaking plist version strings did not fix OSC dispatch. A separate OSC class with supported-plugin registration is the shape to keep.
-- Running both raw and mapped event candidates for one Final Cut mouse point created a hidden second hit layer above/below the visible quad.
+- Running both raw and mapped event candidates for one Final Cut mouse point created a hidden second hit layer above/below the visible stretch.

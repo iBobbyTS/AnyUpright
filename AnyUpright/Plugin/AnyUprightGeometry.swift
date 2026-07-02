@@ -43,14 +43,14 @@ struct AUTextureCoordinateMapping: Equatable {
     var textureSize: AUSize
 }
 
-struct AUQuad: Equatable {
+struct AUStretchCorners: Equatable {
     var topLeft: AUPoint
     var topRight: AUPoint
     var bottomRight: AUPoint
     var bottomLeft: AUPoint
 
-    static func fullFrame(_ size: AUSize) -> AUQuad {
-        AUQuad(
+    static func fullFrame(_ size: AUSize) -> AUStretchCorners {
+        AUStretchCorners(
             topLeft: AUPoint(x: 0.0, y: 0.0),
             topRight: AUPoint(x: size.width, y: 0.0),
             bottomRight: AUPoint(x: size.width, y: size.height),
@@ -94,32 +94,32 @@ enum AUReferenceOrientation {
     case vertical
 }
 
-enum AUQuadTransformMode: Int32 {
+enum AUStretchTransformMode: Int32 {
     case outputCorners = 0
     case innerStretch = 1
 }
 
-enum AUQuadCorner {
+enum AUStretchCorner {
     case topLeft
     case topRight
     case bottomRight
     case bottomLeft
 }
 
-enum AUQuadDetectionPrimitiveKind {
+enum AUStretchDetectionPrimitiveKind {
     case corner
     case edge
 }
 
-struct AUQuadDetectionPrimitiveID: Equatable {
-    var kind: AUQuadDetectionPrimitiveKind
+struct AUStretchDetectionPrimitiveID: Equatable {
+    var kind: AUStretchDetectionPrimitiveKind
     var index: Int
 }
 
-struct AUQuadDetectionSelectionState: Equatable {
+struct AUStretchDetectionSelectionState: Equatable {
     var selectedCornerIndexes: Set<Int> = []
     var selectedEdgeIndexes: Set<Int> = []
-    var hover: AUQuadDetectionPrimitiveID?
+    var hover: AUStretchDetectionPrimitiveID?
 
     var isEmpty: Bool {
         selectedCornerIndexes.isEmpty && selectedEdgeIndexes.isEmpty
@@ -139,7 +139,7 @@ struct AUQuadDetectionSelectionState: Equatable {
         hover = nil
     }
 
-    mutating func toggle(_ primitive: AUQuadDetectionPrimitiveID) {
+    mutating func toggle(_ primitive: AUStretchDetectionPrimitiveID) {
         switch primitive.kind {
         case .corner:
             guard selectedEdgeIndexes.isEmpty else {
@@ -170,7 +170,7 @@ struct AUQuadDetectionSelectionState: Equatable {
         !selectsCorners
     }
 
-    func isSelected(_ primitive: AUQuadDetectionPrimitiveID) -> Bool {
+    func isSelected(_ primitive: AUStretchDetectionPrimitiveID) -> Bool {
         switch primitive.kind {
         case .corner:
             return selectedCornerIndexes.contains(primitive.index)
@@ -179,7 +179,7 @@ struct AUQuadDetectionSelectionState: Equatable {
         }
     }
 
-    func isActive(_ primitive: AUQuadDetectionPrimitiveID) -> Bool {
+    func isActive(_ primitive: AUStretchDetectionPrimitiveID) -> Bool {
         hover == primitive || isSelected(primitive)
     }
 }
@@ -625,12 +625,12 @@ enum AnyUprightGeometry {
         return extent
     }
 
-    static func quad(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
-        quad(from: offsets, base: AUQuad.fullFrame(size), size: size)
+    static func stretch(from offsets: AUCornerOffsets, size: AUSize) -> AUStretchCorners {
+        stretch(from: offsets, base: AUStretchCorners.fullFrame(size), size: size)
     }
 
-    static func innerStretchDefault(_ size: AUSize) -> AUQuad {
-        AUQuad(
+    static func innerStretchDefault(_ size: AUSize) -> AUStretchCorners {
+        AUStretchCorners(
             topLeft: AUPoint(x: size.width * innerStretchInset, y: size.height * innerStretchInset),
             topRight: AUPoint(x: size.width * (1.0 - innerStretchInset), y: size.height * innerStretchInset),
             bottomRight: AUPoint(x: size.width * (1.0 - innerStretchInset), y: size.height * (1.0 - innerStretchInset)),
@@ -638,8 +638,8 @@ enum AnyUprightGeometry {
         )
     }
 
-    static func innerStretch(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
-        quad(from: offsets, base: innerStretchDefault(size), size: size)
+    static func innerStretch(from offsets: AUCornerOffsets, size: AUSize) -> AUStretchCorners {
+        stretch(from: offsets, base: innerStretchDefault(size), size: size)
     }
 
     static func imagePoint(fromNormalizedLowerLeftPoint point: AUPoint, size: AUSize) -> AUPoint {
@@ -660,16 +660,16 @@ enum AnyUprightGeometry {
         )
     }
 
-    static func imageQuad(fromNormalizedLowerLeftQuad quad: AUQuad, size: AUSize) -> AUQuad {
-        AUQuad(
-            topLeft: imagePoint(fromNormalizedLowerLeftPoint: quad.topLeft, size: size),
-            topRight: imagePoint(fromNormalizedLowerLeftPoint: quad.topRight, size: size),
-            bottomRight: imagePoint(fromNormalizedLowerLeftPoint: quad.bottomRight, size: size),
-            bottomLeft: imagePoint(fromNormalizedLowerLeftPoint: quad.bottomLeft, size: size)
+    static func imageSelection(fromNormalizedLowerLeftStretch stretch: AUStretchCorners, size: AUSize) -> AUStretchCorners {
+        AUStretchCorners(
+            topLeft: imagePoint(fromNormalizedLowerLeftPoint: stretch.topLeft, size: size),
+            topRight: imagePoint(fromNormalizedLowerLeftPoint: stretch.topRight, size: size),
+            bottomRight: imagePoint(fromNormalizedLowerLeftPoint: stretch.bottomRight, size: size),
+            bottomLeft: imagePoint(fromNormalizedLowerLeftPoint: stretch.bottomLeft, size: size)
         )
     }
 
-    static func orderedImageQuad(from points: [AUPoint]) -> AUQuad? {
+    static func orderedImageSelection(from points: [AUPoint]) -> AUStretchCorners? {
         guard points.count == 4, points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else {
             return nil
         }
@@ -699,20 +699,20 @@ enum AnyUprightGeometry {
             return nil
         }
 
-        let quad = AUQuad(
+        let stretch = AUStretchCorners(
             topLeft: points[topLeftIndex],
             topRight: points[topRightIndex],
             bottomRight: points[bottomRightIndex],
             bottomLeft: points[bottomLeftIndex]
         )
-        return isConvexImageQuad(quad) ? quad : nil
+        return isConvexImageSelection(stretch) ? stretch : nil
     }
 
-    static func imageQuad(fromNormalizedObjectPoints points: [AUPoint], size: AUSize) -> AUQuad? {
-        orderedImageQuad(from: points.map { imagePoint(fromNormalizedObjectPoint: $0, size: size) })
+    static func imageSelection(fromNormalizedObjectPoints points: [AUPoint], size: AUSize) -> AUStretchCorners? {
+        orderedImageSelection(from: points.map { imagePoint(fromNormalizedObjectPoint: $0, size: size) })
     }
 
-    static func imageQuad(fromNormalizedObjectLines lines: [AULineSegment], size: AUSize) -> AUQuad? {
+    static func imageSelection(fromNormalizedObjectLines lines: [AULineSegment], size: AUSize) -> AUStretchCorners? {
         guard lines.count == 4 else {
             return nil
         }
@@ -734,8 +734,8 @@ enum AnyUprightGeometry {
             return nil
         }
 
-        let quad = AUQuad(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft)
-        return isConvexImageQuad(quad) ? quad : nil
+        let stretch = AUStretchCorners(topLeft: topLeft, topRight: topRight, bottomRight: bottomRight, bottomLeft: bottomLeft)
+        return isConvexImageSelection(stretch) ? stretch : nil
     }
 
     static func normalizedObjectPoint(fromImagePoint point: AUPoint, size: AUSize) -> AUPoint {
@@ -747,8 +747,8 @@ enum AnyUprightGeometry {
         )
     }
 
-    static func isConvexImageQuad(_ quad: AUQuad) -> Bool {
-        let points = [quad.topLeft, quad.topRight, quad.bottomRight, quad.bottomLeft]
+    static func isConvexImageSelection(_ stretch: AUStretchCorners) -> Bool {
+        let points = [stretch.topLeft, stretch.topRight, stretch.bottomRight, stretch.bottomLeft]
         guard points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else {
             return false
         }
@@ -788,12 +788,12 @@ enum AnyUprightGeometry {
         return area / 2.0
     }
 
-    static func normalizedObjectQuad(fromImageQuad quad: AUQuad, size: AUSize) -> AUQuad {
-        AUQuad(
-            topLeft: normalizedObjectPoint(fromImagePoint: quad.topLeft, size: size),
-            topRight: normalizedObjectPoint(fromImagePoint: quad.topRight, size: size),
-            bottomRight: normalizedObjectPoint(fromImagePoint: quad.bottomRight, size: size),
-            bottomLeft: normalizedObjectPoint(fromImagePoint: quad.bottomLeft, size: size)
+    static func normalizedObjectSelection(fromImageSelection stretch: AUStretchCorners, size: AUSize) -> AUStretchCorners {
+        AUStretchCorners(
+            topLeft: normalizedObjectPoint(fromImagePoint: stretch.topLeft, size: size),
+            topRight: normalizedObjectPoint(fromImagePoint: stretch.topRight, size: size),
+            bottomRight: normalizedObjectPoint(fromImagePoint: stretch.bottomRight, size: size),
+            bottomLeft: normalizedObjectPoint(fromImagePoint: stretch.bottomLeft, size: size)
         )
     }
 
@@ -843,20 +843,20 @@ enum AnyUprightGeometry {
         return min(1.0, max(0.0, score / maximum))
     }
 
-    static func innerStretchOffsets(forInnerStretch quad: AUQuad, size: AUSize) -> AUCornerOffsets {
+    static func innerStretchOffsets(forInnerStretch stretch: AUStretchCorners, size: AUSize) -> AUCornerOffsets {
         func objectPoint(fromImagePoint point: AUPoint) -> AUPoint {
             normalizedObjectPoint(fromImagePoint: point, size: size)
         }
 
         return AUCornerOffsets(
-            topLeftPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: quad.topLeft), corner: .topLeft),
-            topRightPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: quad.topRight), corner: .topRight),
-            bottomRightPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: quad.bottomRight), corner: .bottomRight),
-            bottomLeftPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: quad.bottomLeft), corner: .bottomLeft)
+            topLeftPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.topLeft), corner: .topLeft),
+            topRightPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.topRight), corner: .topRight),
+            bottomRightPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.bottomRight), corner: .bottomRight),
+            bottomLeftPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.bottomLeft), corner: .bottomLeft)
         )
     }
 
-    private static func quad(from offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUQuad {
+    private static func stretch(from offsets: AUCornerOffsets, base: AUStretchCorners, size: AUSize) -> AUStretchCorners {
         func apply(_ base: AUPoint, percent: AUPoint, pixels: AUPoint) -> AUPoint {
             AUPoint(
                 x: base.x + percent.x * size.width + pixels.x,
@@ -864,7 +864,7 @@ enum AnyUprightGeometry {
             )
         }
 
-        return AUQuad(
+        return AUStretchCorners(
             topLeft: apply(base.topLeft, percent: offsets.topLeftPercent, pixels: offsets.topLeftPixels),
             topRight: apply(base.topRight, percent: offsets.topRightPercent, pixels: offsets.topRightPixels),
             bottomRight: apply(base.bottomRight, percent: offsets.bottomRightPercent, pixels: offsets.bottomRightPixels),
@@ -872,20 +872,20 @@ enum AnyUprightGeometry {
         )
     }
 
-    static func quadObjectPoints(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
-        quadObjectPoints(from: offsets, base: fullFrameObjectBase(), size: size)
+    static func stretchObjectPoints(from offsets: AUCornerOffsets, size: AUSize) -> AUStretchCorners {
+        stretchObjectPoints(from: offsets, base: fullFrameObjectBase(), size: size)
     }
 
-    static func innerStretchObjectPoints(from offsets: AUCornerOffsets, size: AUSize) -> AUQuad {
-        quadObjectPoints(from: offsets, base: innerStretchObjectBase(), size: size)
+    static func innerStretchObjectPoints(from offsets: AUCornerOffsets, size: AUSize) -> AUStretchCorners {
+        stretchObjectPoints(from: offsets, base: innerStretchObjectBase(), size: size)
     }
 
-    static func objectPixelQuad(fromNormalizedObjectQuad quad: AUQuad, size: AUSize) -> AUQuad {
-        AUQuad(
-            topLeft: objectPixelPoint(fromNormalizedObjectPoint: quad.topLeft, size: size),
-            topRight: objectPixelPoint(fromNormalizedObjectPoint: quad.topRight, size: size),
-            bottomRight: objectPixelPoint(fromNormalizedObjectPoint: quad.bottomRight, size: size),
-            bottomLeft: objectPixelPoint(fromNormalizedObjectPoint: quad.bottomLeft, size: size)
+    static func objectPixelSelection(fromNormalizedObjectSelection stretch: AUStretchCorners, size: AUSize) -> AUStretchCorners {
+        AUStretchCorners(
+            topLeft: objectPixelPoint(fromNormalizedObjectPoint: stretch.topLeft, size: size),
+            topRight: objectPixelPoint(fromNormalizedObjectPoint: stretch.topRight, size: size),
+            bottomRight: objectPixelPoint(fromNormalizedObjectPoint: stretch.bottomRight, size: size),
+            bottomLeft: objectPixelPoint(fromNormalizedObjectPoint: stretch.bottomLeft, size: size)
         )
     }
 
@@ -907,12 +907,12 @@ enum AnyUprightGeometry {
         AUPoint(x: point.x, y: 1.0 - point.y)
     }
 
-    static func verticallyFlippedObjectQuad(_ quad: AUQuad) -> AUQuad {
-        AUQuad(
-            topLeft: verticallyFlippedObjectPoint(quad.topLeft),
-            topRight: verticallyFlippedObjectPoint(quad.topRight),
-            bottomRight: verticallyFlippedObjectPoint(quad.bottomRight),
-            bottomLeft: verticallyFlippedObjectPoint(quad.bottomLeft)
+    static func verticallyFlippedObjectSelection(_ stretch: AUStretchCorners) -> AUStretchCorners {
+        AUStretchCorners(
+            topLeft: verticallyFlippedObjectPoint(stretch.topLeft),
+            topRight: verticallyFlippedObjectPoint(stretch.topRight),
+            bottomRight: verticallyFlippedObjectPoint(stretch.bottomRight),
+            bottomLeft: verticallyFlippedObjectPoint(stretch.bottomLeft)
         )
     }
 
@@ -920,28 +920,28 @@ enum AnyUprightGeometry {
         AUPoint(x: point.x, y: max(size.height, 1.0) - point.y)
     }
 
-    static func verticallyFlippedPixelQuad(_ quad: AUQuad, size: AUSize) -> AUQuad {
-        AUQuad(
-            topLeft: verticallyFlippedPixelPoint(quad.topLeft, size: size),
-            topRight: verticallyFlippedPixelPoint(quad.topRight, size: size),
-            bottomRight: verticallyFlippedPixelPoint(quad.bottomRight, size: size),
-            bottomLeft: verticallyFlippedPixelPoint(quad.bottomLeft, size: size)
+    static func verticallyFlippedPixelSelection(_ stretch: AUStretchCorners, size: AUSize) -> AUStretchCorners {
+        AUStretchCorners(
+            topLeft: verticallyFlippedPixelPoint(stretch.topLeft, size: size),
+            topRight: verticallyFlippedPixelPoint(stretch.topRight, size: size),
+            bottomRight: verticallyFlippedPixelPoint(stretch.bottomRight, size: size),
+            bottomLeft: verticallyFlippedPixelPoint(stretch.bottomLeft, size: size)
         )
     }
 
-    static func distanceToQuadEdge(from point: AUPoint, quad: AUQuad) -> Double {
+    static func distanceToSelectionEdge(from point: AUPoint, stretch: AUStretchCorners) -> Double {
         [
-            AULineSegment(start: quad.topLeft, end: quad.topRight),
-            AULineSegment(start: quad.topRight, end: quad.bottomRight),
-            AULineSegment(start: quad.bottomRight, end: quad.bottomLeft),
-            AULineSegment(start: quad.bottomLeft, end: quad.topLeft)
+            AULineSegment(start: stretch.topLeft, end: stretch.topRight),
+            AULineSegment(start: stretch.topRight, end: stretch.bottomRight),
+            AULineSegment(start: stretch.bottomRight, end: stretch.bottomLeft),
+            AULineSegment(start: stretch.bottomLeft, end: stretch.topLeft)
         ].reduce(Double.greatestFiniteMagnitude) { partial, segment in
             min(partial, segment.distance(to: point))
         }
     }
 
-    private static func quadObjectPoints(from offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUQuad {
-        AUQuad(
+    private static func stretchObjectPoints(from offsets: AUCornerOffsets, base: AUStretchCorners, size: AUSize) -> AUStretchCorners {
+        AUStretchCorners(
             topLeft: objectPoint(for: .topLeft, offsets: offsets, base: base, size: size),
             topRight: objectPoint(for: .topRight, offsets: offsets, base: base, size: size),
             bottomRight: objectPoint(for: .bottomRight, offsets: offsets, base: base, size: size),
@@ -949,20 +949,20 @@ enum AnyUprightGeometry {
         )
     }
 
-    static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
+    static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
         cornerPixelOffset(forObjectPoint: point, corner: corner, offsets: offsets, base: fullFrameObjectBase(), size: size)
     }
 
-    static func sourceCornerPixelOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
+    static func sourceCornerPixelOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
         cornerPixelOffset(forObjectPoint: point, corner: corner, offsets: offsets, base: innerStretchObjectBase(), size: size)
     }
 
-    static func sourceCornerPercentOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner) -> AUPoint {
+    static func sourceCornerPercentOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner) -> AUPoint {
         let base = objectBasePoint(for: corner, in: innerStretchObjectBase())
         return AUPoint(x: point.x - base.x, y: point.y - base.y)
     }
 
-    private static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUQuadCorner, offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUPoint {
+    private static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner, offsets: AUCornerOffsets, base: AUStretchCorners, size: AUSize) -> AUPoint {
         let base = objectBasePoint(for: corner, in: base)
         let percent = percentOffset(for: corner, in: offsets)
         return AUPoint(
@@ -975,10 +975,10 @@ enum AnyUprightGeometry {
         AUPoint(x: point.x * size.width, y: point.y * size.height)
     }
 
-    static func uprightQuad(vertical: Double, horizontal: Double, size: AUSize) -> AUQuad {
+    static func uprightOutputCorners(vertical: Double, horizontal: Double, size: AUSize) -> AUStretchCorners {
         let sourceToOutput = simd_inverse(uprightOutputToSourceMatrix(vertical: vertical, horizontal: horizontal, size: size))
-        let frame = AUQuad.fullFrame(size)
-        return AUQuad(
+        let frame = AUStretchCorners.fullFrame(size)
+        return AUStretchCorners(
             topLeft: transform(frame.topLeft, by: sourceToOutput),
             topRight: transform(frame.topRight, by: sourceToOutput),
             bottomRight: transform(frame.bottomRight, by: sourceToOutput),
@@ -1324,31 +1324,31 @@ enum AnyUprightGeometry {
         estimatePerspective(from: referenceLines, orientation: .horizontal, size: size)
     }
 
-    static func quadOutputToSourceMatrix(
+    static func stretchOutputToSourceMatrix(
         from offsets: AUCornerOffsets,
-        mode: AUQuadTransformMode,
+        mode: AUStretchTransformMode,
         showCornerAdjuster: Bool,
         outputSize: AUSize,
         sourceSize: AUSize
     ) -> simd_float3x3 {
         switch mode {
         case .outputCorners:
-            let outputQuad = quad(from: offsets, size: outputSize)
-            return homography(from: outputQuad, to: AUQuad.fullFrame(sourceSize))
+            let outputStretch = stretch(from: offsets, size: outputSize)
+            return homography(from: outputStretch, to: AUStretchCorners.fullFrame(sourceSize))
 
         case .innerStretch:
             guard !showCornerAdjuster else {
-                return homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
+                return homography(from: AUStretchCorners.fullFrame(outputSize), to: AUStretchCorners.fullFrame(sourceSize))
             }
 
             let selectedInnerStretch = innerStretch(from: offsets, size: sourceSize)
-            return homography(from: AUQuad.fullFrame(outputSize), to: selectedInnerStretch)
+            return homography(from: AUStretchCorners.fullFrame(outputSize), to: selectedInnerStretch)
         }
     }
 
-    static func quadOutputToCurrentSourceMatrix(
+    static func stretchOutputToCurrentSourceMatrix(
         from offsets: AUCornerOffsets,
-        mode: AUQuadTransformMode,
+        mode: AUStretchTransformMode,
         showCornerAdjuster: Bool,
         outputSize: AUSize,
         sourceSize: AUSize,
@@ -1359,7 +1359,7 @@ enum AnyUprightGeometry {
             return identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: sourceSize)
         }
 
-        let correction = quadOutputToSourceMatrix(
+        let correction = stretchOutputToSourceMatrix(
             from: offsets,
             mode: mode,
             showCornerAdjuster: false,
@@ -1376,22 +1376,22 @@ enum AnyUprightGeometry {
         )
     }
 
-    static func quadSelectionToOutputRectMatrix(
+    static func stretchSelectionToOutputRectMatrix(
         from offsets: AUCornerOffsets,
         outputSize: AUSize,
         sourceSize: AUSize
     ) -> simd_float3x3 {
-        let outputQuad = innerStretchOutputHandles(from: offsets, outputSize: outputSize, sourceSize: sourceSize)
-        return homography(from: outputQuad, to: AUQuad.fullFrame(outputSize))
+        let outputStretch = innerStretchOutputHandles(from: offsets, outputSize: outputSize, sourceSize: sourceSize)
+        return homography(from: outputStretch, to: AUStretchCorners.fullFrame(outputSize))
     }
 
     static func innerStretchOutputHandles(
         from offsets: AUCornerOffsets,
         outputSize: AUSize,
         sourceSize: AUSize
-    ) -> AUQuad {
+    ) -> AUStretchCorners {
         let selectedInnerStretch = innerStretch(from: offsets, size: sourceSize)
-        return AUQuad(
+        return AUStretchCorners(
             topLeft: scalePoint(selectedInnerStretch.topLeft, from: sourceSize, to: outputSize),
             topRight: scalePoint(selectedInnerStretch.topRight, from: sourceSize, to: outputSize),
             bottomRight: scalePoint(selectedInnerStretch.bottomRight, from: sourceSize, to: outputSize),
@@ -1400,7 +1400,7 @@ enum AnyUprightGeometry {
     }
 
     static func identityOutputToSourceMatrix(outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {
-        homography(from: AUQuad.fullFrame(outputSize), to: AUQuad.fullFrame(sourceSize))
+        homography(from: AUStretchCorners.fullFrame(outputSize), to: AUStretchCorners.fullFrame(sourceSize))
     }
 
     static func autoCropOutputToSourceMatrix(
@@ -1554,7 +1554,7 @@ enum AnyUprightGeometry {
         }
     }
 
-    static func homography(from output: AUQuad, to source: AUQuad) -> simd_float3x3 {
+    static func homography(from output: AUStretchCorners, to source: AUStretchCorners) -> simd_float3x3 {
         let pairs = [
             (output.topLeft, source.topLeft),
             (output.topRight, source.topRight),
@@ -1630,7 +1630,7 @@ enum AnyUprightGeometry {
         ))
     }
 
-    private static func objectPoint(for corner: AUQuadCorner, offsets: AUCornerOffsets, base: AUQuad, size: AUSize) -> AUPoint {
+    private static func objectPoint(for corner: AUStretchCorner, offsets: AUCornerOffsets, base: AUStretchCorners, size: AUSize) -> AUPoint {
         let base = objectBasePoint(for: corner, in: base)
         let percent = percentOffset(for: corner, in: offsets)
         let pixels = pixelOffset(for: corner, in: offsets)
@@ -1640,8 +1640,8 @@ enum AnyUprightGeometry {
         )
     }
 
-    private static func fullFrameObjectBase() -> AUQuad {
-        AUQuad(
+    private static func fullFrameObjectBase() -> AUStretchCorners {
+        AUStretchCorners(
             topLeft: AUPoint(x: 0.0, y: 1.0),
             topRight: AUPoint(x: 1.0, y: 1.0),
             bottomRight: AUPoint(x: 1.0, y: 0.0),
@@ -1649,8 +1649,8 @@ enum AnyUprightGeometry {
         )
     }
 
-    private static func innerStretchObjectBase() -> AUQuad {
-        AUQuad(
+    private static func innerStretchObjectBase() -> AUStretchCorners {
+        AUStretchCorners(
             topLeft: AUPoint(x: innerStretchInset, y: 1.0 - innerStretchInset),
             topRight: AUPoint(x: 1.0 - innerStretchInset, y: 1.0 - innerStretchInset),
             bottomRight: AUPoint(x: 1.0 - innerStretchInset, y: innerStretchInset),
@@ -1658,7 +1658,7 @@ enum AnyUprightGeometry {
         )
     }
 
-    private static func objectBasePoint(for corner: AUQuadCorner, in base: AUQuad) -> AUPoint {
+    private static func objectBasePoint(for corner: AUStretchCorner, in base: AUStretchCorners) -> AUPoint {
         switch corner {
         case .topLeft:
             return base.topLeft
@@ -1671,7 +1671,7 @@ enum AnyUprightGeometry {
         }
     }
 
-    private static func percentOffset(for corner: AUQuadCorner, in offsets: AUCornerOffsets) -> AUPoint {
+    private static func percentOffset(for corner: AUStretchCorner, in offsets: AUCornerOffsets) -> AUPoint {
         switch corner {
         case .topLeft:
             return offsets.topLeftPercent
@@ -1684,7 +1684,7 @@ enum AnyUprightGeometry {
         }
     }
 
-    private static func pixelOffset(for corner: AUQuadCorner, in offsets: AUCornerOffsets) -> AUPoint {
+    private static func pixelOffset(for corner: AUStretchCorner, in offsets: AUCornerOffsets) -> AUPoint {
         switch corner {
         case .topLeft:
             return offsets.topLeftPixels

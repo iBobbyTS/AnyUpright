@@ -1,5 +1,5 @@
 //
-//  AnyUprightQuadOSCControls.swift
+//  AnyUprightStretchOSCControls.swift
 //  AnyUpright
 //
 
@@ -24,16 +24,16 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     private let dragStateLock = NSLock()
     private let hoverStateLock = NSLock()
     private let detectionSelectionLock = NSLock()
-    private var dragState: QuadOSCDragState?
-    private var hoverPart: QuadOSCPart = .none
-    private var detectionSelection = AUQuadDetectionSelectionState()
+    private var dragState: StretchOSCDragState?
+    private var hoverPart: StretchOSCPart = .none
+    private var detectionSelection = AUStretchDetectionSelectionState()
     var debugDrawSequence = 0
 
     required init?(apiManager: PROAPIAccessing) {
         super.init(apiManager: apiManager)
     }
 
-    var fixedQuadMode: AUQuadTransformMode {
+    var fixedStretchMode: AUStretchTransformMode {
         .innerStretch
     }
 
@@ -45,9 +45,9 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     @objc(drawOSCWithWidth:height:activePart:destinationImage:atTime:)
     func drawOSC(withWidth width: Int, height: Int, activePart: Int, destinationImage: FxImageTile, at time: CMTime) {
         let paramAPI = parameterRetrievalAPI()
-        let state = quadParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedQuadMode)
-        let mode = quadMode(from: state)
-        guard shouldEnableQuadOSCControls(from: state, mode: mode) else {
+        let state = stretchParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedStretchMode)
+        let mode = stretchMode(from: state)
+        guard shouldEnableStretchOSCControls(from: state, mode: mode) else {
             overlayRenderer.clear(destinationImage: destinationImage)
             return
         }
@@ -61,22 +61,22 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
 
         let objectSize = objectPixelSizeForOSC(defaultSize: outputSize)
         let geometry = hitGeometry(from: state, size: objectSize, mode: mode)
-        let quad = geometry.rawCanvasQuad
+        let stretch = geometry.rawCanvasStretch
         let canvasFrame = objectCanvasFrame()
-        let chooseFromDetections = quadChooseFromDetections(at: time, paramAPI: paramAPI)
+        let chooseFromDetections = stretchChooseFromDetections(at: time, paramAPI: paramAPI)
         if chooseFromDetections {
             setHoverPart(.none, forceUpdate: nil)
         } else {
             clearDetectionSelection(forceUpdate: nil)
         }
-        let displayPart = chooseFromDetections ? QuadOSCPart.none : currentDisplayPart(hostActivePart: activePart)
+        let displayPart = chooseFromDetections ? StretchOSCPart.none : currentDisplayPart(hostActivePart: activePart)
         let debugSequence = nextDebugDrawSequence()
-        debugCanvasMetrics(label: "draw-source-entry seq=\(debugSequence) part=\(displayPart.rawValue) host=\(activePart)", width: width, height: height, destinationImage: destinationImage, quad: quad, canvasFrame: canvasFrame)
+        debugCanvasMetrics(label: "draw-source-entry seq=\(debugSequence) part=\(displayPart.rawValue) host=\(activePart)", width: width, height: height, destinationImage: destinationImage, stretch: stretch, canvasFrame: canvasFrame)
         let handles = [
-            AUOSCHandle(point: quad[0], part: QuadOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: quad[1], part: QuadOSCPart.topRight.rawValue),
-            AUOSCHandle(point: quad[2], part: QuadOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: quad[3], part: QuadOSCPart.bottomLeft.rawValue)
+            AUOSCHandle(point: stretch[0], part: StretchOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: stretch[1], part: StretchOSCPart.topRight.rawValue),
+            AUOSCHandle(point: stretch[2], part: StretchOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: stretch[3], part: StretchOSCPart.bottomLeft.rawValue)
         ]
         debugInnerStretchDrawMapping(
             sequence: debugSequence,
@@ -85,14 +85,14 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             destinationImage: destinationImage,
             outputSize: outputSize,
             objectSize: objectSize,
-            quad: quad,
-            objectCanvasQuad: geometry.quad,
+            stretch: stretch,
+            objectCanvasStretch: geometry.stretch,
             canvasFrame: canvasFrame
         )
 
-        let detectedEdges = quadInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
-        let detectedCorners = quadInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
-        let detectionThreshold = quadDetectionScoreThreshold(at: time, paramAPI: paramAPI)
+        let detectedEdges = stretchInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
+        let detectedCorners = stretchInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
+        let detectionThreshold = stretchDetectionScoreThreshold(at: time, paramAPI: paramAPI)
         let detectionSegments: [AUOSCStyledSegment]
         if chooseFromDetections {
             let selection = pruneDetectionSelection(edges: detectedEdges, corners: detectedCorners, threshold: detectionThreshold, forceUpdate: nil)
@@ -107,7 +107,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         }
         debugLog("draw-source seq=\(debugSequence) detection choose=\(chooseFromDetections) edges=\(detectedEdges.count) corners=\(detectedCorners.count) threshold=\(detectionThreshold) segments=\(detectionSegments.count)")
         overlayRenderer.renderStyledSegments(
-            detectionSegments + innerStretchOverlaySegments(for: displayPart, quad: quad),
+            detectionSegments + innerStretchOverlaySegments(for: displayPart, stretch: stretch),
             handles: handles,
             activePart: displayPart.rawValue,
             destinationImage: destinationImage,
@@ -124,10 +124,10 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     @objc(hitTestOSCAtMousePositionX:mousePositionY:activePart:atTime:)
     func hitTestOSC(atMousePositionX mousePositionX: Double, mousePositionY: Double, activePart: UnsafeMutablePointer<Int>?, at time: CMTime) {
         let paramAPI = parameterRetrievalAPI()
-        let state = quadParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedQuadMode)
-        let mode = quadMode(from: state)
-        guard shouldEnableQuadOSCControls(from: state, mode: mode) else {
-            activePart?.pointee = QuadOSCPart.none.rawValue
+        let state = stretchParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedStretchMode)
+        let mode = stretchMode(from: state)
+        guard shouldEnableStretchOSCControls(from: state, mode: mode) else {
+            activePart?.pointee = StretchOSCPart.none.rawValue
             return
         }
 
@@ -135,11 +135,11 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let canvasFrame = objectCanvasFrame()
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
-        debugCanvasMetrics(label: "hit", eventPoint: eventPoint, quad: geometry.rawCanvasQuad, canvasFrame: canvasFrame)
-        if mode == .innerStretch, quadChooseFromDetections(at: time, paramAPI: paramAPI) {
-            let threshold = quadDetectionScoreThreshold(at: time, paramAPI: paramAPI)
-            let edges = quadInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
-            let corners = quadInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
+        debugCanvasMetrics(label: "hit", eventPoint: eventPoint, stretch: geometry.rawCanvasStretch, canvasFrame: canvasFrame)
+        if mode == .innerStretch, stretchChooseFromDetections(at: time, paramAPI: paramAPI) {
+            let threshold = stretchDetectionScoreThreshold(at: time, paramAPI: paramAPI)
+            let edges = stretchInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
+            let corners = stretchInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
             let selection = pruneDetectionSelection(edges: edges, corners: corners, threshold: threshold, forceUpdate: nil)
             let hit = hitTestDetectionPrimitive(
                 forEventPoint: eventPoint,
@@ -148,24 +148,24 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 threshold: threshold,
                 selection: selection,
                 canvasFrame: canvasFrame,
-                rawCanvasQuad: geometry.rawCanvasQuad,
+                rawCanvasStretch: geometry.rawCanvasStretch,
                 preferredMode: nil
             )
-            activePart?.pointee = hit.map { detectionPartID(for: $0.primitive) } ?? QuadOSCPart.none.rawValue
+            activePart?.pointee = hit.map { detectionPartID(for: $0.primitive) } ?? StretchOSCPart.none.rawValue
             return
         }
         let hit = hitTestPart(
             forEventPoint: eventPoint,
             handles: geometry.handles,
-            quad: geometry.quad,
+            stretch: geometry.stretch,
             rawCanvasHandles: geometry.rawCanvasHandles,
-            rawCanvasQuad: geometry.rawCanvasQuad,
+            rawCanvasStretch: geometry.rawCanvasStretch,
             useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
             rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: nil
         )
-        let part = hit?.part.rawValue ?? QuadOSCPart.none.rawValue
+        let part = hit?.part.rawValue ?? StretchOSCPart.none.rawValue
         activePart?.pointee = part
     }
 
@@ -173,19 +173,19 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     func mouseDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         setHoverPart(.none, forceUpdate: nil)
         let paramAPI = parameterRetrievalAPI()
-        let state = quadParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedQuadMode)
-        let mode = quadMode(from: state)
+        let state = stretchParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedStretchMode)
+        let mode = stretchMode(from: state)
         let size = objectPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let canvasFrame = objectCanvasFrame()
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
-        if shouldEnableQuadOSCControls(from: state, mode: mode),
+        if shouldEnableStretchOSCControls(from: state, mode: mode),
            mode == .innerStretch,
-           quadChooseFromDetections(at: time, paramAPI: paramAPI) {
+           stretchChooseFromDetections(at: time, paramAPI: paramAPI) {
             setDragState(nil)
-            let threshold = quadDetectionScoreThreshold(at: time, paramAPI: paramAPI)
-            let edges = quadInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
-            let corners = quadInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
+            let threshold = stretchDetectionScoreThreshold(at: time, paramAPI: paramAPI)
+            let edges = stretchInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
+            let corners = stretchInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
             let selection = pruneDetectionSelection(edges: edges, corners: corners, threshold: threshold, forceUpdate: nil)
             guard let hit = hitTestDetectionPrimitive(
                 forEventPoint: eventPoint,
@@ -194,7 +194,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 threshold: threshold,
                 selection: selection,
                 canvasFrame: canvasFrame,
-                rawCanvasQuad: geometry.rawCanvasQuad,
+                rawCanvasStretch: geometry.rawCanvasStretch,
                 preferredMode: nil
             ) else {
                 forceUpdate?.pointee = false
@@ -214,9 +214,9 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let resolvedEvent = hitTestPart(
             forEventPoint: eventPoint,
             handles: geometry.handles,
-            quad: geometry.quad,
+            stretch: geometry.stretch,
             rawCanvasHandles: geometry.rawCanvasHandles,
-            rawCanvasQuad: geometry.rawCanvasQuad,
+            rawCanvasStretch: geometry.rawCanvasStretch,
             useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
             rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
@@ -226,7 +226,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             ?? resolvedCanvasPoint(
                 fromEventPoint: eventPoint,
                 canvasFrame: canvasFrame,
-                rawCanvasQuad: geometry.rawCanvasQuad,
+                rawCanvasStretch: geometry.rawCanvasStretch,
                 rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
                 preferredMode: nil
             )
@@ -234,9 +234,9 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let resolvedPartRaw = resolveOSCDragPart(
             hostActivePart: activePart,
             localHitPart: resolvedEvent?.part.rawValue,
-            nonePart: QuadOSCPart.none.rawValue
+            nonePart: StretchOSCPart.none.rawValue
         )
-        let resolvedPart = resolvedPartRaw.flatMap(QuadOSCPart.init(rawValue:))
+        let resolvedPart = resolvedPartRaw.flatMap(StretchOSCPart.init(rawValue:))
         debugOSCEventResolution(
             label: "mouse-down",
             eventPoint: eventPoint,
@@ -245,23 +245,23 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             mode: mode,
             size: size
         )
-        guard shouldEnableQuadOSCControls(from: state, mode: mode),
+        guard shouldEnableStretchOSCControls(from: state, mode: mode),
               let resolvedPart else {
             setDragState(nil)
             forceUpdate?.pointee = false
             return
         }
 
-        setDragState(QuadOSCDragState(part: resolvedPart, lastCanvasPoint: resolvedCanvasPoint.canvasPoint, eventCoordinateMode: resolvedCanvasPoint.coordinateMode))
+        setDragState(StretchOSCDragState(part: resolvedPart, lastCanvasPoint: resolvedCanvasPoint.canvasPoint, eventCoordinateMode: resolvedCanvasPoint.coordinateMode))
         forceUpdate?.pointee = true
     }
 
     @objc(mouseDraggedAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseDragged(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         let paramAPI = parameterRetrievalAPI()
-        let state = quadParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedQuadMode)
-        let mode = quadMode(from: state)
-        if mode == .innerStretch, quadChooseFromDetections(at: time, paramAPI: paramAPI) {
+        let state = stretchParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedStretchMode)
+        let mode = stretchMode(from: state)
+        if mode == .innerStretch, stretchChooseFromDetections(at: time, paramAPI: paramAPI) {
             setDragState(nil)
             forceUpdate?.pointee = false
             return
@@ -269,7 +269,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let storedState = currentDragState()
         let part = validDragPart(from: activePart) ?? storedState?.part
 
-        guard shouldEnableQuadOSCControls(from: state, mode: mode),
+        guard shouldEnableStretchOSCControls(from: state, mode: mode),
               let part,
               let settingAPI = parameterSettingAPI() else {
             forceUpdate?.pointee = false
@@ -282,7 +282,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let resolved = resolvedCanvasPoint(
             fromEventPoint: eventPoint,
             canvasFrame: objectCanvasFrame(),
-            rawCanvasQuad: geometry.rawCanvasQuad,
+            rawCanvasStretch: geometry.rawCanvasStretch,
             rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: storedState?.eventCoordinateMode
         )
@@ -296,14 +296,14 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             mode: mode,
             size: size
         )
-        if part == .quad, let previousCanvasPoint = storedState?.lastCanvasPoint {
-            let previousResolution = QuadOSCEventResolution(canvasPoint: previousCanvasPoint, coordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode)
+        if part == .stretch, let previousCanvasPoint = storedState?.lastCanvasPoint {
+            let previousResolution = StretchOSCEventResolution(canvasPoint: previousCanvasPoint, coordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode)
             let previousDragPoint = dragObjectPoint(from: previousResolution, mode: mode, sourceSize: size)
             let pixelDelta = AUPoint(
                 x: (draggedObjectPoint.x - previousDragPoint.x) * size.width,
                 y: (draggedObjectPoint.y - previousDragPoint.y) * size.height
             )
-            debugOSCDragDelta(label: "mouse-drag-quad", previous: previousResolution, current: resolved, previousObject: previousDragPoint, currentObject: draggedObjectPoint, pixelDelta: pixelDelta, size: size)
+            debugOSCDragDelta(label: "mouse-drag-stretch", previous: previousResolution, current: resolved, previousObject: previousDragPoint, currentObject: draggedObjectPoint, pixelDelta: pixelDelta, size: size)
             translateCorners(
                 from: state,
                 pixelDelta: pixelDelta,
@@ -313,13 +313,13 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 settingAPI: settingAPI,
                 time: time
             )
-            setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode))
+            setDragState(StretchOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode))
             forceUpdate?.pointee = true
             return
         }
 
         if let edgeCorners = corners(forEdgePart: part), let previousCanvasPoint = storedState?.lastCanvasPoint {
-            let previousResolution = QuadOSCEventResolution(canvasPoint: previousCanvasPoint, coordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode)
+            let previousResolution = StretchOSCEventResolution(canvasPoint: previousCanvasPoint, coordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode)
             let previousDragPoint = dragObjectPoint(from: previousResolution, mode: mode, sourceSize: size)
             let pixelDelta = AUPoint(
                 x: (draggedObjectPoint.x - previousDragPoint.x) * size.width,
@@ -335,13 +335,13 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 settingAPI: settingAPI,
                 time: time
             )
-            setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode))
+            setDragState(StretchOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode))
             forceUpdate?.pointee = true
             return
         }
 
-        setDragState(QuadOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode))
-        setCorner(draggedObjectPoint, part: part, mode: mode, offsets: quadCornerOffsets(from: state), size: size, settingAPI: settingAPI, time: time)
+        setDragState(StretchOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode))
+        setCorner(draggedObjectPoint, part: part, mode: mode, offsets: stretchCornerOffsets(from: state), size: size, settingAPI: settingAPI, time: time)
         forceUpdate?.pointee = true
     }
 
@@ -404,16 +404,16 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
 
 
     private func renderOutputCornersOSC(from state: AnyUprightParameterState, outputSize: AUSize, destinationImage: FxImageTile) {
-        let objectPoints = quadObjectPoints(from: state, size: objectPixelSizeForOSC(defaultSize: outputSize), mode: .outputCorners)
-        let canvasPoints = quadCanvasPoints(from: objectPoints)
+        let objectPoints = stretchObjectPoints(from: state, size: objectPixelSizeForOSC(defaultSize: outputSize), mode: .outputCorners)
+        let canvasPoints = stretchCanvasPoints(from: objectPoints)
         let handles = [
-            AUOSCHandle(point: canvasPoints.topLeft, part: QuadOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: canvasPoints.topRight, part: QuadOSCPart.topRight.rawValue),
-            AUOSCHandle(point: canvasPoints.bottomRight, part: QuadOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: canvasPoints.bottomLeft, part: QuadOSCPart.bottomLeft.rawValue)
+            AUOSCHandle(point: canvasPoints.topLeft, part: StretchOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: canvasPoints.topRight, part: StretchOSCPart.topRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomRight, part: StretchOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: canvasPoints.bottomLeft, part: StretchOSCPart.bottomLeft.rawValue)
         ]
         let displayPart = currentDisplayPart()
-        overlayRenderer.renderQuad(
+        overlayRenderer.renderStretch(
             points: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
             handles: handles,
             activePart: displayPart.rawValue,
@@ -432,34 +432,34 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         oscAPI.setCursor(cursor)
     }
 
-    private func setDragState(_ state: QuadOSCDragState?) {
+    private func setDragState(_ state: StretchOSCDragState?) {
         dragStateLock.lock()
         dragState = state
         dragStateLock.unlock()
     }
 
-    private func currentDragState() -> QuadOSCDragState? {
+    private func currentDragState() -> StretchOSCDragState? {
         dragStateLock.lock()
         let state = dragState
         dragStateLock.unlock()
         return state
     }
 
-    private func currentHoverPart() -> QuadOSCPart {
+    private func currentHoverPart() -> StretchOSCPart {
         hoverStateLock.lock()
         let part = hoverPart
         hoverStateLock.unlock()
         return part
     }
 
-    private func currentDetectionSelection() -> AUQuadDetectionSelectionState {
+    private func currentDetectionSelection() -> AUStretchDetectionSelectionState {
         detectionSelectionLock.lock()
         let selection = detectionSelection
         detectionSelectionLock.unlock()
         return selection
     }
 
-    private func setDetectionSelection(_ selection: AUQuadDetectionSelectionState, forceUpdate: UnsafeMutablePointer<ObjCBool>?) {
+    private func setDetectionSelection(_ selection: AUStretchDetectionSelectionState, forceUpdate: UnsafeMutablePointer<ObjCBool>?) {
         detectionSelectionLock.lock()
         let changed = detectionSelection != selection
         detectionSelection = selection
@@ -479,7 +479,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         setDetectionSelection(selection, forceUpdate: forceUpdate)
     }
 
-    private func setDetectionHover(_ primitive: AUQuadDetectionPrimitiveID?, forceUpdate: UnsafeMutablePointer<ObjCBool>?) {
+    private func setDetectionHover(_ primitive: AUStretchDetectionPrimitiveID?, forceUpdate: UnsafeMutablePointer<ObjCBool>?) {
         var selection = currentDetectionSelection()
         guard selection.hover != primitive else {
             return
@@ -491,19 +491,19 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
 
     private func isChoosingDetections(at time: CMTime) -> Bool {
         let paramAPI = parameterRetrievalAPI()
-        let state = quadParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedQuadMode)
-        let mode = quadMode(from: state)
+        let state = stretchParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedStretchMode)
+        let mode = stretchMode(from: state)
         return mode == .innerStretch
-            && shouldEnableQuadOSCControls(from: state, mode: mode)
-            && quadChooseFromDetections(at: time, paramAPI: paramAPI)
+            && shouldEnableStretchOSCControls(from: state, mode: mode)
+            && stretchChooseFromDetections(at: time, paramAPI: paramAPI)
     }
 
     private func pruneDetectionSelection(
-        edges: [QuadInnerStretchDetectionEdge],
-        corners: [QuadInnerStretchDetectionCorner],
+        edges: [InnerStretchDetectionEdge],
+        corners: [InnerStretchDetectionCorner],
         threshold: Double,
         forceUpdate: UnsafeMutablePointer<ObjCBool>?
-    ) -> AUQuadDetectionSelectionState {
+    ) -> AUStretchDetectionSelectionState {
         let clampedThreshold = min(1.0, max(0.0, threshold))
         let validEdgeIndexes = Set(edges.filter { $0.score >= clampedThreshold }.map(\.index))
         let validCornerIndexes = Set(corners.filter { $0.score >= clampedThreshold }.map(\.index))
@@ -533,22 +533,22 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     }
 
     @discardableResult
-    private func updateDetectionHover(forEventPoint eventPoint: AUPoint, at time: CMTime, forceUpdate: UnsafeMutablePointer<ObjCBool>?) -> AUQuadDetectionPrimitiveID? {
+    private func updateDetectionHover(forEventPoint eventPoint: AUPoint, at time: CMTime, forceUpdate: UnsafeMutablePointer<ObjCBool>?) -> AUStretchDetectionPrimitiveID? {
         let paramAPI = parameterRetrievalAPI()
-        let state = quadParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedQuadMode)
-        let mode = quadMode(from: state)
+        let state = stretchParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedStretchMode)
+        let mode = stretchMode(from: state)
         guard mode == .innerStretch,
-              shouldEnableQuadOSCControls(from: state, mode: mode),
-              quadChooseFromDetections(at: time, paramAPI: paramAPI) else {
+              shouldEnableStretchOSCControls(from: state, mode: mode),
+              stretchChooseFromDetections(at: time, paramAPI: paramAPI) else {
             clearDetectionSelection(forceUpdate: forceUpdate)
             return nil
         }
 
         let size = objectPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
-        let threshold = quadDetectionScoreThreshold(at: time, paramAPI: paramAPI)
-        let edges = quadInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
-        let corners = quadInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
+        let threshold = stretchDetectionScoreThreshold(at: time, paramAPI: paramAPI)
+        let edges = stretchInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
+        let corners = stretchInnerStretchDetectionCorners(at: time, paramAPI: paramAPI)
         let selection = pruneDetectionSelection(edges: edges, corners: corners, threshold: threshold, forceUpdate: forceUpdate)
         let hit = hitTestDetectionPrimitive(
             forEventPoint: eventPoint,
@@ -557,7 +557,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             threshold: threshold,
             selection: selection,
             canvasFrame: objectCanvasFrame(),
-            rawCanvasQuad: geometry.rawCanvasQuad,
+            rawCanvasStretch: geometry.rawCanvasStretch,
             preferredMode: currentDragState()?.eventCoordinateMode
         )
         setDetectionHover(hit?.primitive, forceUpdate: forceUpdate)
@@ -566,23 +566,23 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
 
     private func hitTestDetectionPrimitive(
         forEventPoint eventPoint: AUPoint,
-        edges: [QuadInnerStretchDetectionEdge],
-        corners: [QuadInnerStretchDetectionCorner],
+        edges: [InnerStretchDetectionEdge],
+        corners: [InnerStretchDetectionCorner],
         threshold: Double,
-        selection: AUQuadDetectionSelectionState,
+        selection: AUStretchDetectionSelectionState,
         canvasFrame: [AUPoint],
-        rawCanvasQuad: [AUPoint],
-        preferredMode: QuadOSCEventCoordinateMode?
-    ) -> (primitive: AUQuadDetectionPrimitiveID, resolution: QuadOSCEventResolution)? {
+        rawCanvasStretch: [AUPoint],
+        preferredMode: StretchOSCEventCoordinateMode?
+    ) -> (primitive: AUStretchDetectionPrimitiveID, resolution: StretchOSCEventResolution)? {
         let resolutions = eventResolutions(
             fromEventPoint: eventPoint,
             canvasFrame: canvasFrame,
-            rawCanvasQuad: rawCanvasQuad,
+            rawCanvasStretch: rawCanvasStretch,
             rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: preferredMode
         )
         let clampedThreshold = min(1.0, max(0.0, threshold))
-        var closestCorner: (primitive: AUQuadDetectionPrimitiveID, resolution: QuadOSCEventResolution, distance: Double)?
+        var closestCorner: (primitive: AUStretchDetectionPrimitiveID, resolution: StretchOSCEventResolution, distance: Double)?
 
         for resolution in resolutions {
             for corner in corners where corner.score >= clampedThreshold && selection.shouldShowCorner(index: corner.index) {
@@ -592,7 +592,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                     continue
                 }
 
-                let primitive = AUQuadDetectionPrimitiveID(kind: .corner, index: corner.index)
+                let primitive = AUStretchDetectionPrimitiveID(kind: .corner, index: corner.index)
                 if closestCorner == nil || distance < closestCorner!.distance {
                     closestCorner = (primitive, resolution, distance)
                 }
@@ -603,7 +603,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             return (closestCorner.primitive, closestCorner.resolution)
         }
 
-        var closestEdge: (primitive: AUQuadDetectionPrimitiveID, resolution: QuadOSCEventResolution, distance: Double)?
+        var closestEdge: (primitive: AUStretchDetectionPrimitiveID, resolution: StretchOSCEventResolution, distance: Double)?
         for resolution in resolutions {
             for edge in edges where edge.score >= clampedThreshold && selection.shouldShowEdge(index: edge.index) {
                 let line = sourceDetectionCanvasLine(from: edge.line)
@@ -612,7 +612,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                     continue
                 }
 
-                let primitive = AUQuadDetectionPrimitiveID(kind: .edge, index: edge.index)
+                let primitive = AUStretchDetectionPrimitiveID(kind: .edge, index: edge.index)
                 if closestEdge == nil || distance < closestEdge!.distance {
                     closestEdge = (primitive, resolution, distance)
                 }
@@ -627,9 +627,9 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     }
 
     private func toggleDetectionSelection(
-        _ primitive: AUQuadDetectionPrimitiveID,
-        edges: [QuadInnerStretchDetectionEdge],
-        corners: [QuadInnerStretchDetectionCorner],
+        _ primitive: AUStretchDetectionPrimitiveID,
+        edges: [InnerStretchDetectionEdge],
+        corners: [InnerStretchDetectionCorner],
         size: AUSize,
         time: CMTime,
         forceUpdate: UnsafeMutablePointer<ObjCBool>?
@@ -648,13 +648,13 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 corners.first(where: { $0.index == index })?.point
             }
             guard points.count == 4,
-                  let quad = AnyUprightGeometry.imageQuad(fromNormalizedObjectPoints: points, size: size) else {
+                  let stretch = AnyUprightGeometry.imageSelection(fromNormalizedObjectPoints: points, size: size) else {
                 forceUpdate?.pointee = true
                 return
             }
 
-            setInnerStretch(quad, size: size, settingAPI: settingAPI, time: time)
-            settingAPI.setBoolValue(false, toParameter: QuadParam.chooseFromDetections.rawValue, at: time)
+            setInnerStretch(stretch, size: size, settingAPI: settingAPI, time: time)
+            settingAPI.setBoolValue(false, toParameter: StretchParam.chooseFromDetections.rawValue, at: time)
             clearDetectionSelection(forceUpdate: forceUpdate)
             forceUpdate?.pointee = true
             return
@@ -665,27 +665,27 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 edges.first(where: { $0.index == index })?.line
             }
             guard lines.count == 4,
-                  let quad = AnyUprightGeometry.imageQuad(fromNormalizedObjectLines: lines, size: size) else {
+                  let stretch = AnyUprightGeometry.imageSelection(fromNormalizedObjectLines: lines, size: size) else {
                 forceUpdate?.pointee = true
                 return
             }
 
-            setInnerStretch(quad, size: size, settingAPI: settingAPI, time: time)
-            settingAPI.setBoolValue(false, toParameter: QuadParam.chooseFromDetections.rawValue, at: time)
+            setInnerStretch(stretch, size: size, settingAPI: settingAPI, time: time)
+            settingAPI.setBoolValue(false, toParameter: StretchParam.chooseFromDetections.rawValue, at: time)
             clearDetectionSelection(forceUpdate: forceUpdate)
             forceUpdate?.pointee = true
         }
     }
 
-    private func currentDisplayPart(hostActivePart: Int = QuadOSCPart.none.rawValue) -> QuadOSCPart {
+    private func currentDisplayPart(hostActivePart: Int = StretchOSCPart.none.rawValue) -> StretchOSCPart {
         let hoverPart = currentHoverPart()
         let rawDisplayPart = resolveOSCDisplayPart(
             hostActivePart: hostActivePart,
             hoverPart: hoverPart.rawValue,
             dragPart: currentDragState()?.part.rawValue,
-            nonePart: QuadOSCPart.none.rawValue
+            nonePart: StretchOSCPart.none.rawValue
         )
-        return QuadOSCPart(rawValue: rawDisplayPart) ?? .none
+        return StretchOSCPart(rawValue: rawDisplayPart) ?? .none
     }
 
     private func updateLastSurfaceSize(from image: FxImageTile, fallback: AUSize) {
@@ -706,10 +706,10 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     }
 
     @discardableResult
-    private func updateHoverPart(forEventPoint eventPoint: AUPoint, at time: CMTime, forceUpdate: UnsafeMutablePointer<ObjCBool>?) -> QuadOSCPart {
-        let state = quadParameterState(at: time, paramAPI: parameterRetrievalAPI(), fixedMode: fixedQuadMode)
-        let mode = quadMode(from: state)
-        guard shouldEnableQuadOSCControls(from: state, mode: mode) else {
+    private func updateHoverPart(forEventPoint eventPoint: AUPoint, at time: CMTime, forceUpdate: UnsafeMutablePointer<ObjCBool>?) -> StretchOSCPart {
+        let state = stretchParameterState(at: time, paramAPI: parameterRetrievalAPI(), fixedMode: fixedStretchMode)
+        let mode = stretchMode(from: state)
+        guard shouldEnableStretchOSCControls(from: state, mode: mode) else {
             setHoverPart(.none, forceUpdate: forceUpdate)
             return .none
         }
@@ -717,13 +717,13 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let size = objectPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let canvasFrame = objectCanvasFrame()
-        debugCanvasMetrics(label: "hover", eventPoint: eventPoint, quad: geometry.rawCanvasQuad, canvasFrame: canvasFrame)
+        debugCanvasMetrics(label: "hover", eventPoint: eventPoint, stretch: geometry.rawCanvasStretch, canvasFrame: canvasFrame)
         let hit = hitTestPart(
             forEventPoint: eventPoint,
             handles: geometry.handles,
-            quad: geometry.quad,
+            stretch: geometry.stretch,
             rawCanvasHandles: geometry.rawCanvasHandles,
-            rawCanvasQuad: geometry.rawCanvasQuad,
+            rawCanvasStretch: geometry.rawCanvasStretch,
             useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
             rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
@@ -734,7 +734,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         return part
     }
 
-    private func setHoverPart(_ part: QuadOSCPart, forceUpdate: UnsafeMutablePointer<ObjCBool>?) {
+    private func setHoverPart(_ part: StretchOSCPart, forceUpdate: UnsafeMutablePointer<ObjCBool>?) {
         hoverStateLock.lock()
         let changed = hoverPart != part
         hoverPart = part
@@ -777,28 +777,28 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         return style
     }
 
-    private func innerStretchOverlaySegments(for part: QuadOSCPart, quad: [AUPoint]) -> [AUOSCStyledSegment] {
-        guard quad.count == 4 else {
+    private func innerStretchOverlaySegments(for part: StretchOSCPart, stretch: [AUPoint]) -> [AUOSCStyledSegment] {
+        guard stretch.count == 4 else {
             return []
         }
 
         var baseStyle = innerStretchOverlayStyle()
         baseStyle.handleRadius = 0.0
-        let top = AUOSCStyledSegment(start: quad[0], end: quad[1], style: baseStyle)
-        let right = AUOSCStyledSegment(start: quad[1], end: quad[2], style: baseStyle)
-        let bottom = AUOSCStyledSegment(start: quad[3], end: quad[2], style: baseStyle)
-        let left = AUOSCStyledSegment(start: quad[0], end: quad[3], style: baseStyle)
+        let top = AUOSCStyledSegment(start: stretch[0], end: stretch[1], style: baseStyle)
+        let right = AUOSCStyledSegment(start: stretch[1], end: stretch[2], style: baseStyle)
+        let bottom = AUOSCStyledSegment(start: stretch[3], end: stretch[2], style: baseStyle)
+        let left = AUOSCStyledSegment(start: stretch[0], end: stretch[3], style: baseStyle)
         let base = [top, right, bottom, left]
 
         var hoverStyle = hoverOverlayStyle()
         hoverStyle.handleRadius = 0.0
-        let hoverTop = AUOSCStyledSegment(start: quad[0], end: quad[1], style: hoverStyle)
-        let hoverRight = AUOSCStyledSegment(start: quad[1], end: quad[2], style: hoverStyle)
-        let hoverBottom = AUOSCStyledSegment(start: quad[3], end: quad[2], style: hoverStyle)
-        let hoverLeft = AUOSCStyledSegment(start: quad[0], end: quad[3], style: hoverStyle)
+        let hoverTop = AUOSCStyledSegment(start: stretch[0], end: stretch[1], style: hoverStyle)
+        let hoverRight = AUOSCStyledSegment(start: stretch[1], end: stretch[2], style: hoverStyle)
+        let hoverBottom = AUOSCStyledSegment(start: stretch[3], end: stretch[2], style: hoverStyle)
+        let hoverLeft = AUOSCStyledSegment(start: stretch[0], end: stretch[3], style: hoverStyle)
 
         switch part {
-        case .quad:
+        case .stretch:
             return base + [hoverTop, hoverRight, hoverBottom, hoverLeft]
         case .topEdge:
             return base + [hoverTop]
@@ -814,16 +814,16 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     }
 
     private func sourceDetectionOverlaySegments(
-        edges: [QuadInnerStretchDetectionEdge],
-        corners: [QuadInnerStretchDetectionCorner],
+        edges: [InnerStretchDetectionEdge],
+        corners: [InnerStretchDetectionCorner],
         threshold: Double,
-        selection: AUQuadDetectionSelectionState
+        selection: AUStretchDetectionSelectionState
     ) -> [AUOSCStyledSegment] {
         let clampedThreshold = min(1.0, max(0.0, threshold))
         var segments: [AUOSCStyledSegment] = []
 
         for edge in edges where edge.score >= clampedThreshold && selection.shouldShowEdge(index: edge.index) {
-            let primitive = AUQuadDetectionPrimitiveID(kind: .edge, index: edge.index)
+            let primitive = AUStretchDetectionPrimitiveID(kind: .edge, index: edge.index)
             let edgeStyle = sourceDetectionOverlayStyle(lineThickness: selection.isActive(primitive) ? 3.5 : 2.5, isActive: selection.isActive(primitive))
             segments.append(AUOSCStyledSegment(
                 start: sourceDetectionCanvasPoint(from: edge.line.start),
@@ -833,7 +833,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         }
 
         for corner in corners where corner.score >= clampedThreshold && selection.shouldShowCorner(index: corner.index) {
-            let primitive = AUQuadDetectionPrimitiveID(kind: .corner, index: corner.index)
+            let primitive = AUStretchDetectionPrimitiveID(kind: .corner, index: corner.index)
             let crossStyle = sourceDetectionOverlayStyle(lineThickness: selection.isActive(primitive) ? 2.75 : 2.0, isActive: selection.isActive(primitive))
             appendDetectionCornerCross(
                 at: sourceDetectionCanvasPoint(from: corner.point),
@@ -845,7 +845,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         return segments
     }
 
-    private func detectionPartID(for primitive: AUQuadDetectionPrimitiveID) -> Int {
+    private func detectionPartID(for primitive: AUStretchDetectionPrimitiveID) -> Int {
         switch primitive.kind {
         case .corner:
             return 1000 + primitive.index
@@ -883,7 +883,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
 
 @objc(AnyUprightOuterStretchOSCPlugIn)
 class AnyUprightOuterStretchOSCPlugIn: AnyUprightInnerStretchOSCPlugIn {
-    override var fixedQuadMode: AUQuadTransformMode {
+    override var fixedStretchMode: AUStretchTransformMode {
         .outputCorners
     }
 }

@@ -1,12 +1,12 @@
-# Quad Render Tile And Source Sampling
+# Stretch Render Tile And Source Sampling
 
 Last updated: 2026-06-30 18:11 MDT
 Reference commit: d6d426ae4c8d07be95c84686c8931cfbf35b8a69
 Observed host versions: macOS 26.5, Motion Studio 6.2, Final Cut Pro 12.2
 
-This note records reusable render-path lessons behind black-edge and edit-preview identity-shift bugs. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../quad-implementation-notes.md`.
+This note records reusable render-path lessons behind black-edge and edit-preview identity-shift bugs. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../stretch-implementation-notes.md`.
 
-For the full coordinate layer inventory, start with `quad-coordinate-layer-contract.md`. This file focuses on render tiles and texture sampling, not OSC interaction.
+For the full coordinate layer inventory, start with `stretch-coordinate-layer-contract.md`. This file focuses on render tiles and texture sampling, not OSC interaction.
 
 For Motion preview pan/zoom flicker in full-frame projective or perspective warps, see `fxplug-preview-render-stability.md`.
 

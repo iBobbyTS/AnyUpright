@@ -4,9 +4,9 @@ Last updated: 2026-07-01 16:46 MDT
 Reference commit: 23c5dcf48b242464e584b38ea59b2f05653f67f3
 Observed host versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 (447036), Final Cut Pro 12.2, Xcode 26.5 (17F42), FxPlug SDK package 4.3.4.1.1769575879
 
-This note records reusable Y-axis guidance for four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../quad-implementation-notes.md`.
+This note records reusable Y-axis guidance for four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../stretch-implementation-notes.md`.
 
-For the cross-layer contract and debugging method, read `quad-coordinate-layer-contract.md` first. Host-specific statements in this note are versioned observations from macOS 26.5, Motion Studio 6.2, and Final Cut Pro 12.2 unless Apple API behavior is explicitly named.
+For the cross-layer contract and debugging method, read `stretch-coordinate-layer-contract.md` first. Host-specific statements in this note are versioned observations from macOS 26.5, Motion Studio 6.2, and Final Cut Pro 12.2 unless Apple API behavior is explicitly named.
 
 ## Coordinate Boundaries
 
@@ -64,7 +64,7 @@ metalY = surfaceHeight / 2 - surfaceY
 - Apple documents FxPlug `CANVAS`, `DOCUMENT`, and `OBJECT` coordinates as Y-up spaces. Image/render pixel conventions are still a plug-in decision and must be bridged explicitly.
 - If user-facing positive Y means up but image/output pixel Y grows down, put that sign difference in the parameter-to-image conversion layer.
 - If a handle drags correctly but hover appears on the opposite edge, inspect hover/overlay drawing and event interpretation before changing render geometry.
-- If the visible source-selection quad moves correctly but hit targets are mirrored, inspect raw canvas versus mapped surface event resolution before changing render preview or homography.
+- If the visible source-selection stretch moves correctly but hit targets are mirrored, inspect raw canvas versus mapped surface event resolution before changing render preview or homography.
 - If the visible video/export is shifted while OSC controls are correct, inspect render tile/source texture origin before changing OSC or object-space math.
 - If an offline CPU render and the live Metal render disagree while using the same project geometry matrix, inspect the source-image-to-input-texture boundary and the fragment output-coordinate boundary before changing the solver.
 - If a reference line should become vertical or horizontal after correction, verify the transformed source line in image/output coordinates. Do not infer correctness from the stored endpoint signs alone.

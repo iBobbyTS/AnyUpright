@@ -44,6 +44,10 @@
 - For Metal transform changes, include targeted tests or deterministic sample calculations for geometry math when practical.
 - The user has explicitly authorized Computer Use to directly modify and save the development Motion templates for `Inner Stretch` and `Outer Stretch`, plus the development Final Cut Pro library named `Develop`, without asking for additional confirmation.
 
+## Git
+
+- Write commit messages for this repository in Chinese while keeping the Conventional Commit structure.
+
 ## Safety
 
 - Preserve user work. Do not reset, clean, or remove Xcode-generated files unless the user explicitly asks.

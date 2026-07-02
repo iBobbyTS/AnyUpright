@@ -437,7 +437,11 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 size: referenceSize
             )
         case .full:
-            matrix = nil
+            matrix = AnyUprightGeometry.guidedFullOutputToSourceMatrix(
+                fromNormalizedVerticalLines: references.vertical,
+                horizontalLines: references.horizontal,
+                size: referenceSize
+            )
         }
         guard let matrix else {
             return false

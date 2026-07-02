@@ -1209,6 +1209,58 @@ enum AnyUprightGeometry {
         )
     }
 
+    static func guidedFullOutputToSourceMatrix(
+        fromNormalizedVerticalLines verticalLines: [AULineSegment],
+        horizontalLines: [AULineSegment],
+        size: AUSize
+    ) -> simd_float3x3? {
+        guard size.width > 1.0, size.height > 1.0 else {
+            return nil
+        }
+
+        let verticalVanishingPoint = vanishingPoint(fromNormalizedImageLines: verticalLines, size: size)
+        let horizontalVanishingPoint = vanishingPoint(fromNormalizedImageLines: horizontalLines, size: size)
+
+        switch (verticalVanishingPoint, horizontalVanishingPoint) {
+        case let (.some(vertical), .some(horizontal)):
+            return fullVanishingPointsOutputToSourceMatrix(
+                verticalVanishingPoint: vertical,
+                horizontalVanishingPoint: horizontal,
+                size: size
+            )
+        case (.some, nil):
+            return guidedVerticalOutputToSourceMatrix(
+                fromNormalizedImageLines: verticalLines,
+                size: size
+            )
+        case (nil, .some):
+            return guidedHorizontalOutputToSourceMatrix(
+                fromNormalizedImageLines: horizontalLines,
+                size: size
+            )
+        case (nil, nil):
+            return nil
+        }
+    }
+
+    private static func vanishingPoint(fromNormalizedImageLines lines: [AULineSegment], size: AUSize) -> AUPoint? {
+        let imageLines = lines
+            .map { scaledLine($0, size: size) }
+            .filter { $0.length > 1.0 }
+        guard imageLines.count >= 2 else {
+            return nil
+        }
+
+        let referenceLines = Array(imageLines.prefix(2))
+        guard let vanishingPoint = intersection(of: referenceLines[0], and: referenceLines[1]),
+              vanishingPoint.x.isFinite,
+              vanishingPoint.y.isFinite else {
+            return nil
+        }
+
+        return vanishingPoint
+    }
+
     private static func scaledLine(_ line: AULineSegment, size: AUSize) -> AULineSegment {
         AULineSegment(
             start: AUPoint(x: line.start.x * size.width, y: line.start.y * size.height),
@@ -1260,6 +1312,51 @@ enum AnyUprightGeometry {
             0.0, 0.0, 1.0
         )
         return multiply(multiply(fromAnchor, perspective), toAnchor)
+    }
+
+    private static func fullVanishingPointsOutputToSourceMatrix(
+        verticalVanishingPoint: AUPoint,
+        horizontalVanishingPoint: AUPoint,
+        size: AUSize
+    ) -> simd_float3x3? {
+        let center = AUPoint(x: size.width / 2.0, y: size.height / 2.0)
+        let vanishingLine = lineThrough(verticalVanishingPoint, horizontalVanishingPoint)
+        let centerScale = vanishingLine.0 * center.x + vanishingLine.1 * center.y + vanishingLine.2
+        guard abs(centerScale) > 0.000001 else {
+            return nil
+        }
+
+        let normalizedVanishingLine = (
+            vanishingLine.0 / centerScale,
+            vanishingLine.1 / centerScale,
+            vanishingLine.2 / centerScale
+        )
+        let rectification = matrix(
+            1.0, 0.0, -verticalVanishingPoint.x,
+            0.0, 1.0, -horizontalVanishingPoint.y,
+            normalizedVanishingLine.0, normalizedVanishingLine.1, normalizedVanishingLine.2
+        )
+        let mappedCenter = transform(center, by: rectification)
+        guard mappedCenter.x.isFinite,
+              mappedCenter.y.isFinite else {
+            return nil
+        }
+
+        let recenter = matrix(
+            1.0, 0.0, center.x - mappedCenter.x,
+            0.0, 1.0, center.y - mappedCenter.y,
+            0.0, 0.0, 1.0
+        )
+        let sourceToOutput = multiply(recenter, rectification)
+        return simd_inverse(sourceToOutput)
+    }
+
+    private static func lineThrough(_ first: AUPoint, _ second: AUPoint) -> (Double, Double, Double) {
+        (
+            first.y - second.y,
+            second.x - first.x,
+            first.x * second.y - first.y * second.x
+        )
     }
 
     static func lineCandidates(

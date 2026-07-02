@@ -96,6 +96,7 @@ struct AnyUprightGeometryTests {
         try testVerticalUprightCorrectionDoesNotAddResidualRotationForOffCenterGuides()
         try testGuidedVerticalMatrixStraightensOffCenterMotionGuidesWithoutSkewingScanlines()
         try testGuidedHorizontalMatrixStraightensOffCenterMotionGuidesWithoutSkewingScanlines()
+        try testGuidedFullMatrixUsesSameDirectAxisAlgorithms()
         try testMotionManualHorizontalGuidesUseDirectMatrix()
         try testManualGuidedVerticalMatrixIgnoresAutoCropWhenAdaptedToPreviewSize()
         try testManualGuidedVerticalMatrixIsStableAcrossMotionPreviewSizes()
@@ -2102,6 +2103,98 @@ struct AnyUprightGeometryTests {
         try assertTrue(
             meanVerticalDeviation(correctedScanlines) < degreesToRadians(0.05),
             "horizontal-only guided matrix should not introduce visible rotation or horizontal shear into source scanlines"
+        )
+    }
+
+    static func testGuidedFullMatrixUsesSameDirectAxisAlgorithms() throws {
+        let size = AUSize(width: 5712.0, height: 4284.0)
+        let normalizedVerticalLines = [
+            AULineSegment(
+                start: AUPoint(x: 0.125237, y: 0.539607),
+                end: AUPoint(x: 0.090030, y: 0.231790)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.795013, y: 0.532354),
+                end: AUPoint(x: 0.865249, y: 0.223977)
+            )
+        ]
+        let normalizedHorizontalLines = [
+            AULineSegment(
+                start: AUPoint(x: 0.115150, y: 0.531439),
+                end: AUPoint(x: 0.415055, y: 0.460389)
+            ),
+            AULineSegment(
+                start: AUPoint(x: 0.084905, y: 0.234260),
+                end: AUPoint(x: 0.419045, y: 0.222487)
+            )
+        ]
+        let sourceVerticalLines = normalizedVerticalLines.map {
+            AULineSegment(
+                start: AUPoint(x: $0.start.x * size.width, y: $0.start.y * size.height),
+                end: AUPoint(x: $0.end.x * size.width, y: $0.end.y * size.height)
+            )
+        }
+        let sourceHorizontalLines = normalizedHorizontalLines.map {
+            AULineSegment(
+                start: AUPoint(x: $0.start.x * size.width, y: $0.start.y * size.height),
+                end: AUPoint(x: $0.end.x * size.width, y: $0.end.y * size.height)
+            )
+        }
+
+        let directMatrix = try unwrap(
+            AnyUprightGeometry.guidedFullOutputToSourceMatrix(
+                fromNormalizedVerticalLines: normalizedVerticalLines,
+                horizontalLines: normalizedHorizontalLines,
+                size: size
+            ),
+            "guided full output-to-source"
+        )
+        let directSourceToOutput = simd_inverse(directMatrix)
+        let directVerticalLines = sourceVerticalLines.map {
+            AnyUprightGeometry.transform($0, by: directSourceToOutput)
+        }
+        let directHorizontalLines = sourceHorizontalLines.map {
+            AnyUprightGeometry.transform($0, by: directSourceToOutput)
+        }
+
+        let scalarCorrection = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: normalizedVerticalLines,
+            horizontalLines: normalizedHorizontalLines,
+            correctionMode: .full,
+            referenceSize: AUSize(width: 1000.0, height: 1000.0)
+        )
+        let scalarSourceToOutput = simd_inverse(
+            AnyUprightGeometry.uprightAppliedOutputToSourceMatrix(
+                vertical: scalarCorrection.verticalPerspective,
+                horizontal: scalarCorrection.horizontalPerspective,
+                rotationRadians: scalarCorrection.rotationRadians,
+                fillFrame: false,
+                outputSize: size,
+                sourceSize: size
+            )
+        )
+        let scalarVerticalLines = sourceVerticalLines.map {
+            AnyUprightGeometry.transform($0, by: scalarSourceToOutput)
+        }
+        let scalarHorizontalLines = sourceHorizontalLines.map {
+            AnyUprightGeometry.transform($0, by: scalarSourceToOutput)
+        }
+
+        try assertTrue(
+            meanVerticalDeviation(directVerticalLines) < degreesToRadians(0.05),
+            "guided full matrix should reuse direct vertical correction for vertical guides"
+        )
+        try assertTrue(
+            meanHorizontalDeviation(directHorizontalLines) < degreesToRadians(0.05),
+            "guided full matrix should reuse direct horizontal correction for horizontal guides"
+        )
+        try assertTrue(
+            meanVerticalDeviation(scalarVerticalLines) > meanVerticalDeviation(directVerticalLines) * 20.0,
+            "old scalar full path should remain visibly worse for off-center vertical guides"
+        )
+        try assertTrue(
+            meanHorizontalDeviation(scalarHorizontalLines) > meanHorizontalDeviation(directHorizontalLines) * 20.0,
+            "old scalar full path should remain visibly worse for off-center horizontal guides"
         )
     }
 

@@ -67,6 +67,13 @@ private struct AUMLSDResizeWeights {
     var weights: [Double]
 }
 
+private enum AUMLSDCandidateOutputSpace {
+    case image
+    case object
+}
+
+private final class AUMLSDCoreMLResourceAnchor: NSObject {}
+
 enum AnyUprightMLSDCoreMLDetector {
     private static let inputSize = 512
     private static let maxDeviationDegrees = 30.0
@@ -78,16 +85,60 @@ enum AnyUprightMLSDCoreMLDetector {
 
     private static let sessionLock = NSLock()
     private static var cachedModelURL: URL?
+    private static var cachedComputeUnits: MLComputeUnits?
     private static var cachedSession: AUMLSDCoreMLSession?
 
+#if !AU_MLSD_CLI
     static func detectCandidates(
         in frame: FxImageTile,
         request: UprightAnalysisRequest,
         context: CIContext
     ) throws -> [UprightDetectedCandidate] {
         let source = try renderSourceRGBA(from: frame, context: context)
+        return try detectCandidates(
+            from: source,
+            request: request,
+            modelURL: nil,
+            computeUnits: .all,
+            outputSpace: .object
+        )
+    }
+#endif
+
+    static func detectImageCandidates(
+        width: Int,
+        height: Int,
+        rgbaPixels: [UInt8],
+        correctionMode: UprightCorrectionMode,
+        modelURL: URL,
+        computeUnits: MLComputeUnits = .all
+    ) throws -> [UprightDetectedCandidate] {
+        guard width > 0, height > 0 else {
+            throw AUMLSDCoreMLDetectorError.invalidInput("width and height must be positive")
+        }
+        let expectedPixelCount = width * height * 4
+        guard rgbaPixels.count == expectedPixelCount else {
+            throw AUMLSDCoreMLDetectorError.invalidInput("expected \(expectedPixelCount) RGBA bytes, got \(rgbaPixels.count)")
+        }
+
+        return try detectCandidates(
+            from: AUMLSDRGBAImage(width: width, height: height, pixels: rgbaPixels),
+            request: UprightAnalysisRequest(correctionMode: correctionMode, controlMode: .automatic),
+            modelURL: modelURL,
+            computeUnits: computeUnits,
+            outputSpace: .image
+        )
+    }
+
+    private static func detectCandidates(
+        from source: AUMLSDRGBAImage,
+        request: UprightAnalysisRequest,
+        modelURL: URL?,
+        computeUnits: MLComputeUnits,
+        outputSpace: AUMLSDCandidateOutputSpace
+    ) throws -> [UprightDetectedCandidate] {
         let input = makeInputNCHW(from: source)
-        let output = try session().run(inputNCHW: input)
+        let output = try session(modelURL: modelURL, computeUnits: computeUnits).run(inputNCHW: input)
         let decoded = decodeLines(
             output: output.values,
             shape: output.shape,
@@ -105,7 +156,7 @@ enum AnyUprightMLSDCoreMLDetector {
                 width: source.width,
                 height: source.height,
                 limit: limit
-            ).map { detectedCandidate(from: $0, width: source.width, height: source.height) })
+            ).map { detectedCandidate(from: $0, width: source.width, height: source.height, outputSpace: outputSpace) })
         }
         if request.includesHorizontal {
             candidates.append(contentsOf: filterCandidates(
@@ -114,41 +165,54 @@ enum AnyUprightMLSDCoreMLDetector {
                 width: source.width,
                 height: source.height,
                 limit: limit
-            ).map { detectedCandidate(from: $0, width: source.width, height: source.height) })
+            ).map { detectedCandidate(from: $0, width: source.width, height: source.height, outputSpace: outputSpace) })
         }
 
         return Array(candidates.prefix(AnyUprightUprightCandidates.slotCount))
     }
 
-    private static func session() throws -> AUMLSDCoreMLSession {
-        let modelURL = try resolvedModelURL()
+    private static func session(modelURL explicitModelURL: URL? = nil, computeUnits: MLComputeUnits = .all) throws -> AUMLSDCoreMLSession {
+        let modelURL = try explicitModelURL ?? resolvedModelURL()
         sessionLock.lock()
         defer { sessionLock.unlock() }
 
-        if let cachedSession, cachedModelURL == modelURL {
+        if let cachedSession, cachedModelURL == modelURL, cachedComputeUnits == computeUnits {
             return cachedSession
         }
 
-        let session = try AUMLSDCoreMLSession(modelURL: modelURL, computeUnits: .all)
+        let session = try AUMLSDCoreMLSession(modelURL: modelURL, computeUnits: computeUnits)
         cachedModelURL = modelURL
+        cachedComputeUnits = computeUnits
         cachedSession = session
         return session
     }
 
     private static func resolvedModelURL() throws -> URL {
-        let bundle = Bundle(for: AnyUprightUprightPlugIn.self)
-        guard let resourceURL = bundle.resourceURL else {
+        let resourceRoots = [
+            Bundle(for: AUMLSDCoreMLResourceAnchor.self).resourceURL,
+            Bundle.main.resourceURL,
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+        ].compactMap { $0 }
+        guard !resourceRoots.isEmpty else {
             throw AUMLSDCoreMLDetectorError.missingResourceBundle
         }
 
-        let candidates = [
-            resourceURL.appendingPathComponent("mlsd_large_512_fp32.mlmodelc", isDirectory: true),
-            resourceURL.appendingPathComponent("MLSDCoreML/mlsd_large_512_fp32.mlmodelc", isDirectory: true),
-            resourceURL.appendingPathComponent("mlsd_large_512_fp32.mlpackage", isDirectory: true),
-            resourceURL.appendingPathComponent("MLSDCoreML/mlsd_large_512_fp32.mlpackage", isDirectory: true),
-            resourceURL.appendingPathComponent("mlsd_large_512_fp32.mlmodel"),
-            resourceURL.appendingPathComponent("MLSDCoreML/mlsd_large_512_fp32.mlmodel")
-        ]
+        let candidates = resourceRoots.flatMap { resourceURL in
+            [
+                resourceURL.appendingPathComponent("mlsd_large_512_fp32.mlmodelc", isDirectory: true),
+                resourceURL.appendingPathComponent("MLSDCoreML/mlsd_large_512_fp32.mlmodelc", isDirectory: true),
+                resourceURL.appendingPathComponent("Plugin/MLSDCoreML/mlsd_large_512_fp32.mlmodelc", isDirectory: true),
+                resourceURL.appendingPathComponent("AnyUpright/Plugin/MLSDCoreML/mlsd_large_512_fp32.mlmodelc", isDirectory: true),
+                resourceURL.appendingPathComponent("mlsd_large_512_fp32.mlpackage", isDirectory: true),
+                resourceURL.appendingPathComponent("MLSDCoreML/mlsd_large_512_fp32.mlpackage", isDirectory: true),
+                resourceURL.appendingPathComponent("Plugin/MLSDCoreML/mlsd_large_512_fp32.mlpackage", isDirectory: true),
+                resourceURL.appendingPathComponent("AnyUpright/Plugin/MLSDCoreML/mlsd_large_512_fp32.mlpackage", isDirectory: true),
+                resourceURL.appendingPathComponent("mlsd_large_512_fp32.mlmodel"),
+                resourceURL.appendingPathComponent("MLSDCoreML/mlsd_large_512_fp32.mlmodel"),
+                resourceURL.appendingPathComponent("Plugin/MLSDCoreML/mlsd_large_512_fp32.mlmodel"),
+                resourceURL.appendingPathComponent("AnyUpright/Plugin/MLSDCoreML/mlsd_large_512_fp32.mlmodel"),
+            ]
+        }
 
         for url in candidates where FileManager.default.fileExists(atPath: url.path) {
             return url
@@ -156,6 +220,7 @@ enum AnyUprightMLSDCoreMLDetector {
         throw AUMLSDCoreMLDetectorError.missingModel(candidates)
     }
 
+#if !AU_MLSD_CLI
     private static func renderSourceRGBA(from frame: FxImageTile, context: CIContext) throws -> AUMLSDRGBAImage {
         guard let sourceImage = AnyUprightAnalysisImage.ciImage(from: frame) else {
             throw AUMLSDCoreMLDetectorError.missingFrameImage
@@ -177,6 +242,7 @@ enum AnyUprightMLSDCoreMLDetector {
 
         return AUMLSDRGBAImage(width: width, height: height, pixels: rgba)
     }
+#endif
 
     private static func makeInputNCHW(from source: AUMLSDRGBAImage) -> [Float] {
         let resizedRGB = areaResizeRGB(
@@ -394,19 +460,30 @@ enum AnyUprightMLSDCoreMLDetector {
         )
     }
 
-    private static func detectedCandidate(from candidate: AUMLSDCandidate, width: Int, height: Int) -> UprightDetectedCandidate {
+    private static func detectedCandidate(
+        from candidate: AUMLSDCandidate,
+        width: Int,
+        height: Int,
+        outputSpace: AUMLSDCandidateOutputSpace
+    ) -> UprightDetectedCandidate {
         let line = AULineSegment(
             start: AUPoint(x: candidate.segment.x1, y: candidate.segment.y1),
             end: AUPoint(x: candidate.segment.x2, y: candidate.segment.y2)
         )
-        let object = AnyUprightUprightCandidates.objectLine(
-            from: line,
-            size: AUSize(width: Double(width), height: Double(height))
-        )
+        let outputLine: (start: AUPoint, end: AUPoint)
+        switch outputSpace {
+        case .image:
+            outputLine = (line.start, line.end)
+        case .object:
+            outputLine = AnyUprightUprightCandidates.objectLine(
+                from: line,
+                size: AUSize(width: Double(width), height: Double(height))
+            )
+        }
         return UprightDetectedCandidate(
             orientation: candidate.orientation,
-            start: object.start,
-            end: object.end,
+            start: outputLine.start,
+            end: outputLine.end,
             score: min(1.0, max(0.0, candidate.score))
         )
     }

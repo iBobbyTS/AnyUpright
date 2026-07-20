@@ -86,6 +86,7 @@ struct AnyUprightGeometryTests {
         try testSupportedLineDetectorReturnsFiniteSegments()
         try testUprightCandidateSelectionLimitsToTwoAndConvertsCoordinates()
         try testUprightAutomaticSelectionChoosesTopTwoIncludedCandidates()
+        try testUprightAnalysisRankingCoversAllAutomaticModeCombinations()
         try testUprightCandidateToggleSelectionStopsAtTwoPerOrientation()
         try testUprightCandidateDisplayHonorsControlAndCorrectionMode()
         try testUprightCandidateObjectLineClampsAndFlipsY()
@@ -1714,8 +1715,61 @@ struct AnyUprightGeometryTests {
         let full = AnyUprightUprightCandidates.automaticSelectedIndexes(from: candidates, correctionMode: .full)
         let vertical = AnyUprightUprightCandidates.automaticSelectedIndexes(from: candidates, correctionMode: .vertical)
 
-        try assertTrue(full == Set([1, 2]), "full automatic should choose top two included scores overall")
+        try assertTrue(full == Set([0, 1, 2, 3]), "full automatic should choose top two scores per orientation")
         try assertTrue(vertical == Set([0, 2]), "vertical automatic should choose top two vertical scores")
+    }
+
+    static func testUprightAnalysisRankingCoversAllAutomaticModeCombinations() throws {
+        let vertical = (0..<12).map { index in
+            UprightDetectedCandidate(
+                orientation: .vertical,
+                start: AUPoint(x: Double(index) / 20.0, y: 0.2),
+                end: AUPoint(x: Double(index) / 20.0, y: 0.8),
+                score: Double(index) / 20.0
+            )
+        }
+        let horizontal = (0..<12).map { index in
+            UprightDetectedCandidate(
+                orientation: .horizontal,
+                start: AUPoint(x: 0.2, y: Double(index) / 20.0),
+                end: AUPoint(x: 0.8, y: Double(index) / 20.0),
+                score: Double(index + 1) / 20.0
+            )
+        }
+        let candidates = vertical + horizontal
+
+        func ranked(
+            _ correctionMode: UprightCorrectionMode,
+            _ controlMode: UprightControlMode
+        ) -> [UprightDetectedCandidate] {
+            AnyUprightUprightCandidates.analysisCandidates(
+                from: candidates,
+                request: UprightAnalysisRequest(
+                    correctionMode: correctionMode,
+                    controlMode: controlMode
+                )
+            )
+        }
+
+        let semiVertical = ranked(.vertical, .semiAutomatic)
+        let semiHorizontal = ranked(.horizontal, .semiAutomatic)
+        let semiFull = ranked(.full, .semiAutomatic)
+        let autoVertical = ranked(.vertical, .automatic)
+        let autoHorizontal = ranked(.horizontal, .automatic)
+        let autoFull = ranked(.full, .automatic)
+
+        try assertEqual(semiVertical.count, 10, "semi-auto vertical keeps ten vertical candidates")
+        try assertTrue(semiVertical.allSatisfy { $0.orientation == .vertical }, "semi-auto vertical filters orientation")
+        try assertEqual(semiHorizontal.count, 10, "semi-auto horizontal keeps ten horizontal candidates")
+        try assertTrue(semiHorizontal.allSatisfy { $0.orientation == .horizontal }, "semi-auto horizontal filters orientation")
+        try assertEqual(semiFull.count, 20, "semi-auto full keeps ten candidates per orientation")
+        try assertEqual(autoVertical.count, 2, "full-auto vertical keeps the top vertical pair")
+        try assertTrue(autoVertical.allSatisfy { $0.orientation == .vertical }, "full-auto vertical filters orientation")
+        try assertEqual(autoHorizontal.count, 2, "full-auto horizontal keeps the top horizontal pair")
+        try assertTrue(autoHorizontal.allSatisfy { $0.orientation == .horizontal }, "full-auto horizontal filters orientation")
+        try assertEqual(autoFull.count, 4, "full-auto full keeps two candidates per orientation")
+        try assertTrue(autoVertical[0].score > autoVertical[1].score, "vertical candidates are score ordered")
+        try assertTrue(autoHorizontal[0].score > autoHorizontal[1].score, "horizontal candidates are score ordered")
     }
 
     static func testUprightCandidateToggleSelectionStopsAtTwoPerOrientation() throws {

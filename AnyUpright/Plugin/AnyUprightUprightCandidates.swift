@@ -101,6 +101,8 @@ struct UprightCorrectionValues {
 
 enum AnyUprightUprightCandidates {
     static let slotCount = 40
+    static let semiAutomaticLimitPerOrientation = 10
+    static let automaticLimitPerOrientation = 2
     static let specs: [UprightCandidateSpec] = (0..<slotCount).map { index in
         let base = UInt32(430 + index * 10)
         return UprightCandidateSpec(
@@ -163,21 +165,47 @@ enum AnyUprightUprightCandidates {
     static func automaticSelectedIndexes(
         from candidates: [UprightDetectedCandidate],
         correctionMode: UprightCorrectionMode,
-        maximumCount: Int = 2
+        maximumCountPerOrientation: Int = automaticLimitPerOrientation
     ) -> Set<Int> {
-        Set(
-            candidates
+        var selected: Set<Int> = []
+        for orientation in includedOrientations(in: correctionMode) {
+            selected.formUnion(
+                candidates
                 .enumerated()
-                .filter { included($0.element.orientation, in: correctionMode) }
+                .filter { $0.element.orientation == orientation }
                 .sorted {
                     if $0.element.score == $1.element.score {
                         return $0.offset < $1.offset
                     }
                     return $0.element.score > $1.element.score
                 }
-                .prefix(maximumCount)
+                .prefix(maximumCountPerOrientation)
                 .map(\.offset)
-        )
+            )
+        }
+        return selected
+    }
+
+    static func analysisCandidates(
+        from candidates: [UprightDetectedCandidate],
+        request: UprightAnalysisRequest
+    ) -> [UprightDetectedCandidate] {
+        let limit = request.controlMode == .automatic
+            ? automaticLimitPerOrientation
+            : semiAutomaticLimitPerOrientation
+        return includedOrientations(in: request.correctionMode).flatMap { orientation in
+            candidates
+                .enumerated()
+                .filter { $0.element.orientation == orientation }
+                .sorted {
+                    if $0.element.score == $1.element.score {
+                        return $0.offset < $1.offset
+                    }
+                    return $0.element.score > $1.element.score
+                }
+                .prefix(limit)
+                .map(\.element)
+        }
     }
 
     static func selectedImageLines(from candidates: [UprightCandidateLine], orientation: UprightGuideOrientation) -> [AULineSegment] {
@@ -218,6 +246,19 @@ enum AnyUprightUprightCandidates {
         case .horizontal:
             return correctionMode.includesHorizontal
         }
+    }
+
+    private static func includedOrientations(
+        in correctionMode: UprightCorrectionMode
+    ) -> [UprightGuideOrientation] {
+        var result: [UprightGuideOrientation] = []
+        if correctionMode.includesVertical {
+            result.append(.vertical)
+        }
+        if correctionMode.includesHorizontal {
+            result.append(.horizontal)
+        }
+        return result
     }
 
     static func imageLine(from candidate: UprightCandidateLine, size: AUSize) -> AULineSegment {

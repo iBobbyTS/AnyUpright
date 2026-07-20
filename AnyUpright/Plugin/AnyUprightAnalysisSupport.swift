@@ -41,6 +41,7 @@ struct HorizonAnalysisScratchState {
 
 struct UprightAnalysisScratchState {
     var pendingAnalysisRequest: UprightAnalysisRequest?
+    var hasAnalyzedFrame = false
     var detectedVerticalPerspective: Double?
     var detectedHorizontalPerspective: Double?
     var detectedRotationRadians: Double?

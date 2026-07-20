@@ -6,12 +6,14 @@
 import Foundation
 import AppKit
 import CoreImage
+import Dispatch
 import IOSurface
 import simd
 import Vision
 
 @objc(AnyUprightUprightPlugIn)
 class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
+    private static let analysisDebugLogLock = NSLock()
     private let analysisLock = NSLock()
     private let analysisContext = CIContext(options: nil)
     private var analysisState = UprightAnalysisScratchState()
@@ -182,16 +184,27 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     @objc func analyze() {
+        let startNanos = Self.analysisNowNanos()
         let time = currentParameterTime()
         let paramAPI = parameterRetrievalAPI()
         let correctionMode = uprightCorrectionMode(at: time, paramAPI: paramAPI)
         let controlMode = uprightControlMode(at: time, paramAPI: paramAPI)
+        analysisDebugLog(
+            String(
+                format: "analyze_start time=%@ correction_mode=%d control_mode=%d",
+                String(describing: time),
+                correctionMode.rawValue,
+                controlMode.rawValue
+            )
+        )
         guard controlMode != .manual else {
             applyGuided(correctionMode, time: time)
+            analysisDebugLog(String(format: "analyze_manual_return elapsed_ms=%.3f", Self.analysisElapsedMilliseconds(since: startNanos)))
             return
         }
 
         startAnalysis(UprightAnalysisRequest(correctionMode: correctionMode, controlMode: controlMode))
+        analysisDebugLog(String(format: "analyze_request_submitted elapsed_ms=%.3f", Self.analysisElapsedMilliseconds(since: startNanos)))
     }
 
     private func startAnalysis(_ request: UprightAnalysisRequest) {
@@ -204,18 +217,29 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             return
         }
 
-        try? analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU)
+        let startNanos = Self.analysisNowNanos()
+        do {
+            try analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU)
+            analysisDebugLog(String(format: "start_forward_return elapsed_ms=%.3f", Self.analysisElapsedMilliseconds(since: startNanos)))
+        } catch {
+            analysisDebugLog("start_forward_error error=\(String(describing: error))")
+        }
     }
 
     func desiredAnalysisTimeRange(_ desiredRange: UnsafeMutablePointer<CMTimeRange>, forInputWith inputTimeRange: CMTimeRange) throws {
         analysisLock.lock()
         let requestedTime = analysisState.requestedAnalysisTime
         analysisLock.unlock()
-        desiredRange.pointee = singleFrameAnalysisRange(near: requestedTime, within: inputTimeRange)
+        let range = singleFrameAnalysisRange(near: requestedTime, within: inputTimeRange)
+        desiredRange.pointee = range
+        analysisDebugLog(
+            "desired_range start=\(range.start) duration=\(range.duration) input_start=\(inputTimeRange.start) input_duration=\(inputTimeRange.duration)"
+        )
     }
 
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
         analysisLock.lock()
+        analysisState.hasAnalyzedFrame = false
         analysisState.detectedVerticalPerspective = nil
         analysisState.detectedHorizontalPerspective = nil
         analysisState.detectedRotationRadians = nil
@@ -223,32 +247,95 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         analysisState.detectedReferenceSize = AUSize(width: 1000.0, height: 1000.0)
         analysisState.detectedPerspectiveTime = analysisRange.start
         analysisLock.unlock()
+        analysisDebugLog("setup_analysis range_start=\(analysisRange.start) range_duration=\(analysisRange.duration) frame_duration=\(frameDuration)")
     }
 
     func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
+        let frameStartNanos = Self.analysisNowNanos()
         analysisLock.lock()
         let request = analysisState.pendingAnalysisRequest
+        let alreadyAnalyzed = analysisState.hasAnalyzedFrame
+        if request != nil && !alreadyAnalyzed {
+            analysisState.hasAnalyzedFrame = true
+        }
         analysisLock.unlock()
 
         guard let request else {
             return
         }
+        guard !alreadyAnalyzed else {
+            analysisDebugLog("analyze_frame_skip already_analyzed time=\(frameTime)")
+            return
+        }
         let sourceReferenceSize = analysisReferenceSize(from: frame)
+        let bounds = frame.imagePixelBounds
+        analysisDebugLog(
+            "analyze_frame_start time=\(frameTime) bounds=\(bounds) reference=\(sourceReferenceSize.width)x\(sourceReferenceSize.height)"
+        )
 
         if request.shouldUseCandidateDetection {
+            let detectorStartNanos = Self.analysisNowNanos()
+            do {
+                let scaleLSDCandidates = try AnyUprightScaleLSDDetector.detectCandidates(
+                    in: frame,
+                    request: request,
+                    context: analysisContext
+                )
+                storeDetectedCandidates(
+                    scaleLSDCandidates,
+                    request: request,
+                    referenceSize: sourceReferenceSize,
+                    time: frameTime
+                )
+                analysisDebugLog(
+                    String(
+                        format: "scalelsd_success candidates=%d detector_ms=%.3f frame_ms=%.3f",
+                        scaleLSDCandidates.count,
+                        Self.analysisElapsedMilliseconds(since: detectorStartNanos),
+                        Self.analysisElapsedMilliseconds(since: frameStartNanos)
+                    )
+                )
+                return
+            } catch {
+                analysisDebugLog(
+                    String(
+                        format: "scalelsd_error error=%@ detector_ms=%.3f",
+                        String(describing: error),
+                        Self.analysisElapsedMilliseconds(since: detectorStartNanos)
+                    )
+                )
+                // Preserve the existing detector chain when the local ScaleLSD resource is absent.
+            }
+            let mlsdStartNanos = Self.analysisNowNanos()
             do {
                 let mlsdCandidates = try AnyUprightMLSDCoreMLDetector.detectCandidates(
                     in: frame,
                     request: request,
                     context: analysisContext
                 )
-                analysisLock.lock()
-                analysisState.detectedCandidates = mlsdCandidates
-                analysisState.detectedReferenceSize = sourceReferenceSize
-                analysisState.detectedPerspectiveTime = frameTime
-                analysisLock.unlock()
+                storeDetectedCandidates(
+                    mlsdCandidates,
+                    request: request,
+                    referenceSize: sourceReferenceSize,
+                    time: frameTime
+                )
+                analysisDebugLog(
+                    String(
+                        format: "mlsd_success candidates=%d detector_ms=%.3f frame_ms=%.3f",
+                        mlsdCandidates.count,
+                        Self.analysisElapsedMilliseconds(since: mlsdStartNanos),
+                        Self.analysisElapsedMilliseconds(since: frameStartNanos)
+                    )
+                )
                 return
             } catch {
+                analysisDebugLog(
+                    String(
+                        format: "mlsd_error error=%@ detector_ms=%.3f",
+                        String(describing: error),
+                        Self.analysisElapsedMilliseconds(since: mlsdStartNanos)
+                    )
+                )
                 // Keep local development usable before the ignored M-LSD model bundle is installed.
             }
         }
@@ -306,14 +393,40 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             ))
         }
 
+        storeDetectedCandidates(
+            candidates,
+            request: request,
+            referenceSize: sourceReferenceSize,
+            time: frameTime
+        )
+        analysisDebugLog(
+            String(
+                format: "hough_success candidates=%d frame_ms=%.3f",
+                candidates.count,
+                Self.analysisElapsedMilliseconds(since: frameStartNanos)
+            )
+        )
+    }
+
+    private func storeDetectedCandidates(
+        _ candidates: [UprightDetectedCandidate],
+        request: UprightAnalysisRequest,
+        referenceSize: AUSize,
+        time: CMTime
+    ) {
+        let ranked = AnyUprightUprightCandidates.analysisCandidates(
+            from: candidates,
+            request: request
+        )
         analysisLock.lock()
-        analysisState.detectedCandidates = Array(candidates.prefix(AnyUprightUprightCandidates.slotCount))
-        analysisState.detectedReferenceSize = sourceReferenceSize
-        analysisState.detectedPerspectiveTime = frameTime
+        analysisState.detectedCandidates = Array(ranked.prefix(AnyUprightUprightCandidates.slotCount))
+        analysisState.detectedReferenceSize = referenceSize
+        analysisState.detectedPerspectiveTime = time
         analysisLock.unlock()
     }
 
     func cleanupAnalysis() throws {
+        let cleanupStartNanos = Self.analysisNowNanos()
         analysisLock.lock()
         let request = analysisState.pendingAnalysisRequest
         let candidates = analysisState.detectedCandidates
@@ -324,6 +437,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
         guard let request,
               let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
+            analysisDebugLog("cleanup_skipped missing_request_or_setting_api")
             return
         }
 
@@ -354,6 +468,14 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 referenceSize: referenceSize
             )
         }
+        analysisDebugLog(
+            String(
+                format: "cleanup_done candidates=%d control_mode=%d elapsed_ms=%.3f",
+                candidates.count,
+                request.controlMode.rawValue,
+                Self.analysisElapsedMilliseconds(since: cleanupStartNanos)
+            )
+        )
     }
 
     private func applyGuided(_ correctionMode: UprightCorrectionMode, time: CMTime) {
@@ -708,6 +830,38 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
             return
         }
+
+        if FileManager.default.fileExists(atPath: logPath),
+           let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+            try? handle.close()
+        } else {
+            try? data.write(to: URL(fileURLWithPath: logPath))
+        }
+    }
+
+    private static func analysisNowNanos() -> UInt64 {
+        DispatchTime.now().uptimeNanoseconds
+    }
+
+    private static func analysisElapsedMilliseconds(since startNanos: UInt64) -> Double {
+        Double(analysisNowNanos() - startNanos) / 1_000_000.0
+    }
+
+    private func analysisDebugLog(_ message: String) {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightUprightAnalysis.debug") else {
+            return
+        }
+
+        let logPath = "/tmp/AnyUprightUprightAnalysis.log"
+        let timestamp = String(format: "%.3f", Date().timeIntervalSince1970)
+        guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
+            return
+        }
+
+        Self.analysisDebugLogLock.lock()
+        defer { Self.analysisDebugLogLock.unlock() }
 
         if FileManager.default.fileExists(atPath: logPath),
            let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {

@@ -20,3 +20,4 @@ build/
 AnyUpright/Plugin/GeoCalibRuntime/
 AnyUpright/Plugin/GeoCalibCoreML/
 AnyUpright/Plugin/MLSDCoreML/
+AnyUpright/Plugin/ScaleLSDCoreML/

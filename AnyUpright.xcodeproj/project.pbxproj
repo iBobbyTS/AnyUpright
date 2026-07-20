@@ -81,7 +81,9 @@
 				Plugin/AnyUprightMLSDCoreMLDetector.swift,
 				Plugin/AnyUprightOSCOverlayRenderer.swift,
 				Plugin/AnyUprightScaleLSDCoreML.swift,
+				Plugin/AnyUprightScaleLSDDetector.swift,
 				Plugin/AnyUprightScaleLSDPostprocessor.swift,
+				Plugin/AnyUprightScaleLSDPreprocessor.swift,
 				Plugin/AnyUprightStretchEffects.swift,
 				Plugin/AnyUprightStretchOSCDebugLogger.swift,
 				Plugin/AnyUprightStretchOSCControls.swift,
@@ -109,6 +111,8 @@
 				Plugin/Info.plist,
 				Plugin/main.swift,
 				Plugin/MetalDeviceCache.swift,
+				Plugin/ScaleLSDCoreML,
+				Plugin/ScaleLSDCoreML/scalelsd_neural_forward.mlmodelc,
 				"Wrapper Application/Info.plist",
 			);
 			target = B0B4FA9D2FD2A99500794BBA /* Wrapper Application */;

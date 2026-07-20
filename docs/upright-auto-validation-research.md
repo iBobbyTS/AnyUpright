@@ -226,11 +226,34 @@ metric. Keep those numbers only as detector-run history; they are not directly
 comparable to the corrected same-VP metric. A full corrected rerun can reuse a
 persisted raw-line cache, but the original full run did not retain one.
 
-This is still an offline migration path. The production Upright detector order
-has not changed, and the plugin does not yet ship or load the ScaleLSD model.
-Remaining production work includes plugin-side grayscale preprocessing,
-resource/session ownership, candidate reduction/ranking, final-transform
-validation, and conservative reject behavior.
+The neural migration and proposal-quality measurements above remain the
+research baseline. Production integration now uses ScaleLSD as the first
+Upright detector, with M-LSD and the CPU detector as fallbacks. The production
+path deliberately does not use the experimental VP/proposal rejector: it ranks
+decoded lines by monotonic normalized support score, keeps the top 10 per
+requested orientation for Semi Auto, and selects the top two per requested
+orientation for Full Auto. Full direction therefore uses 10V+10H display
+candidates or 2V+2H automatic references. This implements score-only behavior;
+it does not change the documented conclusion that Full selection quality is
+not proven by the current HoliCity proposal experiment.
+
+Motion host timing on 2026-07-20 exposed two production integration costs. The
+shared 0.05-second FxAnalysis range produced three callbacks in a 60 fps
+project, and the original detector rendered each 5712x4284 frame to full RGBA
+before resizing to 512x512. The three Debug detector calls measured 19.86,
+14.07, and 14.04 seconds. Production now renders the analysis tile directly to
+512x512 and atomically processes only the first callback; later callbacks return
+success without repeating inference, preserving normal cleanup semantics. The
+0.05-second value remains only a host probe window because FxAnalysis exposes a
+time range rather than an exact-frame API. Performance conclusions must use a
+Release build: an isolated Swift postprocessor benchmark measured about 2.9
+seconds under `-Onone` and 23-28 milliseconds under `-O` for the same test
+path.
+
+The local FP16 compiled resource is intentionally ignored by Git and must be
+installed at:
+
+`AnyUpright/Plugin/ScaleLSDCoreML/scalelsd_neural_forward.mlmodelc`
 
 Representative commands:
 

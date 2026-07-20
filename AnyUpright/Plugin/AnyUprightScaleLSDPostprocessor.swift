@@ -19,6 +19,11 @@ struct AUScaleLSDLineSegment: Equatable {
     var score: Double
 }
 
+enum AUScaleLSDNearestJunctionSearch {
+    case spatialGrid
+    case linearReference
+}
+
 enum AUScaleLSDPostprocessError: Error, CustomStringConvertible {
     case invalidShape([Int])
     case invalidElementCount(expected: Int, actual: Int)
@@ -44,12 +49,74 @@ enum AnyUprightScaleLSDPostprocessor {
         var denseIndex: Int
     }
 
+    private struct JunctionSpatialIndex {
+        let cellSize: Float
+        let searchRadius: Float
+        let columnCount: Int
+        let rowCount: Int
+        var buckets: [[Int]]
+
+        init(
+            junctions: [Junction],
+            width: Int,
+            height: Int,
+            maximumSquaredDistance: Float
+        ) {
+            searchRadius = ceilf(sqrtf(max(0, maximumSquaredDistance)))
+            cellSize = max(1, searchRadius * 2)
+            columnCount = max(1, Int(ceilf(Float(width) / cellSize)))
+            rowCount = max(1, Int(ceilf(Float(height) / cellSize)))
+            buckets = Array(repeating: [], count: columnCount * rowCount)
+
+            for (index, junction) in junctions.enumerated() {
+                let column = Self.cellIndex(junction.x, cellSize: cellSize, count: columnCount)
+                let row = Self.cellIndex(junction.y, cellSize: cellSize, count: rowCount)
+                buckets[row * columnCount + column].append(index)
+            }
+        }
+
+        func nearestJunction(
+            toX x: Float,
+            y: Float,
+            junctions: [Junction]
+        ) -> (index: Int, squaredDistance: Float) {
+            let minimumColumn = Self.cellIndex(x - searchRadius, cellSize: cellSize, count: columnCount)
+            let maximumColumn = Self.cellIndex(x + searchRadius, cellSize: cellSize, count: columnCount)
+            let minimumRow = Self.cellIndex(y - searchRadius, cellSize: cellSize, count: rowCount)
+            let maximumRow = Self.cellIndex(y + searchRadius, cellSize: cellSize, count: rowCount)
+            var bestIndex = 0
+            var bestDistance = Float.greatestFiniteMagnitude
+
+            for row in minimumRow...maximumRow {
+                for column in minimumColumn...maximumColumn {
+                    for index in buckets[row * columnCount + column] {
+                        let junction = junctions[index]
+                        let dx = junction.x - x
+                        let dy = junction.y - y
+                        let distance = dx * dx + dy * dy
+                        if distance < bestDistance || (distance == bestDistance && index < bestIndex) {
+                            bestIndex = index
+                            bestDistance = distance
+                        }
+                    }
+                }
+            }
+
+            return (bestIndex, bestDistance)
+        }
+
+        private static func cellIndex(_ coordinate: Float, cellSize: Float, count: Int) -> Int {
+            min(count - 1, max(0, Int(floorf(coordinate / cellSize))))
+        }
+    }
+
     static func decode(
         denseLogits: [Float],
         shape: [Int],
         imageWidth: Int,
         imageHeight: Int,
-        configuration: AUScaleLSDPostprocessConfiguration = AUScaleLSDPostprocessConfiguration()
+        configuration: AUScaleLSDPostprocessConfiguration = AUScaleLSDPostprocessConfiguration(),
+        nearestJunctionSearch: AUScaleLSDNearestJunctionSearch = .spatialGrid
     ) throws -> [AUScaleLSDLineSegment] {
         guard imageWidth > 0, imageHeight > 0 else {
             throw AUScaleLSDPostprocessError.invalidImageSize(width: imageWidth, height: imageHeight)
@@ -100,6 +167,18 @@ enum AnyUprightScaleLSDPostprocessor {
         }
 
         let junctionCount = junctions.count
+        let spatialIndex: JunctionSpatialIndex?
+        switch nearestJunctionSearch {
+        case .spatialGrid:
+            spatialIndex = JunctionSpatialIndex(
+                junctions: junctions,
+                width: dimensions.width,
+                height: dimensions.height,
+                maximumSquaredDistance: configuration.junctionToLineSquaredDistanceThreshold
+            )
+        case .linearReference:
+            spatialIndex = nil
+        }
         var pairSupport: [Int: Int] = [:]
         pairSupport.reserveCapacity(junctionCount * 2)
         for index in 0..<planeSize {
@@ -119,8 +198,15 @@ enum AnyUprightScaleLSDPostprocessor {
             let endX = clamp((cosine - sine * endTangent) * distance + x0, lower: 0, upper: Float(dimensions.width - 1))
             let endY = clamp((sine + cosine * endTangent) * distance + y0, lower: 0, upper: Float(dimensions.height - 1))
 
-            let first = nearestJunction(toX: startX, y: startY, junctions: junctions)
-            let second = nearestJunction(toX: endX, y: endY, junctions: junctions)
+            let first: (index: Int, squaredDistance: Float)
+            let second: (index: Int, squaredDistance: Float)
+            if let spatialIndex {
+                first = spatialIndex.nearestJunction(toX: startX, y: startY, junctions: junctions)
+                second = spatialIndex.nearestJunction(toX: endX, y: endY, junctions: junctions)
+            } else {
+                first = nearestJunction(toX: startX, y: startY, junctions: junctions)
+                second = nearestJunction(toX: endX, y: endY, junctions: junctions)
+            }
             guard first.index != second.index,
                   first.squaredDistance < configuration.junctionToLineSquaredDistanceThreshold,
                   second.squaredDistance < configuration.junctionToLineSquaredDistanceThreshold else {

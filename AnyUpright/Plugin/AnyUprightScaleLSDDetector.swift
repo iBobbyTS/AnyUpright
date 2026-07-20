@@ -5,6 +5,7 @@
 
 import CoreImage
 import CoreML
+import Dispatch
 import Foundation
 
 enum AUScaleLSDDetectorError: Error, CustomStringConvertible {
@@ -28,6 +29,7 @@ private final class AUScaleLSDResourceAnchor: NSObject {}
 
 enum AnyUprightScaleLSDDetector {
     private static let inputSize = 512
+    private static let debugLogLock = NSLock()
     private static let sessionLock = NSLock()
     private static var cachedModelURL: URL?
     private static var cachedSession: AUScaleLSDCoreMLSession?
@@ -37,22 +39,56 @@ enum AnyUprightScaleLSDDetector {
         request: UprightAnalysisRequest,
         context: CIContext
     ) throws -> [UprightDetectedCandidate] {
+        let totalStart = nowNanos()
+        let renderStart = nowNanos()
         let source = try renderSourceRGBA(from: frame, context: context)
+        let renderMS = elapsedMilliseconds(since: renderStart)
+
+        let preprocessStart = nowNanos()
         guard let input = AnyUprightScaleLSDPreprocessor.normalizedGrayscaleNCHW(from: source) else {
             throw AUScaleLSDDetectorError.invalidInput
         }
-        let dense = try session().run(inputNCHW: input)
+        let preprocessMS = elapsedMilliseconds(since: preprocessStart)
+
+        let sessionStart = nowNanos()
+        let inferenceSession = try session()
+        let sessionMS = elapsedMilliseconds(since: sessionStart)
+
+        let inferenceStart = nowNanos()
+        let dense = try inferenceSession.run(inputNCHW: input)
+        let inferenceMS = elapsedMilliseconds(since: inferenceStart)
+
+        let decodeStart = nowNanos()
         let lines = try AnyUprightScaleLSDPostprocessor.decode(
             denseLogits: dense.values,
             shape: dense.shape,
             imageWidth: source.width,
             imageHeight: source.height
         )
+        let decodeMS = elapsedMilliseconds(since: decodeStart)
+
+        let candidatesStart = nowNanos()
         let candidates = AnyUprightScaleLSDPreprocessor.detectedCandidates(
             from: lines,
             imageSize: AUSize(width: Double(source.width), height: Double(source.height))
         )
-        return AnyUprightUprightCandidates.analysisCandidates(from: candidates, request: request)
+        let ranked = AnyUprightUprightCandidates.analysisCandidates(from: candidates, request: request)
+        let candidatesMS = elapsedMilliseconds(since: candidatesStart)
+        debugLog(
+            String(
+                format: "scalelsd_stages render_ms=%.3f preprocess_ms=%.3f session_ms=%.3f inference_ms=%.3f decode_ms=%.3f candidates_ms=%.3f lines=%d candidates=%d total_ms=%.3f",
+                renderMS,
+                preprocessMS,
+                sessionMS,
+                inferenceMS,
+                decodeMS,
+                candidatesMS,
+                lines.count,
+                ranked.count,
+                elapsedMilliseconds(since: totalStart)
+            )
+        )
+        return ranked
     }
 
     private static func session() throws -> AUScaleLSDCoreMLSession {
@@ -120,5 +156,36 @@ enum AnyUprightScaleLSDDetector {
             colorSpace: CGColorSpaceCreateDeviceRGB()
         )
         return AUScaleLSDRGBAImage(width: inputSize, height: inputSize, pixels: pixels)
+    }
+
+    private static func nowNanos() -> UInt64 {
+        DispatchTime.now().uptimeNanoseconds
+    }
+
+    private static func elapsedMilliseconds(since startNanos: UInt64) -> Double {
+        Double(nowNanos() - startNanos) / 1_000_000.0
+    }
+
+    private static func debugLog(_ message: String) {
+        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightUprightAnalysis.debug") else {
+            return
+        }
+
+        let logURL = URL(fileURLWithPath: "/tmp/AnyUprightUprightAnalysis.log")
+        let timestamp = String(format: "%.3f", Date().timeIntervalSince1970)
+        guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
+            return
+        }
+
+        debugLogLock.lock()
+        defer { debugLogLock.unlock() }
+        if FileManager.default.fileExists(atPath: logURL.path),
+           let handle = try? FileHandle(forWritingTo: logURL) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+            try? handle.close()
+        } else {
+            try? data.write(to: logURL)
+        }
     }
 }

@@ -38,6 +38,12 @@ private struct ExpectedLine: Decodable {
 @main
 struct AnyUprightScaleLSDPostprocessorTests {
     static func main() throws {
+        try verifySpatialSearchMatchesLinearReference()
+        if CommandLine.arguments.dropFirst().first == "--synthetic-only" {
+            print("AnyUprightScaleLSDPostprocessorTests passed synthetic equivalence")
+            return
+        }
+
         let defaultFixture = "/Volumes/4T/temp/AnyUprightResearchWorkspace/model_tests/scalelsd/coreml_conversion/postprocess_fixture.json"
         let fixtureURL = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? defaultFixture)
         let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: fixtureURL))
@@ -98,6 +104,80 @@ struct AnyUprightScaleLSDPostprocessorTests {
         }
 
         print("AnyUprightScaleLSDPostprocessorTests passed; lines=\(actual.count) maxCoordinateDiff=\(maximumCoordinateDifference)")
+    }
+
+    private static func verifySpatialSearchMatchesLinearReference() throws {
+        let cases = [
+            (width: 16, height: 16, seed: UInt64(0x1234), maximumJunctions: 64),
+            (width: 24, height: 18, seed: UInt64(0xBEEF), maximumJunctions: 96),
+            (width: 32, height: 24, seed: UInt64(0xC0FFEE), maximumJunctions: 128),
+        ]
+
+        for testCase in cases {
+            let shape = [1, 9, testCase.height, testCase.width]
+            let dense = deterministicDenseLogits(count: shape.reduce(1, *), seed: testCase.seed)
+            var configuration = AUScaleLSDPostprocessConfiguration()
+            configuration.maximumJunctions = testCase.maximumJunctions
+            configuration.junctionHeatmapThreshold = 0.02
+            configuration.lineSupportThreshold = 0
+
+            let spatial = try AnyUprightScaleLSDPostprocessor.decode(
+                denseLogits: dense,
+                shape: shape,
+                imageWidth: testCase.width * 2,
+                imageHeight: testCase.height * 3,
+                configuration: configuration,
+                nearestJunctionSearch: .spatialGrid
+            )
+            let linear = try AnyUprightScaleLSDPostprocessor.decode(
+                denseLogits: dense,
+                shape: shape,
+                imageWidth: testCase.width * 2,
+                imageHeight: testCase.height * 3,
+                configuration: configuration,
+                nearestJunctionSearch: .linearReference
+            )
+            guard spatial == linear else {
+                throw ScaleLSDPostprocessorTestFailure.failed(
+                    "spatial search mismatch for \(testCase.width)x\(testCase.height) seed \(testCase.seed)"
+                )
+            }
+        }
+
+        let shape = [1, 9, 8, 8]
+        let dense = deterministicDenseLogits(count: shape.reduce(1, *), seed: 0xFACE)
+        var zeroThresholdConfiguration = AUScaleLSDPostprocessConfiguration()
+        zeroThresholdConfiguration.junctionToLineSquaredDistanceThreshold = 0
+        zeroThresholdConfiguration.lineSupportThreshold = 0
+        let zeroThresholdSpatial = try AnyUprightScaleLSDPostprocessor.decode(
+            denseLogits: dense,
+            shape: shape,
+            imageWidth: 8,
+            imageHeight: 8,
+            configuration: zeroThresholdConfiguration,
+            nearestJunctionSearch: .spatialGrid
+        )
+        let zeroThresholdLinear = try AnyUprightScaleLSDPostprocessor.decode(
+            denseLogits: dense,
+            shape: shape,
+            imageWidth: 8,
+            imageHeight: 8,
+            configuration: zeroThresholdConfiguration,
+            nearestJunctionSearch: .linearReference
+        )
+        guard zeroThresholdSpatial == zeroThresholdLinear else {
+            throw ScaleLSDPostprocessorTestFailure.failed("zero-distance threshold mismatch")
+        }
+    }
+
+    private static func deterministicDenseLogits(count: Int, seed: UInt64) -> [Float] {
+        var state = seed
+        return (0..<count).map { _ in
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            let mantissa = UInt32(truncatingIfNeeded: state >> 40)
+            let unit = Float(mantissa) / Float(0x00FF_FFFF)
+            return unit * 8 - 4
+        }
     }
 
     private static func readFloatTensor(_ url: URL, expectedCount: Int) throws -> [Float] {

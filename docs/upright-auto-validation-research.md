@@ -245,10 +245,29 @@ before resizing to 512x512. The three Debug detector calls measured 19.86,
 512x512 and atomically processes only the first callback; later callbacks return
 success without repeating inference, preserving normal cleanup semantics. The
 0.05-second value remains only a host probe window because FxAnalysis exposes a
-time range rather than an exact-frame API. Performance conclusions must use a
-Release build: an isolated Swift postprocessor benchmark measured about 2.9
-seconds under `-Onone` and 23-28 milliseconds under `-O` for the same test
-path.
+time range rather than an exact-frame API.
+
+The remaining steady-state bottleneck was the official-compatible Swift decode.
+For every one of the 256x256 dense cells, the initial implementation searched
+up to 512 junctions twice, or about 67 million squared-distance comparisons.
+On the same Motion frame, the Debug host measured `8580.770 ms` in decode out
+of `8865.879 ms` detector time. The decoder now buckets junctions in a uniform
+spatial grid derived from the existing distance threshold and searches only
+intersecting cells. It preserves the original strict threshold, Float distance
+calculation, and lower-array-index tie break; the old linear search remains an
+internal test oracle. Deterministic synthetic tensors produce exactly equal
+line arrays for both searches, including the zero-distance-threshold edge case.
+
+With that change, the same Debug Motion input still produced 518 decoded lines
+and 20 ranked candidates. Decode fell to `300.835 ms` on the first run and
+`299.852 ms` on the next run, about 28.6x faster than the previous Debug host
+measurement. The warm detector total was `625.618 ms`: 19.408 ms render,
+89.362 ms preprocessing, 0.241 ms session lookup, 215.700 ms inference,
+299.852 ms decode, and 1.050 ms candidate ranking. A cold XPC run still spent
+about 5.8 seconds creating the Core ML session. These are Debug diagnostics;
+release performance conclusions still require a Release host measurement.
+Create `/tmp/AnyUprightUprightAnalysis.debug` to enable per-stage timing at
+`/tmp/AnyUprightUprightAnalysis.log`.
 
 The local FP16 compiled resource is intentionally ignored by Git and must be
 installed at:

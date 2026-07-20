@@ -129,6 +129,18 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             return result
         }
 
+        if controlMode == .automatic {
+            let correction = AnyUprightUprightCandidates.automaticCorrectionValues(
+                from: uprightCandidateLines(at: renderTime, paramAPI: paramAPI),
+                correctionMode: correctionMode,
+                referenceSize: correctionReferenceSize(from: result)
+            )
+            result.verticalPerspective = Float(correction.verticalPerspective)
+            result.horizontalPerspective = Float(correction.horizontalPerspective)
+            result.rotationRadians = correctionMode == .full ? Float(correction.rotationRadians) : 0.0
+            return result
+        }
+
         result.verticalPerspective = correctionMode.includesVertical ? Float(vertical) : 0.0
         result.horizontalPerspective = correctionMode.includesHorizontal ? Float(horizontal) : 0.0
         result.rotationRadians = correctionMode == .full ? Float(rotation) : 0.0

@@ -1833,7 +1833,7 @@ struct AnyUprightGeometryTests {
             end: AUPoint(x: 0.1, y: 0.8),
             score: 0.3
         )
-        let selectedLowScore = uprightCandidateLine(
+        let manuallySelectedLowScore = uprightCandidateLine(
             spec: specs[1],
             selected: true,
             orientation: .vertical,
@@ -1849,7 +1849,23 @@ struct AnyUprightGeometryTests {
             end: AUPoint(x: 0.8, y: 0.5),
             score: 0.8
         )
-        let candidates = [lowScore, selectedLowScore, highScore]
+        let highVerticalScore = uprightCandidateLine(
+            spec: specs[3],
+            selected: false,
+            orientation: .vertical,
+            start: AUPoint(x: 0.25, y: 0.2),
+            end: AUPoint(x: 0.40, y: 0.8),
+            score: 0.9
+        )
+        let mediumVerticalScore = uprightCandidateLine(
+            spec: specs[4],
+            selected: false,
+            orientation: .vertical,
+            start: AUPoint(x: 0.75, y: 0.2),
+            end: AUPoint(x: 0.60, y: 0.8),
+            score: 0.6
+        )
+        let candidates = [lowScore, manuallySelectedLowScore, highScore, highVerticalScore, mediumVerticalScore]
 
         try assertEqual(
             AnyUprightUprightCandidates.displayCandidates(from: candidates, controlMode: .manual, correctionMode: .full).count,
@@ -1862,7 +1878,7 @@ struct AnyUprightGeometryTests {
             controlMode: .semiAutomatic,
             correctionMode: .vertical
         )
-        try assertEqual(semiVertical.count, 2, "semi-auto vertical shows analyzed vertical candidates")
+        try assertEqual(semiVertical.count, 4, "semi-auto vertical shows analyzed vertical candidates")
         try assertTrue(semiVertical.allSatisfy { $0.orientation == .vertical }, "semi-auto vertical hides horizontal candidates")
 
         let semiFull = AnyUprightUprightCandidates.displayCandidates(
@@ -1870,15 +1886,61 @@ struct AnyUprightGeometryTests {
             controlMode: .semiAutomatic,
             correctionMode: .full
         )
-        try assertEqual(semiFull.count, 3, "semi-auto full shows all included analyzed candidates")
+        try assertEqual(semiFull.count, 5, "semi-auto full shows all included analyzed candidates")
 
         let automatic = AnyUprightUprightCandidates.displayCandidates(
             from: candidates,
             controlMode: .automatic,
             correctionMode: .full
         )
-        try assertEqual(automatic.count, 1, "automatic display shows only persisted selected candidates")
-        try assertTrue(automatic.contains { $0.spec.linePart == selectedLowScore.spec.linePart }, "selected candidate remains visible")
+        try assertEqual(automatic.count, 3, "full auto shows the top two candidates per included orientation")
+        try assertTrue(automatic.allSatisfy(\.selected), "full-auto display marks score-selected candidates as selected")
+        try assertTrue(
+            automatic.contains { $0.spec.linePart == highVerticalScore.spec.linePart }
+                && automatic.contains { $0.spec.linePart == mediumVerticalScore.spec.linePart }
+                && automatic.contains { $0.spec.linePart == highScore.spec.linePart },
+            "full auto displays the highest-score candidates"
+        )
+        try assertTrue(
+            !automatic.contains { $0.spec.linePart == manuallySelectedLowScore.spec.linePart },
+            "switching from semi auto must not retain a lower-score manual selection"
+        )
+
+        let referenceSize = AUSize(width: 1600.0, height: 900.0)
+        let automaticCorrection = AnyUprightUprightCandidates.automaticCorrectionValues(
+            from: candidates,
+            correctionMode: .full,
+            referenceSize: referenceSize
+        )
+        let expectedCorrection = AnyUprightUprightCandidates.correctionValues(
+            verticalLines: [highVerticalScore, mediumVerticalScore].map {
+                AnyUprightUprightCandidates.imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0))
+            },
+            horizontalLines: [AnyUprightUprightCandidates.imageLine(from: highScore, size: AUSize(width: 1.0, height: 1.0))],
+            correctionMode: .full,
+            referenceSize: referenceSize
+        )
+        try assertApprox(
+            automaticCorrection.verticalPerspective,
+            expectedCorrection.verticalPerspective,
+            "full-auto render uses score-selected vertical references"
+        )
+        try assertApprox(
+            automaticCorrection.horizontalPerspective,
+            expectedCorrection.horizontalPerspective,
+            "full-auto render uses score-selected horizontal references"
+        )
+        try assertApprox(
+            automaticCorrection.rotationRadians,
+            expectedCorrection.rotationRadians,
+            "full-auto render uses score-selected residual rotation"
+        )
+        try assertTrue(
+            abs(automaticCorrection.verticalPerspective) > 0.0001
+                || abs(automaticCorrection.horizontalPerspective) > 0.0001
+                || abs(automaticCorrection.rotationRadians) > 0.0001,
+            "full-auto score-selected references should produce a nonzero correction in this fixture"
+        )
     }
 
     static func testUprightCandidateObjectLineClampsAndFlipsY() throws {

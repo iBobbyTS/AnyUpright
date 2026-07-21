@@ -485,10 +485,32 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             innerStretchBottomRight: vector_float2(Float(sourceHandles.bottomRight.x), Float(sourceHandles.bottomRight.y)),
             innerStretchBottomLeft: vector_float2(Float(sourceHandles.bottomLeft.x), Float(sourceHandles.bottomLeft.y)),
             renderMode: renderMode,
-            reserved0: 0,
+            usesNearestSampling: usesNearestSampling(outputToSource: outputToSource, outputSize: destinationSize, sourceSize: sourceSize),
             reserved1: 0,
             reserved2: 0
         )
+    }
+
+    private func usesNearestSampling(outputToSource: simd_float3x3, outputSize: AUSize, sourceSize: AUSize) -> Int32 {
+        guard abs(outputSize.width - sourceSize.width) < 0.5,
+              abs(outputSize.height - sourceSize.height) < 0.5 else {
+            return 0
+        }
+
+        let identity = simd_float3x3(
+            SIMD3<Float>(1.0, 0.0, 0.0),
+            SIMD3<Float>(0.0, 1.0, 0.0),
+            SIMD3<Float>(0.0, 0.0, 1.0)
+        )
+        let values = outputToSource - identity
+        let first = values.columns.0
+        let second = values.columns.1
+        let third = values.columns.2
+        let firstMaximum = max(abs(first.x), max(abs(first.y), abs(first.z)))
+        let secondMaximum = max(abs(second.x), max(abs(second.y), abs(second.z)))
+        let thirdMaximum = max(abs(third.x), max(abs(third.y), abs(third.z)))
+        let maximumDifference = max(firstMaximum, max(secondMaximum, thirdMaximum))
+        return maximumDifference < 0.0001 ? 1 : 0
     }
 
     private func outputToSourceMatrix(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> simd_float3x3 {

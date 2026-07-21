@@ -84,9 +84,12 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
                                        texture2d<half> colorTexture [[texture(AUTI_InputImage)]],
                                        constant AnyUprightWarpState *warpState [[buffer(AUFII_WarpState)]])
 {
-    constexpr sampler textureSampler(mag_filter::linear,
-                                     min_filter::linear,
-                                     address::clamp_to_edge);
+    constexpr sampler linearTextureSampler(mag_filter::linear,
+                                            min_filter::linear,
+                                            address::clamp_to_edge);
+    constexpr sampler nearestTextureSampler(mag_filter::nearest,
+                                             min_filter::nearest,
+                                             address::clamp_to_edge);
 
     if (warpState->renderMode == AURM_InnerStretchAdjusterPreview) {
         float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
@@ -96,7 +99,9 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
         }
 
         float2 texturePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
-        float4 color = sampleInputImage(colorTexture, textureSampler, texturePixel, warpState);
+        float4 color = warpState->usesNearestSampling != 0
+            ? sampleInputImage(colorTexture, nearestTextureSampler, texturePixel, warpState)
+            : sampleInputImage(colorTexture, linearTextureSampler, texturePixel, warpState);
         float3 selectionHomogeneous = warpState->selectionOutputToRect * float3(outputCoordinate, 1.0);
         if (fabs(selectionHomogeneous.z) < 0.000001) {
             color.rgb *= 0.70;
@@ -124,7 +129,9 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
     }
 
     float2 texturePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
-    return sampleInputImage(colorTexture, textureSampler, texturePixel, warpState);
+    return warpState->usesNearestSampling != 0
+        ? sampleInputImage(colorTexture, nearestTextureSampler, texturePixel, warpState)
+        : sampleInputImage(colorTexture, linearTextureSampler, texturePixel, warpState);
 }
 
 vertex OverlayRasterizerData anyUprightOverlayVertex(uint vertexID [[vertex_id]],

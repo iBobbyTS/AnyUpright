@@ -59,6 +59,13 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         segments.append(contentsOf: canvasGuides.map {
             AUOSCStyledSegment(start: $0.start, end: $0.end, style: guideStyle($0.guide, activePart: activePart))
         })
+        segments.append(contentsOf: guides.flatMap { guide in
+            dashedDirectionSegments(
+                from: guide.start,
+                to: guide.end,
+                style: guideStyle(guide, activePart: activePart)
+            )
+        })
         let handles = canvasGuides.flatMap {
             let colorOverride = $0.guide.enabled ? guideColor(for: $0.guide.orientation) : disabledGuideColor()
             return [
@@ -247,8 +254,23 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     }
 
     private func selectedDirectionSegments(_ candidate: UprightCandidateLine) -> [AUOSCStyledSegment] {
-        guard candidate.selected,
-              let extendedLine = extendedUnitCanvasLine(from: candidate.start, to: candidate.end) else {
+        guard candidate.selected else {
+            return []
+        }
+
+        return dashedDirectionSegments(
+            from: candidate.start,
+            to: candidate.end,
+            style: candidateStyle(candidate)
+        )
+    }
+
+    private func dashedDirectionSegments(
+        from objectStart: AUPoint,
+        to objectEnd: AUPoint,
+        style: AUOSCOverlayStyle
+    ) -> [AUOSCStyledSegment] {
+        guard let extendedLine = extendedUnitCanvasLine(from: objectStart, to: objectEnd) else {
             return []
         }
 
@@ -266,20 +288,39 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let step = dashLength + gapLength
         let directionX = dx / length
         let directionY = dy / length
-        let style = candidateStyle(candidate)
-        var segments: [AUOSCStyledSegment] = []
-        var offset = 0.0
-        while offset < length {
-            let dashEnd = min(length, offset + dashLength)
-            segments.append(
-                AUOSCStyledSegment(
-                    start: AUPoint(x: start.x + directionX * offset, y: start.y + directionY * offset),
-                    end: AUPoint(x: start.x + directionX * dashEnd, y: start.y + directionY * dashEnd),
-                    style: style
+        let originalStart = canvasPoint(fromObjectPoint: objectStart)
+        let originalEnd = canvasPoint(fromObjectPoint: objectEnd)
+        let originalOffsets = [originalStart, originalEnd].map { point in
+            max(
+                0.0,
+                min(
+                    length,
+                    (point.x - start.x) * directionX + (point.y - start.y) * directionY
                 )
             )
-            offset += step
+        }.sorted()
+        guard originalOffsets.count == 2 else {
+            return []
         }
+
+        var segments: [AUOSCStyledSegment] = []
+        func appendDashes(from intervalStart: Double, to intervalEnd: Double) {
+            var offset = intervalStart
+            while offset < intervalEnd {
+                let dashEnd = min(intervalEnd, offset + dashLength)
+                segments.append(
+                    AUOSCStyledSegment(
+                        start: AUPoint(x: start.x + directionX * offset, y: start.y + directionY * offset),
+                        end: AUPoint(x: start.x + directionX * dashEnd, y: start.y + directionY * dashEnd),
+                        style: style
+                    )
+                )
+                offset += step
+            }
+        }
+
+        appendDashes(from: 0.0, to: originalOffsets[0])
+        appendDashes(from: originalOffsets[1], to: length)
         return segments
     }
 

@@ -89,6 +89,7 @@ struct AnyUprightGeometryTests {
         try testUprightAnalysisRankingCoversAllAutomaticModeCombinations()
         try testUprightCandidateToggleSelectionStopsAtTwoPerOrientation()
         try testUprightCandidateDisplayHonorsControlAndCorrectionMode()
+        try testUprightControlModesShareReferenceMatrixSolver()
         try testUprightFullAutoTransfersScoreSelectedLinesToManualSlots()
         try testUprightSemiAutoTransfersOnlySelectedLinesAndPlacesSinglesByPosition()
         try testUprightCandidateObjectLineClampsAndFlipsY()
@@ -1908,41 +1909,82 @@ struct AnyUprightGeometryTests {
             "switching from semi auto must not retain a lower-score manual selection"
         )
 
-        let referenceSize = AUSize(width: 1600.0, height: 900.0)
-        let automaticCorrection = AnyUprightUprightCandidates.automaticCorrectionValues(
+        let automaticReferences = AnyUprightUprightCandidates.selectedReferenceLines(
+            manualReferences: .empty,
             from: candidates,
-            correctionMode: .full,
-            referenceSize: referenceSize
+            controlMode: .automatic,
+            correctionMode: .full
         )
-        let expectedCorrection = AnyUprightUprightCandidates.correctionValues(
-            verticalLines: [highVerticalScore, mediumVerticalScore].map {
+        try assertEqual(automaticReferences.vertical.count, 2, "full-auto selects two vertical references")
+        try assertEqual(automaticReferences.horizontal.count, 1, "full-auto selects the available horizontal reference")
+        let expectedVertical = [highVerticalScore, mediumVerticalScore].map {
+            AnyUprightUprightCandidates.imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0))
+        }
+        try assertApprox(automaticReferences.vertical[0].start.x, expectedVertical[0].start.x, "full-auto first vertical reference")
+        try assertApprox(automaticReferences.vertical[1].start.x, expectedVertical[1].start.x, "full-auto second vertical reference")
+        try assertApprox(
+            automaticReferences.horizontal[0].start.y,
+            AnyUprightUprightCandidates.imageLine(from: highScore, size: AUSize(width: 1.0, height: 1.0)).start.y,
+            "full-auto horizontal reference"
+        )
+    }
+
+    static func testUprightControlModesShareReferenceMatrixSolver() throws {
+        let specs = AnyUprightUprightCandidates.specs
+        let candidates = [
+            uprightCandidateLine(spec: specs[0], selected: true, orientation: .vertical, start: AUPoint(x: 0.16, y: 0.18), end: AUPoint(x: 0.24, y: 0.82), score: 0.9),
+            uprightCandidateLine(spec: specs[1], selected: true, orientation: .vertical, start: AUPoint(x: 0.84, y: 0.18), end: AUPoint(x: 0.76, y: 0.82), score: 0.8),
+            uprightCandidateLine(spec: specs[2], selected: true, orientation: .horizontal, start: AUPoint(x: 0.18, y: 0.78), end: AUPoint(x: 0.82, y: 0.68), score: 0.7),
+            uprightCandidateLine(spec: specs[3], selected: true, orientation: .horizontal, start: AUPoint(x: 0.18, y: 0.28), end: AUPoint(x: 0.82, y: 0.26), score: 0.6)
+        ]
+        let candidateReferences = UprightReferenceLines(
+            vertical: candidates.prefix(2).map {
                 AnyUprightUprightCandidates.imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0))
             },
-            horizontalLines: [AnyUprightUprightCandidates.imageLine(from: highScore, size: AUSize(width: 1.0, height: 1.0))],
-            correctionMode: .full,
-            referenceSize: referenceSize
+            horizontal: candidates.suffix(2).map {
+                AnyUprightUprightCandidates.imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0))
+            }
         )
-        try assertApprox(
-            automaticCorrection.verticalPerspective,
-            expectedCorrection.verticalPerspective,
-            "full-auto render uses score-selected vertical references"
-        )
-        try assertApprox(
-            automaticCorrection.horizontalPerspective,
-            expectedCorrection.horizontalPerspective,
-            "full-auto render uses score-selected horizontal references"
-        )
-        try assertApprox(
-            automaticCorrection.rotationRadians,
-            expectedCorrection.rotationRadians,
-            "full-auto render uses score-selected residual rotation"
-        )
-        try assertTrue(
-            abs(automaticCorrection.verticalPerspective) > 0.0001
-                || abs(automaticCorrection.horizontalPerspective) > 0.0001
-                || abs(automaticCorrection.rotationRadians) > 0.0001,
-            "full-auto score-selected references should produce a nonzero correction in this fixture"
-        )
+
+        let size = AUSize(width: 1600.0, height: 900.0)
+        let directionCases: [(correction: UprightCorrectionMode, guided: AUGuidedUprightMode)] = [
+            (.vertical, .vertical),
+            (.horizontal, .horizontal),
+            (.full, .full)
+        ]
+
+        for directionCase in directionCases {
+            let manual = AnyUprightUprightCandidates.selectedReferenceLines(
+                manualReferences: candidateReferences,
+                from: candidates,
+                controlMode: .manual,
+                correctionMode: directionCase.correction
+            )
+            let semiAutomatic = AnyUprightUprightCandidates.selectedReferenceLines(
+                manualReferences: .empty,
+                from: candidates,
+                controlMode: .semiAutomatic,
+                correctionMode: directionCase.correction
+            )
+            let automatic = AnyUprightUprightCandidates.selectedReferenceLines(
+                manualReferences: .empty,
+                from: candidates,
+                controlMode: .automatic,
+                correctionMode: directionCase.correction
+            )
+            let matrices = [manual, semiAutomatic, automatic].compactMap {
+                AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
+                    verticalLines: $0.vertical,
+                    horizontalLines: $0.horizontal,
+                    mode: directionCase.guided,
+                    size: size
+                )
+            }
+
+            try assertEqual(matrices.count, 3, "all control modes produce a shared reference matrix for direction \(directionCase.correction.rawValue)")
+            try assertMatrixApprox(matrices[1], matrices[0], "semi-auto and manual shared matrix for direction \(directionCase.correction.rawValue)")
+            try assertMatrixApprox(matrices[2], matrices[0], "full-auto and manual shared matrix for direction \(directionCase.correction.rawValue)")
+        }
     }
 
     static func testUprightFullAutoTransfersScoreSelectedLinesToManualSlots() throws {
@@ -2397,7 +2439,7 @@ struct AnyUprightGeometryTests {
         let horizontalLines = motionHorizontalGuides()
 
         try assertTrue(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: [],
                 horizontalLines: [],
                 mode: .vertical,
@@ -2406,7 +2448,7 @@ struct AnyUprightGeometryTests {
             "vertical manual mode should skip zero active vertical guides"
         )
         try assertTrue(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: [],
                 horizontalLines: [],
                 mode: .horizontal,
@@ -2416,7 +2458,7 @@ struct AnyUprightGeometryTests {
         )
 
         let verticalOne = try unwrap(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: [verticalLines[0]],
                 horizontalLines: [],
                 mode: .vertical,
@@ -2427,7 +2469,7 @@ struct AnyUprightGeometryTests {
         try assertLinesVertical([verticalLines[0]], after: verticalOne, size: size, label: "one vertical guide")
 
         let horizontalOne = try unwrap(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: [],
                 horizontalLines: [horizontalLines[0]],
                 mode: .horizontal,
@@ -2438,7 +2480,7 @@ struct AnyUprightGeometryTests {
         try assertLinesHorizontal([horizontalLines[0]], after: horizontalOne, size: size, label: "one horizontal guide")
 
         let verticalTwo = try unwrap(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: verticalLines,
                 horizontalLines: horizontalLines,
                 mode: .vertical,
@@ -2456,7 +2498,7 @@ struct AnyUprightGeometryTests {
         try assertMatrixApprox(verticalTwo, legacyVerticalTwo, "vertical two-line unified matrix")
 
         let horizontalTwo = try unwrap(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: verticalLines,
                 horizontalLines: horizontalLines,
                 mode: .horizontal,
@@ -2480,7 +2522,7 @@ struct AnyUprightGeometryTests {
         let horizontalLines = motionHorizontalGuides()
 
         let fullTwoVertical = try unwrap(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: verticalLines,
                 horizontalLines: [],
                 mode: .full,
@@ -2498,7 +2540,7 @@ struct AnyUprightGeometryTests {
         try assertMatrixApprox(fullTwoVertical, legacyVertical, "full two-vertical unified matrix")
 
         let fullTwoHorizontal = try unwrap(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: [],
                 horizontalLines: horizontalLines,
                 mode: .full,
@@ -2516,7 +2558,7 @@ struct AnyUprightGeometryTests {
         try assertMatrixApprox(fullTwoHorizontal, legacyHorizontal, "full two-horizontal unified matrix")
 
         let fullFour = try unwrap(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: verticalLines,
                 horizontalLines: horizontalLines,
                 mode: .full,
@@ -2541,7 +2583,7 @@ struct AnyUprightGeometryTests {
         let horizontalLine = motionHorizontalGuides()[0]
 
         let matrix = try unwrap(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: [verticalLine],
                 horizontalLines: [horizontalLine],
                 mode: .full,
@@ -2564,7 +2606,7 @@ struct AnyUprightGeometryTests {
         let horizontalLines = motionHorizontalGuides()
 
         let twoVerticalOneHorizontal = try unwrap(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: verticalLines,
                 horizontalLines: [horizontalLines[0]],
                 mode: .full,
@@ -2576,7 +2618,7 @@ struct AnyUprightGeometryTests {
         try assertLinesHorizontal([horizontalLines[0]], after: twoVerticalOneHorizontal, size: size, label: "full two vertical one horizontal horizontal guide")
 
         let oneVerticalTwoHorizontal = try unwrap(
-            AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+            AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
                 verticalLines: [verticalLines[0]],
                 horizontalLines: horizontalLines,
                 mode: .full,

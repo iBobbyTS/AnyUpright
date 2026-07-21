@@ -157,17 +157,6 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             let current = guides.first { $0.spec.linePart == part }?.enabled ?? true
             let next = !current
             settingAPI.setBoolValue(next, toParameter: spec.enabled.rawValue, at: time)
-            writeGuidedCorrection(
-                from: guides.map { guide in
-                    guard guide.spec.linePart == part else {
-                        return guide
-                    }
-                    return UprightGuideLine(spec: guide.spec, enabled: next, orientation: guide.orientation, start: guide.start, end: guide.end)
-                },
-                correctionMode: correctionMode,
-                settingAPI: settingAPI,
-                time: time
-            )
             forceUpdate?.pointee = true
             return
         }
@@ -182,24 +171,6 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             if let candidate = candidates.first(where: { $0.spec.linePart == activePart }) {
                 let selected = AnyUprightUprightCandidates.selectionValueAfterToggling(candidate, within: candidates, correctionMode: correctionMode)
                 settingAPI.setBoolValue(selected, toParameter: AnyUprightUprightCandidates.specs[candidateIndex].selected, at: time)
-                writeSelectedCandidateCorrection(
-                    from: candidates.map { existing in
-                        guard existing.spec.linePart == candidate.spec.linePart else {
-                            return existing
-                        }
-                        return UprightCandidateLine(
-                            spec: existing.spec,
-                            selected: selected,
-                            orientation: existing.orientation,
-                            start: existing.start,
-                            end: existing.end,
-                            score: existing.score
-                        )
-                    },
-                    correctionMode: correctionMode,
-                    settingAPI: settingAPI,
-                    time: time
-                )
             }
         }
         forceUpdate?.pointee = true
@@ -208,7 +179,6 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     @objc(mouseDraggedAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseDragged(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         let paramAPI = parameterRetrievalAPI()
-        let correctionMode = uprightCorrectionMode(at: time, paramAPI: paramAPI)
         guard uprightEditMode(at: time, paramAPI: paramAPI),
               uprightControlMode(at: time, paramAPI: paramAPI) == .manual else {
             forceUpdate?.pointee = false
@@ -224,17 +194,6 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
 
         let objectPoint = objectPoint(fromCanvasPoint: AUPoint(x: mousePositionX, y: mousePositionY))
         settingAPI.setXValue(objectPoint.x, yValue: objectPoint.y, toParameter: endpoint.rawValue, at: time)
-        let guides = manualGuides(at: time, paramAPI: paramAPI, correctionMode: correctionMode).map { guide in
-            guard guide.spec.start == endpoint || guide.spec.end == endpoint else {
-                return guide
-            }
-
-            if guide.spec.start == endpoint {
-                return UprightGuideLine(spec: guide.spec, enabled: guide.enabled, orientation: guide.orientation, start: objectPoint, end: guide.end)
-            }
-            return UprightGuideLine(spec: guide.spec, enabled: guide.enabled, orientation: guide.orientation, start: guide.start, end: objectPoint)
-        }
-        writeGuidedCorrection(from: guides, correctionMode: correctionMode, settingAPI: settingAPI, time: time)
         forceUpdate?.pointee = true
     }
 
@@ -371,36 +330,6 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 return correctionMode.includesHorizontal
             }
         }
-    }
-
-    private func writeGuidedCorrection(from guides: [UprightGuideLine], correctionMode: UprightCorrectionMode, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
-        let verticalLines = guides
-            .filter { $0.enabled && $0.orientation == .vertical }
-            .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
-        let horizontalLines = guides
-            .filter { $0.enabled && $0.orientation == .horizontal }
-            .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
-        writeUprightCorrection(
-            verticalLines: verticalLines,
-            horizontalLines: horizontalLines,
-            correctionMode: correctionMode,
-            settingAPI: settingAPI,
-            time: time,
-            referenceSize: objectPixelSizeForOSC(defaultSize: AUSize(width: 1000.0, height: 1000.0))
-        )
-    }
-
-    private func writeSelectedCandidateCorrection(from candidates: [UprightCandidateLine], correctionMode: UprightCorrectionMode, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
-        let verticalLines = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .vertical)
-        let horizontalLines = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .horizontal)
-        writeUprightCorrection(
-            verticalLines: verticalLines,
-            horizontalLines: horizontalLines,
-            correctionMode: correctionMode,
-            settingAPI: settingAPI,
-            time: time,
-            referenceSize: objectPixelSizeForOSC(defaultSize: AUSize(width: 1000.0, height: 1000.0))
-        )
     }
 
     private func objectCanvasFrame() -> [AUPoint] {

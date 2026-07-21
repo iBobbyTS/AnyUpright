@@ -26,7 +26,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         addUprightWorkflowParameters(paramAPI, defaultFlags: defaultFlags())
-        addHiddenCorrectionResultParameters(paramAPI)
+        addLegacyCorrectionResultParameters(paramAPI)
         addUprightGuideParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
         addUprightCandidateParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
     }
@@ -65,24 +65,10 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             correctionMode: correctionMode
         )
         writeUprightManualGuides(transfers, settingAPI: settingAPI, time: time)
-
-        let verticalLines = transfers
-            .filter { $0.orientation == .vertical }
-            .map { AnyUprightUprightCandidates.imageLine(fromManualGuide: AULineSegment(start: $0.start, end: $0.end), size: AUSize(width: 1.0, height: 1.0)) }
-        let horizontalLines = transfers
-            .filter { $0.orientation == .horizontal }
-            .map { AnyUprightUprightCandidates.imageLine(fromManualGuide: AULineSegment(start: $0.start, end: $0.end), size: AUSize(width: 1.0, height: 1.0)) }
-        writeUprightCorrection(
-            verticalLines: verticalLines,
-            horizontalLines: horizontalLines,
-            correctionMode: correctionMode,
-            settingAPI: settingAPI,
-            time: time,
-            referenceSize: objectPixelSizeForOSC(defaultSize: AUSize(width: 1000.0, height: 1000.0))
-        )
     }
 
-    private func addHiddenCorrectionResultParameters(_ paramAPI: FxParameterCreationAPI_v5) {
+    private func addLegacyCorrectionResultParameters(_ paramAPI: FxParameterCreationAPI_v5) {
+        // Keep the parameter IDs readable for existing Motion/FCP documents; rendering no longer consumes them.
         paramAPI.addPercentSlider(
             withName: "Vertical Perspective",
             parameterID: UprightParam.verticalPerspective.rawValue,
@@ -130,14 +116,6 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             return result
         }
 
-        var vertical = 0.0
-        var horizontal = 0.0
-        var rotation = 0.0
-
-        paramAPI.getFloatValue(&vertical, fromParameter: UprightParam.verticalPerspective.rawValue, at: renderTime)
-        paramAPI.getFloatValue(&horizontal, fromParameter: UprightParam.horizontalPerspective.rawValue, at: renderTime)
-        paramAPI.getFloatValue(&rotation, fromParameter: UprightParam.rotation.rawValue, at: renderTime)
-
         let correctionMode = uprightCorrectionMode(at: renderTime, paramAPI: paramAPI)
         let controlMode = uprightControlMode(at: renderTime, paramAPI: paramAPI)
         let editMode = uprightEditMode(at: renderTime, paramAPI: paramAPI)
@@ -146,57 +124,30 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         result.uprightCorrectionMode = correctionMode.rawValue
         result.uprightControlMode = controlMode.rawValue
 
-        if controlMode == .manual && !editMode {
-            let references = manualGuideReferences(
-                at: renderTime,
-                paramAPI: paramAPI,
-                correctionMode: correctionMode
-            )
-            storeManualGuideReferences(references, in: &result)
-            let referenceSize = correctionReferenceSize(from: result)
-            let usesDirectManualMatrix = applyManualMatrixOverride(
-                from: references,
-                correctionMode: correctionMode,
-                referenceSize: referenceSize,
-                to: &result
-            )
-            let correction = usesDirectManualMatrix ? .zero : correction(
-                fromManualReferences: references,
-                correctionMode: correctionMode,
-                referenceSize: referenceSize
-            )
-            debugLogManualGuides(
-                guides: references.guides,
-                verticalLines: references.vertical,
-                horizontalLines: references.horizontal,
-                correction: correction,
-                correctionMode: correctionMode,
-                usesDirectManualMatrix: usesDirectManualMatrix,
-                referenceSize: referenceSize
-            )
-            if !usesDirectManualMatrix {
-                result.verticalPerspective = Float(correction.verticalPerspective)
-                result.horizontalPerspective = Float(correction.horizontalPerspective)
-                result.rotationRadians = correctionMode == .full ? Float(correction.rotationRadians) : 0.0
-            }
-            return result
-        }
-
-        if controlMode == .automatic {
-            let correction = AnyUprightUprightCandidates.automaticCorrectionValues(
-                from: uprightCandidateLines(at: renderTime, paramAPI: paramAPI),
-                correctionMode: correctionMode,
-                referenceSize: correctionReferenceSize(from: result)
-            )
-            result.verticalPerspective = Float(correction.verticalPerspective)
-            result.horizontalPerspective = Float(correction.horizontalPerspective)
-            result.rotationRadians = correctionMode == .full ? Float(correction.rotationRadians) : 0.0
-            return result
-        }
-
-        result.verticalPerspective = correctionMode.includesVertical ? Float(vertical) : 0.0
-        result.horizontalPerspective = correctionMode.includesHorizontal ? Float(horizontal) : 0.0
-        result.rotationRadians = correctionMode == .full ? Float(rotation) : 0.0
+        let manualGuides = uprightGuideLines(at: renderTime, paramAPI: paramAPI)
+        let manualReferences = referenceLines(from: manualGuides, correctionMode: correctionMode)
+        let references = AnyUprightUprightCandidates.selectedReferenceLines(
+            manualReferences: manualReferences,
+            from: uprightCandidateLines(at: renderTime, paramAPI: paramAPI),
+            controlMode: controlMode,
+            correctionMode: correctionMode
+        )
+        storeUprightReferenceLines(references, in: &result)
+        let referenceSize = correctionReferenceSize(from: result)
+        let hasMatrix = !editMode && applyUprightReferenceMatrix(
+            from: references,
+            correctionMode: correctionMode,
+            referenceSize: referenceSize,
+            to: &result
+        )
+        debugLogReferenceLines(
+            controlMode: controlMode,
+            guides: controlMode == .manual ? manualGuides : [],
+            references: references,
+            correctionMode: correctionMode,
+            hasMatrix: hasMatrix,
+            referenceSize: referenceSize
+        )
         return result
     }
 
@@ -213,38 +164,26 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             renderTime: renderTime
         )
         guard result.showCornerAdjuster == 0,
-              UprightControlMode(rawValue: result.uprightControlMode) == .manual,
               let correctionMode = UprightCorrectionMode(rawValue: result.uprightCorrectionMode) else {
             return result
         }
 
-        let references = manualGuideReferences(from: result, correctionMode: correctionMode)
+        let references = uprightReferenceLines(from: result, correctionMode: correctionMode)
         let referenceSize = correctionReferenceSize(from: result)
-        let usesDirectManualMatrix = applyManualMatrixOverride(
+        let hasMatrix = applyUprightReferenceMatrix(
             from: references,
             correctionMode: correctionMode,
             referenceSize: referenceSize,
             to: &result
         )
-        let correction = usesDirectManualMatrix ? .zero : correction(
-            fromManualReferences: references,
-            correctionMode: correctionMode,
-            referenceSize: referenceSize
-        )
-        debugLogManualGuides(
+        debugLogReferenceLines(
+            controlMode: UprightControlMode(rawValue: result.uprightControlMode) ?? .manual,
             guides: [],
-            verticalLines: references.vertical,
-            horizontalLines: references.horizontal,
-            correction: correction,
+            references: references,
             correctionMode: correctionMode,
-            usesDirectManualMatrix: usesDirectManualMatrix,
+            hasMatrix: hasMatrix,
             referenceSize: referenceSize
         )
-        if !usesDirectManualMatrix {
-            result.verticalPerspective = Float(correction.verticalPerspective)
-            result.horizontalPerspective = Float(correction.horizontalPerspective)
-            result.rotationRadians = correctionMode == .full ? Float(correction.rotationRadians) : 0.0
-        }
         return result
     }
 
@@ -263,7 +202,6 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             )
         )
         guard controlMode != .manual else {
-            applyGuided(correctionMode, time: time)
             analysisDebugLog(String(format: "analyze_manual_return elapsed_ms=%.3f", Self.analysisElapsedMilliseconds(since: startNanos)))
             return
         }
@@ -305,11 +243,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
         analysisLock.lock()
         analysisState.hasAnalyzedFrame = false
-        analysisState.detectedVerticalPerspective = nil
-        analysisState.detectedHorizontalPerspective = nil
-        analysisState.detectedRotationRadians = nil
         analysisState.detectedCandidates = []
-        analysisState.detectedReferenceSize = AUSize(width: 1000.0, height: 1000.0)
         analysisState.detectedPerspectiveTime = analysisRange.start
         analysisLock.unlock()
         analysisDebugLog("setup_analysis range_start=\(analysisRange.start) range_duration=\(analysisRange.duration) frame_duration=\(frameDuration)")
@@ -349,7 +283,6 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 storeDetectedCandidates(
                     scaleLSDCandidates,
                     request: request,
-                    referenceSize: sourceReferenceSize,
                     time: frameTime
                 )
                 analysisDebugLog(
@@ -381,7 +314,6 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 storeDetectedCandidates(
                     mlsdCandidates,
                     request: request,
-                    referenceSize: sourceReferenceSize,
                     time: frameTime
                 )
                 analysisDebugLog(
@@ -461,7 +393,6 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         storeDetectedCandidates(
             candidates,
             request: request,
-            referenceSize: sourceReferenceSize,
             time: frameTime
         )
         analysisDebugLog(
@@ -476,7 +407,6 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private func storeDetectedCandidates(
         _ candidates: [UprightDetectedCandidate],
         request: UprightAnalysisRequest,
-        referenceSize: AUSize,
         time: CMTime
     ) {
         let ranked = AnyUprightUprightCandidates.analysisCandidates(
@@ -485,7 +415,6 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         )
         analysisLock.lock()
         analysisState.detectedCandidates = Array(ranked.prefix(AnyUprightUprightCandidates.slotCount))
-        analysisState.detectedReferenceSize = referenceSize
         analysisState.detectedPerspectiveTime = time
         analysisLock.unlock()
     }
@@ -495,7 +424,6 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         analysisLock.lock()
         let request = analysisState.pendingAnalysisRequest
         let candidates = analysisState.detectedCandidates
-        let referenceSize = analysisState.detectedReferenceSize
         let time = parameterWriteTime(preferred: analysisState.requestedAnalysisTime, fallback: analysisState.detectedPerspectiveTime)
         analysisState.pendingAnalysisRequest = nil
         analysisLock.unlock()
@@ -514,25 +442,6 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             time: time
         )
 
-        if request.controlMode == .automatic {
-            let selectedIndexes = AnyUprightUprightCandidates.automaticSelectedIndexes(
-                from: candidates,
-                correctionMode: request.correctionMode
-            )
-            let selectedCandidates = candidates.enumerated()
-                .filter { selectedIndexes.contains($0.offset) }
-                .map(\.element)
-            let verticalLines = selectedDetectedImageLines(from: selectedCandidates, orientation: .vertical, correctionMode: request.correctionMode)
-            let horizontalLines = selectedDetectedImageLines(from: selectedCandidates, orientation: .horizontal, correctionMode: request.correctionMode)
-            writeUprightCorrection(
-                verticalLines: verticalLines,
-                horizontalLines: horizontalLines,
-                correctionMode: request.correctionMode,
-                settingAPI: settingAPI,
-                time: time,
-                referenceSize: referenceSize
-            )
-        }
         analysisDebugLog(
             String(
                 format: "cleanup_done candidates=%d control_mode=%d elapsed_ms=%.3f",
@@ -543,75 +452,14 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         )
     }
 
-    private func applyGuided(_ correctionMode: UprightCorrectionMode, time: CMTime) {
-        let guides = uprightGuideLines(at: time, paramAPI: parameterRetrievalAPI())
-        let references = referenceLines(
-            from: guides,
-            correctionMode: correctionMode
-        )
-
-        applyReferences(
-            verticalLines: references.vertical,
-            horizontalLines: references.horizontal,
-            correctionMode: correctionMode,
-            time: time
-        )
-    }
-
-    private func applySelected(_ correctionMode: UprightCorrectionMode, time: CMTime) {
-        let candidates = uprightCandidateLines(at: time, paramAPI: parameterRetrievalAPI())
-        let verticalLines = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .vertical)
-        let horizontalLines = AnyUprightUprightCandidates.selectedImageLines(from: candidates, orientation: .horizontal)
-
-        applyReferences(verticalLines: verticalLines, horizontalLines: horizontalLines, correctionMode: correctionMode, time: time)
-    }
-
-    private func applyReferences(verticalLines: [AULineSegment], horizontalLines: [AULineSegment], correctionMode: UprightCorrectionMode, time: CMTime) {
-        guard let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
-            return
-        }
-
-        writeUprightCorrection(
-            verticalLines: verticalLines,
-            horizontalLines: horizontalLines,
-            correctionMode: correctionMode,
-            settingAPI: settingAPI,
-            time: time,
-            referenceSize: objectPixelSizeForOSC(defaultSize: AUSize(width: 1000.0, height: 1000.0))
-        )
-    }
-
-    private func manualGuideReferences(
-        at time: CMTime,
-        paramAPI: FxParameterRetrievalAPI_v6,
-        correctionMode: UprightCorrectionMode
-    ) -> (guides: [UprightGuideLine], vertical: [AULineSegment], horizontal: [AULineSegment]) {
-        let guides = uprightGuideLines(at: time, paramAPI: paramAPI)
-        let references = referenceLines(from: guides, correctionMode: correctionMode)
-        return (guides, references.vertical, references.horizontal)
-    }
-
-    private func correction(
-        fromManualReferences references: (guides: [UprightGuideLine], vertical: [AULineSegment], horizontal: [AULineSegment]),
-        correctionMode: UprightCorrectionMode,
-        referenceSize: AUSize
-    ) -> UprightCorrectionValues {
-        AnyUprightUprightCandidates.correctionValues(
-            verticalLines: references.vertical,
-            horizontalLines: references.horizontal,
-            correctionMode: correctionMode,
-            referenceSize: referenceSize
-        )
-    }
-
-    private func applyManualMatrixOverride(
-        from references: (guides: [UprightGuideLine], vertical: [AULineSegment], horizontal: [AULineSegment]),
+    private func applyUprightReferenceMatrix(
+        from references: UprightReferenceLines,
         correctionMode: UprightCorrectionMode,
         referenceSize: AUSize,
         to state: inout AnyUprightParameterState
     ) -> Bool {
-        state.uprightManualMatrixEnabled = 0
-        let matrix = AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+        state.uprightReferenceMatrixEnabled = 0
+        let matrix = AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
             verticalLines: references.vertical,
             horizontalLines: references.horizontal,
             mode: guidedUprightMode(from: correctionMode),
@@ -621,8 +469,8 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             return false
         }
 
-        state.uprightManualMatrixEnabled = 1
-        storeManualMatrix(matrix, in: &state)
+        state.uprightReferenceMatrixEnabled = 1
+        storeUprightReferenceMatrix(matrix, in: &state)
         state.verticalPerspective = 0.0
         state.horizontalPerspective = 0.0
         state.rotationRadians = 0.0
@@ -640,32 +488,32 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         }
     }
 
-    private func storeManualMatrix(_ matrix: simd_float3x3, in state: inout AnyUprightParameterState) {
-        state.uprightManualMatrixA = matrix.columns.0.x
-        state.uprightManualMatrixB = matrix.columns.1.x
-        state.uprightManualMatrixC = matrix.columns.2.x
-        state.uprightManualMatrixD = matrix.columns.0.y
-        state.uprightManualMatrixE = matrix.columns.1.y
-        state.uprightManualMatrixF = matrix.columns.2.y
-        state.uprightManualMatrixG = matrix.columns.0.z
-        state.uprightManualMatrixH = matrix.columns.1.z
-        state.uprightManualMatrixI = matrix.columns.2.z
+    private func storeUprightReferenceMatrix(_ matrix: simd_float3x3, in state: inout AnyUprightParameterState) {
+        state.uprightReferenceMatrixA = matrix.columns.0.x
+        state.uprightReferenceMatrixB = matrix.columns.1.x
+        state.uprightReferenceMatrixC = matrix.columns.2.x
+        state.uprightReferenceMatrixD = matrix.columns.0.y
+        state.uprightReferenceMatrixE = matrix.columns.1.y
+        state.uprightReferenceMatrixF = matrix.columns.2.y
+        state.uprightReferenceMatrixG = matrix.columns.0.z
+        state.uprightReferenceMatrixH = matrix.columns.1.z
+        state.uprightReferenceMatrixI = matrix.columns.2.z
     }
 
-    private func storeManualGuideReferences(
-        _ references: (guides: [UprightGuideLine], vertical: [AULineSegment], horizontal: [AULineSegment]),
+    private func storeUprightReferenceLines(
+        _ references: UprightReferenceLines,
         in state: inout AnyUprightParameterState
     ) {
         let lines = references.vertical.map { (UprightGuideOrientation.vertical, $0) }
             + references.horizontal.map { (UprightGuideOrientation.horizontal, $0) }
-        state.uprightManualLineCount = Int32(min(lines.count, 4))
+        state.uprightReferenceLineCount = Int32(min(lines.count, 4))
 
         for (index, entry) in lines.prefix(4).enumerated() {
-            setManualGuideReference(entry.1, orientation: entry.0, index: index, in: &state)
+            setUprightReferenceLine(entry.1, orientation: entry.0, index: index, in: &state)
         }
     }
 
-    private func setManualGuideReference(
+    private func setUprightReferenceLine(
         _ line: AULineSegment,
         orientation: UprightGuideOrientation,
         index: Int,
@@ -679,42 +527,42 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
         switch index {
         case 0:
-            state.uprightManualLine1Orientation = rawOrientation
-            state.uprightManualLine1StartX = startX
-            state.uprightManualLine1StartY = startY
-            state.uprightManualLine1EndX = endX
-            state.uprightManualLine1EndY = endY
+            state.uprightReferenceLine1Orientation = rawOrientation
+            state.uprightReferenceLine1StartX = startX
+            state.uprightReferenceLine1StartY = startY
+            state.uprightReferenceLine1EndX = endX
+            state.uprightReferenceLine1EndY = endY
         case 1:
-            state.uprightManualLine2Orientation = rawOrientation
-            state.uprightManualLine2StartX = startX
-            state.uprightManualLine2StartY = startY
-            state.uprightManualLine2EndX = endX
-            state.uprightManualLine2EndY = endY
+            state.uprightReferenceLine2Orientation = rawOrientation
+            state.uprightReferenceLine2StartX = startX
+            state.uprightReferenceLine2StartY = startY
+            state.uprightReferenceLine2EndX = endX
+            state.uprightReferenceLine2EndY = endY
         case 2:
-            state.uprightManualLine3Orientation = rawOrientation
-            state.uprightManualLine3StartX = startX
-            state.uprightManualLine3StartY = startY
-            state.uprightManualLine3EndX = endX
-            state.uprightManualLine3EndY = endY
+            state.uprightReferenceLine3Orientation = rawOrientation
+            state.uprightReferenceLine3StartX = startX
+            state.uprightReferenceLine3StartY = startY
+            state.uprightReferenceLine3EndX = endX
+            state.uprightReferenceLine3EndY = endY
         case 3:
-            state.uprightManualLine4Orientation = rawOrientation
-            state.uprightManualLine4StartX = startX
-            state.uprightManualLine4StartY = startY
-            state.uprightManualLine4EndX = endX
-            state.uprightManualLine4EndY = endY
+            state.uprightReferenceLine4Orientation = rawOrientation
+            state.uprightReferenceLine4StartX = startX
+            state.uprightReferenceLine4StartY = startY
+            state.uprightReferenceLine4EndX = endX
+            state.uprightReferenceLine4EndY = endY
         default:
             break
         }
     }
 
-    private func manualGuideReferences(
+    private func uprightReferenceLines(
         from state: AnyUprightParameterState,
         correctionMode: UprightCorrectionMode
-    ) -> (guides: [UprightGuideLine], vertical: [AULineSegment], horizontal: [AULineSegment]) {
+    ) -> UprightReferenceLines {
         var verticalLines: [AULineSegment] = []
         var horizontalLines: [AULineSegment] = []
-        for index in 0..<min(Int(state.uprightManualLineCount), 4) {
-            guard let entry = manualGuideReference(from: state, index: index) else {
+        for index in 0..<min(Int(state.uprightReferenceLineCount), 4) {
+            guard let entry = uprightReferenceLine(from: state, index: index) else {
                 continue
             }
             switch entry.orientation {
@@ -726,10 +574,10 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 break
             }
         }
-        return ([], verticalLines, horizontalLines)
+        return UprightReferenceLines(vertical: verticalLines, horizontal: horizontalLines)
     }
 
-    private func manualGuideReference(
+    private func uprightReferenceLine(
         from state: AnyUprightParameterState,
         index: Int
     ) -> (orientation: UprightGuideOrientation, line: AULineSegment)? {
@@ -741,29 +589,29 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
         switch index {
         case 0:
-            rawOrientation = state.uprightManualLine1Orientation
-            startX = state.uprightManualLine1StartX
-            startY = state.uprightManualLine1StartY
-            endX = state.uprightManualLine1EndX
-            endY = state.uprightManualLine1EndY
+            rawOrientation = state.uprightReferenceLine1Orientation
+            startX = state.uprightReferenceLine1StartX
+            startY = state.uprightReferenceLine1StartY
+            endX = state.uprightReferenceLine1EndX
+            endY = state.uprightReferenceLine1EndY
         case 1:
-            rawOrientation = state.uprightManualLine2Orientation
-            startX = state.uprightManualLine2StartX
-            startY = state.uprightManualLine2StartY
-            endX = state.uprightManualLine2EndX
-            endY = state.uprightManualLine2EndY
+            rawOrientation = state.uprightReferenceLine2Orientation
+            startX = state.uprightReferenceLine2StartX
+            startY = state.uprightReferenceLine2StartY
+            endX = state.uprightReferenceLine2EndX
+            endY = state.uprightReferenceLine2EndY
         case 2:
-            rawOrientation = state.uprightManualLine3Orientation
-            startX = state.uprightManualLine3StartX
-            startY = state.uprightManualLine3StartY
-            endX = state.uprightManualLine3EndX
-            endY = state.uprightManualLine3EndY
+            rawOrientation = state.uprightReferenceLine3Orientation
+            startX = state.uprightReferenceLine3StartX
+            startY = state.uprightReferenceLine3StartY
+            endX = state.uprightReferenceLine3EndX
+            endY = state.uprightReferenceLine3EndY
         case 3:
-            rawOrientation = state.uprightManualLine4Orientation
-            startX = state.uprightManualLine4StartX
-            startY = state.uprightManualLine4StartY
-            endX = state.uprightManualLine4EndX
-            endY = state.uprightManualLine4EndY
+            rawOrientation = state.uprightReferenceLine4Orientation
+            startX = state.uprightReferenceLine4StartX
+            startY = state.uprightReferenceLine4StartY
+            endX = state.uprightReferenceLine4EndX
+            endY = state.uprightReferenceLine4EndY
         default:
             return nil
         }
@@ -792,38 +640,14 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private func referenceLines(
         from guides: [UprightGuideLine],
         correctionMode: UprightCorrectionMode
-    ) -> (vertical: [AULineSegment], horizontal: [AULineSegment]) {
+    ) -> UprightReferenceLines {
         let verticalLines = guides
             .filter { $0.enabled && $0.orientation == .vertical && correctionMode.includesVertical }
             .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
         let horizontalLines = guides
             .filter { $0.enabled && $0.orientation == .horizontal && correctionMode.includesHorizontal }
             .map { imageLine(from: $0, size: AUSize(width: 1.0, height: 1.0)) }
-        return (verticalLines, horizontalLines)
-    }
-
-    private func selectedDetectedImageLines(from candidates: [UprightDetectedCandidate], orientation: UprightGuideOrientation, correctionMode: UprightCorrectionMode) -> [AULineSegment] {
-        let selected = candidates
-            .filter { $0.orientation == orientation }
-            .sorted {
-                if $0.score == $1.score {
-                    return $0.start.x < $1.start.x
-                }
-                return $0.score > $1.score
-            }
-            .prefix(2)
-
-        guard (orientation == .vertical && correctionMode.includesVertical)
-            || (orientation == .horizontal && correctionMode.includesHorizontal) else {
-            return []
-        }
-
-        return selected.map {
-            AULineSegment(
-                start: AUPoint(x: $0.start.x, y: 1.0 - $0.start.y),
-                end: AUPoint(x: $0.end.x, y: 1.0 - $0.end.y)
-            )
-        }
+        return UprightReferenceLines(vertical: verticalLines, horizontal: horizontalLines)
     }
 
     private func analysisReferenceSize(from frame: FxImageTile) -> AUSize {
@@ -834,13 +658,12 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         )
     }
 
-    private func debugLogManualGuides(
+    private func debugLogReferenceLines(
+        controlMode: UprightControlMode,
         guides: [UprightGuideLine],
-        verticalLines: [AULineSegment],
-        horizontalLines: [AULineSegment],
-        correction: UprightCorrectionValues,
+        references: UprightReferenceLines,
         correctionMode: UprightCorrectionMode,
-        usesDirectManualMatrix: Bool,
+        hasMatrix: Bool,
         referenceSize: AUSize
     ) {
         guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightUprightRender.debug") else {
@@ -859,17 +682,15 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 $0.end.y
             )
         }.joined(separator: " | ")
-        let verticalDescription = debugLineDescription(verticalLines)
-        let horizontalDescription = debugLineDescription(horizontalLines)
+        let verticalDescription = debugLineDescription(references.vertical)
+        let horizontalDescription = debugLineDescription(references.horizontal)
         let message = String(
-            format: "manual-guides mode=%d ref=(%.2fx%.2f) matrix=%@ correction=(v=%.6f,h=%.6f,rot=%.6f) guides=[%@] verticalImage=[%@] horizontalImage=[%@]",
+            format: "reference-lines control_mode=%d direction=%d ref=(%.2fx%.2f) matrix=%@ guides=[%@] verticalImage=[%@] horizontalImage=[%@]",
+            controlMode.rawValue,
             correctionMode.rawValue,
             referenceSize.width,
             referenceSize.height,
-            usesDirectManualMatrix ? "direct" : "parameter",
-            correction.verticalPerspective,
-            correction.horizontalPerspective,
-            correction.rotationRadians,
+            hasMatrix ? "direct" : "identity",
             guideDescription,
             verticalDescription,
             horizontalDescription

@@ -42,11 +42,7 @@ struct HorizonAnalysisScratchState {
 struct UprightAnalysisScratchState {
     var pendingAnalysisRequest: UprightAnalysisRequest?
     var hasAnalyzedFrame = false
-    var detectedVerticalPerspective: Double?
-    var detectedHorizontalPerspective: Double?
-    var detectedRotationRadians: Double?
     var detectedCandidates: [UprightDetectedCandidate] = []
-    var detectedReferenceSize = AUSize(width: 1000.0, height: 1000.0)
     var detectedPerspectiveTime = CMTime.zero
     var requestedAnalysisTime = CMTime.zero
 }

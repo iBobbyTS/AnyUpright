@@ -183,26 +183,6 @@ func imageLine(from guide: UprightGuideLine, size: AUSize) -> AULineSegment {
     )
 }
 
-func writeUprightCorrection(
-    verticalLines: [AULineSegment],
-    horizontalLines: [AULineSegment],
-    correctionMode: UprightCorrectionMode,
-    settingAPI: FxParameterSettingAPI_v5,
-    time: CMTime,
-    referenceSize: AUSize = AUSize(width: 1000.0, height: 1000.0)
-) {
-    let correction = AnyUprightUprightCandidates.correctionValues(
-        verticalLines: verticalLines,
-        horizontalLines: horizontalLines,
-        correctionMode: correctionMode,
-        referenceSize: referenceSize
-    )
-
-    settingAPI.setFloatValue(correction.verticalPerspective, toParameter: UprightParam.verticalPerspective.rawValue, at: time)
-    settingAPI.setFloatValue(correction.horizontalPerspective, toParameter: UprightParam.horizontalPerspective.rawValue, at: time)
-    settingAPI.setFloatValue(correction.rotationRadians, toParameter: UprightParam.rotation.rawValue, at: time)
-}
-
 func writeUprightManualGuides(
     _ transfers: [UprightManualGuideTransfer],
     settingAPI: FxParameterSettingAPI_v5,

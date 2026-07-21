@@ -80,6 +80,13 @@ struct UprightCandidateLine {
     var score: Double
 }
 
+struct UprightReferenceLines {
+    var vertical: [AULineSegment]
+    var horizontal: [AULineSegment]
+
+    static let empty = UprightReferenceLines(vertical: [], horizontal: [])
+}
+
 enum UprightManualGuideSlot: Int {
     case verticalLeft = 0
     case verticalRight = 1
@@ -233,22 +240,29 @@ enum AnyUprightUprightCandidates {
         )
     }
 
-    static func automaticCorrectionValues(
+    static func selectedReferenceLines(
+        manualReferences: UprightReferenceLines,
         from candidates: [UprightCandidateLine],
-        correctionMode: UprightCorrectionMode,
-        referenceSize: AUSize
-    ) -> UprightCorrectionValues {
-        let automaticCandidates = displayCandidates(
-            from: candidates,
-            controlMode: .automatic,
-            correctionMode: correctionMode
-        )
-        return correctionValues(
-            verticalLines: selectedImageLines(from: automaticCandidates, orientation: .vertical),
-            horizontalLines: selectedImageLines(from: automaticCandidates, orientation: .horizontal),
-            correctionMode: correctionMode,
-            referenceSize: referenceSize
-        )
+        controlMode: UprightControlMode,
+        correctionMode: UprightCorrectionMode
+    ) -> UprightReferenceLines {
+        switch controlMode {
+        case .manual:
+            return UprightReferenceLines(
+                vertical: correctionMode.includesVertical ? Array(manualReferences.vertical.prefix(2)) : [],
+                horizontal: correctionMode.includesHorizontal ? Array(manualReferences.horizontal.prefix(2)) : []
+            )
+        case .semiAutomatic, .automatic:
+            let displayed = displayCandidates(
+                from: candidates,
+                controlMode: controlMode,
+                correctionMode: correctionMode
+            )
+            return UprightReferenceLines(
+                vertical: selectedImageLines(from: displayed, orientation: .vertical),
+                horizontal: selectedImageLines(from: displayed, orientation: .horizontal)
+            )
+        }
     }
 
     static func manualGuideTransfers(

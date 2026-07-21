@@ -694,7 +694,7 @@ enum AnyUprightUprightProposalRanker {
         mode: AUGuidedUprightMode,
         imageSize: AUSize
     ) -> simd_float3x3? {
-        if let matrix = AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+        if let matrix = AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
             verticalLines: verticalLines,
             horizontalLines: horizontalLines,
             mode: mode,
@@ -706,7 +706,7 @@ enum AnyUprightUprightProposalRanker {
         // Exactly parallel references describe rotation without finite
         // perspective. Keep both selected lines, but use one from each family
         // for the existing rotation/affine fallback.
-        return AnyUprightGeometry.guidedManualOutputToSourceMatrix(
+        return AnyUprightGeometry.guidedUprightOutputToSourceMatrix(
             verticalLines: Array(verticalLines.prefix(1)),
             horizontalLines: Array(horizontalLines.prefix(1)),
             mode: mode,

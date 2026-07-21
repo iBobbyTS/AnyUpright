@@ -20,37 +20,37 @@ struct AnyUprightParameterState {
     var showCornerAdjuster: Int32 = 1
     var uprightCorrectionMode: Int32 = 0
     var uprightControlMode: Int32 = 0
-    var uprightManualLineCount: Int32 = 0
-    var uprightManualLine1Orientation: Int32 = 0
-    var uprightManualLine1StartX: Float = 0.0
-    var uprightManualLine1StartY: Float = 0.0
-    var uprightManualLine1EndX: Float = 0.0
-    var uprightManualLine1EndY: Float = 0.0
-    var uprightManualLine2Orientation: Int32 = 0
-    var uprightManualLine2StartX: Float = 0.0
-    var uprightManualLine2StartY: Float = 0.0
-    var uprightManualLine2EndX: Float = 0.0
-    var uprightManualLine2EndY: Float = 0.0
-    var uprightManualLine3Orientation: Int32 = 0
-    var uprightManualLine3StartX: Float = 0.0
-    var uprightManualLine3StartY: Float = 0.0
-    var uprightManualLine3EndX: Float = 0.0
-    var uprightManualLine3EndY: Float = 0.0
-    var uprightManualLine4Orientation: Int32 = 0
-    var uprightManualLine4StartX: Float = 0.0
-    var uprightManualLine4StartY: Float = 0.0
-    var uprightManualLine4EndX: Float = 0.0
-    var uprightManualLine4EndY: Float = 0.0
-    var uprightManualMatrixEnabled: Int32 = 0
-    var uprightManualMatrixA: Float = 1.0
-    var uprightManualMatrixB: Float = 0.0
-    var uprightManualMatrixC: Float = 0.0
-    var uprightManualMatrixD: Float = 0.0
-    var uprightManualMatrixE: Float = 1.0
-    var uprightManualMatrixF: Float = 0.0
-    var uprightManualMatrixG: Float = 0.0
-    var uprightManualMatrixH: Float = 0.0
-    var uprightManualMatrixI: Float = 1.0
+    var uprightReferenceLineCount: Int32 = 0
+    var uprightReferenceLine1Orientation: Int32 = 0
+    var uprightReferenceLine1StartX: Float = 0.0
+    var uprightReferenceLine1StartY: Float = 0.0
+    var uprightReferenceLine1EndX: Float = 0.0
+    var uprightReferenceLine1EndY: Float = 0.0
+    var uprightReferenceLine2Orientation: Int32 = 0
+    var uprightReferenceLine2StartX: Float = 0.0
+    var uprightReferenceLine2StartY: Float = 0.0
+    var uprightReferenceLine2EndX: Float = 0.0
+    var uprightReferenceLine2EndY: Float = 0.0
+    var uprightReferenceLine3Orientation: Int32 = 0
+    var uprightReferenceLine3StartX: Float = 0.0
+    var uprightReferenceLine3StartY: Float = 0.0
+    var uprightReferenceLine3EndX: Float = 0.0
+    var uprightReferenceLine3EndY: Float = 0.0
+    var uprightReferenceLine4Orientation: Int32 = 0
+    var uprightReferenceLine4StartX: Float = 0.0
+    var uprightReferenceLine4StartY: Float = 0.0
+    var uprightReferenceLine4EndX: Float = 0.0
+    var uprightReferenceLine4EndY: Float = 0.0
+    var uprightReferenceMatrixEnabled: Int32 = 0
+    var uprightReferenceMatrixA: Float = 1.0
+    var uprightReferenceMatrixB: Float = 0.0
+    var uprightReferenceMatrixC: Float = 0.0
+    var uprightReferenceMatrixD: Float = 0.0
+    var uprightReferenceMatrixE: Float = 1.0
+    var uprightReferenceMatrixF: Float = 0.0
+    var uprightReferenceMatrixG: Float = 0.0
+    var uprightReferenceMatrixH: Float = 0.0
+    var uprightReferenceMatrixI: Float = 1.0
     var rotationRadians: Float = 0.0
     var verticalPerspective: Float = 0.0
     var horizontalPerspective: Float = 0.0
@@ -551,21 +551,12 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
             let stableOutputSize = stableOutputSize(from: state, fallback: outputSize)
             let stableInputSize = stableInputSize(from: state, fallback: sourceSize)
-            if state.uprightManualMatrixEnabled != 0 {
-                return AnyUprightGeometry.appliedOutputToCurrentSourceMatrix(
-                    manualUprightOutputToSourceMatrix(from: state),
-                    fillFrame: state.fillFrame != 0,
-                    outputSize: outputSize,
-                    sourceSize: sourceSize,
-                    correctionOutputSize: stableOutputSize,
-                    correctionSourceSize: stableInputSize
-                )
+            guard state.uprightReferenceMatrixEnabled != 0 else {
+                return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: sourceSize)
             }
 
-            return AnyUprightGeometry.uprightAppliedOutputToCurrentSourceMatrix(
-                vertical: Double(state.verticalPerspective),
-                horizontal: Double(state.horizontalPerspective),
-                rotationRadians: Double(state.rotationRadians),
+            return AnyUprightGeometry.appliedOutputToCurrentSourceMatrix(
+                uprightReferenceOutputToSourceMatrix(from: state),
                 fillFrame: state.fillFrame != 0,
                 outputSize: outputSize,
                 sourceSize: sourceSize,
@@ -578,11 +569,11 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         }
     }
 
-    private func manualUprightOutputToSourceMatrix(from state: AnyUprightParameterState) -> simd_float3x3 {
+    private func uprightReferenceOutputToSourceMatrix(from state: AnyUprightParameterState) -> simd_float3x3 {
         simd_float3x3(columns: (
-            SIMD3<Float>(state.uprightManualMatrixA, state.uprightManualMatrixD, state.uprightManualMatrixG),
-            SIMD3<Float>(state.uprightManualMatrixB, state.uprightManualMatrixE, state.uprightManualMatrixH),
-            SIMD3<Float>(state.uprightManualMatrixC, state.uprightManualMatrixF, state.uprightManualMatrixI)
+            SIMD3<Float>(state.uprightReferenceMatrixA, state.uprightReferenceMatrixD, state.uprightReferenceMatrixG),
+            SIMD3<Float>(state.uprightReferenceMatrixB, state.uprightReferenceMatrixE, state.uprightReferenceMatrixH),
+            SIMD3<Float>(state.uprightReferenceMatrixC, state.uprightReferenceMatrixF, state.uprightReferenceMatrixI)
         ))
     }
 
@@ -799,11 +790,11 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         )
 
         let message = String(
-            format: "time=%@ fill=%d edit=%d manualMatrix=%d v=%.6f h=%.6f rot=%.6f renderMode=%d stableIn=(%.2fx%.2f) stableOut=(%.2fx%.2f) srcImage=%@ srcTile=%@ dstImage=%@ dstTile=%@ srcOrigin=%lu dstOrigin=%lu srcPT=%@ srcInvPT=%@ dstPT=%@ dstInvPT=%@ transformSamples=%@ srcTex=%dx%d dstTex=%dx%d outBounds=(l=%.2f,r=%.2f,t=%.2f,b=%.2f) outSize=%@ srcSize=%@ texOrigin=%@ texSize=%@ matrix=%@ samples=%@",
+            format: "time=%@ fill=%d edit=%d referenceMatrix=%d v=%.6f h=%.6f rot=%.6f renderMode=%d stableIn=(%.2fx%.2f) stableOut=(%.2fx%.2f) srcImage=%@ srcTile=%@ dstImage=%@ dstTile=%@ srcOrigin=%lu dstOrigin=%lu srcPT=%@ srcInvPT=%@ dstPT=%@ dstInvPT=%@ transformSamples=%@ srcTex=%dx%d dstTex=%dx%d outBounds=(l=%.2f,r=%.2f,t=%.2f,b=%.2f) outSize=%@ srcSize=%@ texOrigin=%@ texSize=%@ matrix=%@ samples=%@",
             debugTime(renderTime),
             parameterState.fillFrame,
             parameterState.showCornerAdjuster,
-            parameterState.uprightManualMatrixEnabled,
+            parameterState.uprightReferenceMatrixEnabled,
             parameterState.verticalPerspective,
             parameterState.horizontalPerspective,
             parameterState.rotationRadians,

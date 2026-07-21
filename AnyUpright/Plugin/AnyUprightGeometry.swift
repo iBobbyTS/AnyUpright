@@ -1249,7 +1249,7 @@ enum AnyUprightGeometry {
         }
     }
 
-    static func guidedManualOutputToSourceMatrix(
+    static func guidedUprightOutputToSourceMatrix(
         verticalLines: [AULineSegment],
         horizontalLines: [AULineSegment],
         mode: AUGuidedUprightMode,

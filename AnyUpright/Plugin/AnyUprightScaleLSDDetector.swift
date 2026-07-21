@@ -40,6 +40,11 @@ enum AnyUprightScaleLSDDetector {
         context: CIContext
     ) throws -> [UprightDetectedCandidate] {
         let totalStart = nowNanos()
+        let sourceBounds = frame.imagePixelBounds
+        let referenceImageSize = AUSize(
+            width: max(1.0, Double(sourceBounds.right - sourceBounds.left)),
+            height: max(1.0, Double(sourceBounds.top - sourceBounds.bottom))
+        )
         let renderStart = nowNanos()
         let source = try renderSourceRGBA(from: frame, context: context)
         let renderMS = elapsedMilliseconds(since: renderStart)
@@ -70,7 +75,8 @@ enum AnyUprightScaleLSDDetector {
         let candidatesStart = nowNanos()
         let candidates = AnyUprightScaleLSDPreprocessor.detectedCandidates(
             from: lines,
-            imageSize: AUSize(width: Double(source.width), height: Double(source.height))
+            imageSize: AUSize(width: Double(source.width), height: Double(source.height)),
+            referenceImageSize: referenceImageSize
         )
         let ranked = AnyUprightUprightCandidates.analysisCandidates(from: candidates, request: request)
         let candidatesMS = elapsedMilliseconds(since: candidatesStart)

@@ -203,6 +203,24 @@ func writeUprightCorrection(
     settingAPI.setFloatValue(correction.rotationRadians, toParameter: UprightParam.rotation.rawValue, at: time)
 }
 
+func writeUprightManualGuides(
+    _ transfers: [UprightManualGuideTransfer],
+    settingAPI: FxParameterSettingAPI_v5,
+    time: CMTime
+) {
+    for spec in uprightGuideSpecs {
+        settingAPI.setBoolValue(false, toParameter: spec.enabled.rawValue, at: time)
+    }
+
+    for transfer in transfers {
+        let spec = uprightGuideSpecs[transfer.slot.rawValue]
+        settingAPI.setBoolValue(true, toParameter: spec.enabled.rawValue, at: time)
+        settingAPI.setIntValue(transfer.orientation.rawValue, toParameter: spec.orientation.rawValue, at: time)
+        settingAPI.setXValue(transfer.start.x, yValue: transfer.start.y, toParameter: spec.start.rawValue, at: time)
+        settingAPI.setXValue(transfer.end.x, yValue: transfer.end.y, toParameter: spec.end.rawValue, at: time)
+    }
+}
+
 func uprightCorrectionMode(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> UprightCorrectionMode {
     guard let paramAPI else {
         return .full

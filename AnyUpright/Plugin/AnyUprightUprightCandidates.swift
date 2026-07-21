@@ -80,6 +80,20 @@ struct UprightCandidateLine {
     var score: Double
 }
 
+enum UprightManualGuideSlot: Int {
+    case verticalLeft = 0
+    case verticalRight = 1
+    case horizontalBottom = 2
+    case horizontalTop = 3
+}
+
+struct UprightManualGuideTransfer {
+    var slot: UprightManualGuideSlot
+    var orientation: UprightGuideOrientation
+    var start: AUPoint
+    var end: AUPoint
+}
+
 struct UprightDetectedCandidate {
     var orientation: UprightGuideOrientation
     var start: AUPoint
@@ -237,6 +251,46 @@ enum AnyUprightUprightCandidates {
         )
     }
 
+    static func manualGuideTransfers(
+        from candidates: [UprightCandidateLine],
+        sourceControlMode: UprightControlMode,
+        correctionMode: UprightCorrectionMode
+    ) -> [UprightManualGuideTransfer] {
+        let sourceCandidates: [UprightCandidateLine]
+        switch sourceControlMode {
+        case .manual:
+            return []
+        case .semiAutomatic:
+            sourceCandidates = candidates.filter {
+                $0.selected && included($0.orientation, in: correctionMode)
+            }
+        case .automatic:
+            sourceCandidates = displayCandidates(
+                from: candidates,
+                controlMode: .automatic,
+                correctionMode: correctionMode
+            )
+        }
+
+        return manualGuideTransfers(
+            from: sourceCandidates,
+            orientation: .vertical,
+            firstSlot: .verticalLeft,
+            secondSlot: .verticalRight,
+            position: { $0.midpoint.x },
+            firstSlotContainsSingleLine: { $0 < 0.5 },
+            firstSlotSortsBeforeSecond: <
+        ) + manualGuideTransfers(
+            from: sourceCandidates,
+            orientation: .horizontal,
+            firstSlot: .horizontalTop,
+            secondSlot: .horizontalBottom,
+            position: { $0.midpoint.y },
+            firstSlotContainsSingleLine: { $0 >= 0.5 },
+            firstSlotSortsBeforeSecond: >
+        )
+    }
+
     static func selectionValueAfterToggling(_ candidate: UprightCandidateLine, within candidates: [UprightCandidateLine], correctionMode: UprightCorrectionMode, maximumSelectedPerOrientation: Int = 2) -> Bool {
         guard !candidate.selected else {
             return false
@@ -307,6 +361,60 @@ enum AnyUprightUprightCandidates {
                 .prefix(maximumCountPerOrientation)
                 .map(\.offset)
         }
+    }
+
+    private static func manualGuideTransfers(
+        from candidates: [UprightCandidateLine],
+        orientation: UprightGuideOrientation,
+        firstSlot: UprightManualGuideSlot,
+        secondSlot: UprightManualGuideSlot,
+        position: (AULineSegment) -> Double,
+        firstSlotContainsSingleLine: (Double) -> Bool,
+        firstSlotSortsBeforeSecond: (Double, Double) -> Bool
+    ) -> [UprightManualGuideTransfer] {
+        let oriented = candidates
+            .filter { $0.orientation == orientation }
+            .sorted {
+                if $0.score == $1.score {
+                    return $0.spec.linePart < $1.spec.linePart
+                }
+                return $0.score > $1.score
+            }
+            .prefix(2)
+            .map { candidate in
+                (
+                    candidate: candidate,
+                    line: AULineSegment(start: candidate.start, end: candidate.end)
+                )
+            }
+
+        guard let first = oriented.first else {
+            return []
+        }
+        guard oriented.count == 2 else {
+            let slot = firstSlotContainsSingleLine(position(first.line)) ? firstSlot : secondSlot
+            return [manualGuideTransfer(from: first.candidate, slot: slot)]
+        }
+
+        let spatiallyOrdered = oriented.sorted {
+            firstSlotSortsBeforeSecond(position($0.line), position($1.line))
+        }
+        return [
+            manualGuideTransfer(from: spatiallyOrdered[0].candidate, slot: firstSlot),
+            manualGuideTransfer(from: spatiallyOrdered[1].candidate, slot: secondSlot)
+        ]
+    }
+
+    private static func manualGuideTransfer(
+        from candidate: UprightCandidateLine,
+        slot: UprightManualGuideSlot
+    ) -> UprightManualGuideTransfer {
+        UprightManualGuideTransfer(
+            slot: slot,
+            orientation: candidate.orientation,
+            start: candidate.start,
+            end: candidate.end
+        )
     }
 
     static func imageLine(from candidate: UprightCandidateLine, size: AUSize) -> AULineSegment {

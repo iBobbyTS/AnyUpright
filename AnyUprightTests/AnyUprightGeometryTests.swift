@@ -89,6 +89,8 @@ struct AnyUprightGeometryTests {
         try testUprightAnalysisRankingCoversAllAutomaticModeCombinations()
         try testUprightCandidateToggleSelectionStopsAtTwoPerOrientation()
         try testUprightCandidateDisplayHonorsControlAndCorrectionMode()
+        try testUprightFullAutoTransfersScoreSelectedLinesToManualSlots()
+        try testUprightSemiAutoTransfersOnlySelectedLinesAndPlacesSinglesByPosition()
         try testUprightCandidateObjectLineClampsAndFlipsY()
         try testUprightManualGuideImageLineFlipsObjectY()
         try testUprightCandidateHitTestingUsesPixelDistance()
@@ -1941,6 +1943,77 @@ struct AnyUprightGeometryTests {
                 || abs(automaticCorrection.rotationRadians) > 0.0001,
             "full-auto score-selected references should produce a nonzero correction in this fixture"
         )
+    }
+
+    static func testUprightFullAutoTransfersScoreSelectedLinesToManualSlots() throws {
+        try assertEqual(
+            UprightManualGuideSlot.horizontalBottom.rawValue,
+            2,
+            "guide 3 is the lower horizontal slot in Y-up object space"
+        )
+        try assertEqual(
+            UprightManualGuideSlot.horizontalTop.rawValue,
+            3,
+            "guide 4 is the upper horizontal slot in Y-up object space"
+        )
+
+        let specs = AnyUprightUprightCandidates.specs
+        let candidates = [
+            uprightCandidateLine(spec: specs[0], selected: true, orientation: .vertical, start: AUPoint(x: 0.10, y: 0.20), end: AUPoint(x: 0.12, y: 0.80), score: 0.10),
+            uprightCandidateLine(spec: specs[1], selected: false, orientation: .vertical, start: AUPoint(x: 0.78, y: 0.20), end: AUPoint(x: 0.82, y: 0.80), score: 0.90),
+            uprightCandidateLine(spec: specs[2], selected: false, orientation: .vertical, start: AUPoint(x: 0.18, y: 0.20), end: AUPoint(x: 0.22, y: 0.80), score: 0.80),
+            uprightCandidateLine(spec: specs[3], selected: false, orientation: .horizontal, start: AUPoint(x: 0.20, y: 0.82), end: AUPoint(x: 0.80, y: 0.78), score: 0.70),
+            uprightCandidateLine(spec: specs[4], selected: false, orientation: .horizontal, start: AUPoint(x: 0.20, y: 0.22), end: AUPoint(x: 0.80, y: 0.18), score: 0.60),
+            uprightCandidateLine(spec: specs[5], selected: true, orientation: .horizontal, start: AUPoint(x: 0.20, y: 0.52), end: AUPoint(x: 0.80, y: 0.48), score: 0.10)
+        ]
+
+        let transfers = AnyUprightUprightCandidates.manualGuideTransfers(
+            from: candidates,
+            sourceControlMode: .automatic,
+            correctionMode: .full
+        )
+
+        try assertEqual(transfers.count, 4, "full auto transfers two lines per orientation")
+        try assertEqual(transfers[0].slot.rawValue, UprightManualGuideSlot.verticalLeft.rawValue, "left vertical slot")
+        try assertApprox(transfers[0].start.x, 0.18, "left vertical uses the high-score left line")
+        try assertEqual(transfers[1].slot.rawValue, UprightManualGuideSlot.verticalRight.rawValue, "right vertical slot")
+        try assertApprox(transfers[1].start.x, 0.78, "right vertical uses the highest-score right line")
+        try assertEqual(transfers[2].slot.rawValue, UprightManualGuideSlot.horizontalTop.rawValue, "top horizontal slot")
+        try assertApprox(transfers[2].start.y, 0.82, "top horizontal uses object-space top")
+        try assertEqual(transfers[3].slot.rawValue, UprightManualGuideSlot.horizontalBottom.rawValue, "bottom horizontal slot")
+        try assertApprox(transfers[3].start.y, 0.22, "bottom horizontal uses object-space bottom")
+    }
+
+    static func testUprightSemiAutoTransfersOnlySelectedLinesAndPlacesSinglesByPosition() throws {
+        let specs = AnyUprightUprightCandidates.specs
+        let rightAndBottom = [
+            uprightCandidateLine(spec: specs[0], selected: false, orientation: .vertical, start: AUPoint(x: 0.20, y: 0.20), end: AUPoint(x: 0.22, y: 0.80)),
+            uprightCandidateLine(spec: specs[1], selected: true, orientation: .vertical, start: AUPoint(x: 0.74, y: 0.20), end: AUPoint(x: 0.76, y: 0.80)),
+            uprightCandidateLine(spec: specs[2], selected: false, orientation: .horizontal, start: AUPoint(x: 0.20, y: 0.80), end: AUPoint(x: 0.80, y: 0.82)),
+            uprightCandidateLine(spec: specs[3], selected: true, orientation: .horizontal, start: AUPoint(x: 0.20, y: 0.24), end: AUPoint(x: 0.80, y: 0.26))
+        ]
+        let rightAndBottomTransfers = AnyUprightUprightCandidates.manualGuideTransfers(
+            from: rightAndBottom,
+            sourceControlMode: .semiAutomatic,
+            correctionMode: .full
+        )
+
+        try assertEqual(rightAndBottomTransfers.count, 2, "semi auto excludes unselected lines")
+        try assertEqual(rightAndBottomTransfers[0].slot.rawValue, UprightManualGuideSlot.verticalRight.rawValue, "single right-side vertical maps right")
+        try assertEqual(rightAndBottomTransfers[1].slot.rawValue, UprightManualGuideSlot.horizontalBottom.rawValue, "single lower horizontal maps bottom")
+
+        let leftAndTop = [
+            uprightCandidateLine(spec: specs[4], selected: true, orientation: .vertical, start: AUPoint(x: 0.24, y: 0.20), end: AUPoint(x: 0.26, y: 0.80)),
+            uprightCandidateLine(spec: specs[5], selected: true, orientation: .horizontal, start: AUPoint(x: 0.20, y: 0.76), end: AUPoint(x: 0.80, y: 0.74))
+        ]
+        let leftAndTopTransfers = AnyUprightUprightCandidates.manualGuideTransfers(
+            from: leftAndTop,
+            sourceControlMode: .semiAutomatic,
+            correctionMode: .full
+        )
+
+        try assertEqual(leftAndTopTransfers[0].slot.rawValue, UprightManualGuideSlot.verticalLeft.rawValue, "single left-side vertical maps left")
+        try assertEqual(leftAndTopTransfers[1].slot.rawValue, UprightManualGuideSlot.horizontalTop.rawValue, "single upper horizontal maps top")
     }
 
     static func testUprightCandidateObjectLineClampsAndFlipsY() throws {

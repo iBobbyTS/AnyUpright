@@ -15,8 +15,10 @@ import Vision
 class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private static let analysisDebugLogLock = NSLock()
     private let analysisLock = NSLock()
+    private let controlModeLock = NSLock()
     private let analysisContext = CIContext(options: nil)
     private var analysisState = UprightAnalysisScratchState()
+    private var previousControlMode: UprightControlMode?
 
     override var needsFullBuffer: Bool {
         true
@@ -27,6 +29,57 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         addHiddenCorrectionResultParameters(paramAPI)
         addUprightGuideParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
         addUprightCandidateParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
+    }
+
+    func pluginInstanceAddedToDocument() {
+        let time = currentParameterTime()
+        let controlMode = uprightControlMode(at: time, paramAPI: parameterRetrievalAPI())
+        controlModeLock.lock()
+        previousControlMode = controlMode
+        controlModeLock.unlock()
+    }
+
+    func parameterChanged(_ paramID: UInt32, at time: CMTime) throws {
+        guard paramID == UprightParam.controlMode.rawValue else {
+            return
+        }
+
+        let paramAPI = parameterRetrievalAPI()
+        let currentControlMode = uprightControlMode(at: time, paramAPI: paramAPI)
+        controlModeLock.lock()
+        let sourceControlMode = previousControlMode
+        previousControlMode = currentControlMode
+        controlModeLock.unlock()
+
+        guard currentControlMode == .manual,
+              let sourceControlMode,
+              sourceControlMode != .manual,
+              let settingAPI = parameterSettingAPI() else {
+            return
+        }
+
+        let correctionMode = uprightCorrectionMode(at: time, paramAPI: paramAPI)
+        let transfers = AnyUprightUprightCandidates.manualGuideTransfers(
+            from: uprightCandidateLines(at: time, paramAPI: paramAPI),
+            sourceControlMode: sourceControlMode,
+            correctionMode: correctionMode
+        )
+        writeUprightManualGuides(transfers, settingAPI: settingAPI, time: time)
+
+        let verticalLines = transfers
+            .filter { $0.orientation == .vertical }
+            .map { AnyUprightUprightCandidates.imageLine(fromManualGuide: AULineSegment(start: $0.start, end: $0.end), size: AUSize(width: 1.0, height: 1.0)) }
+        let horizontalLines = transfers
+            .filter { $0.orientation == .horizontal }
+            .map { AnyUprightUprightCandidates.imageLine(fromManualGuide: AULineSegment(start: $0.start, end: $0.end), size: AUSize(width: 1.0, height: 1.0)) }
+        writeUprightCorrection(
+            verticalLines: verticalLines,
+            horizontalLines: horizontalLines,
+            correctionMode: correctionMode,
+            settingAPI: settingAPI,
+            time: time,
+            referenceSize: objectPixelSizeForOSC(defaultSize: AUSize(width: 1000.0, height: 1000.0))
+        )
     }
 
     private func addHiddenCorrectionResultParameters(_ paramAPI: FxParameterCreationAPI_v5) {

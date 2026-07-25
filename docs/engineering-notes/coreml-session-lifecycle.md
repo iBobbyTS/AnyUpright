@@ -34,6 +34,8 @@ All cache state is protected by a private serial queue. Acquiring a session and 
 
 Prediction runs outside the state queue. The analysis closure holds a local strong session reference, allowing an expiry timer to remove the cached reference without interrupting an in-flight prediction. Every timer reschedule increments a generation; an older timer cannot unload a session whose deadline was extended later.
 
+FxAnalysis may deliver several frames for the 0.05-second probe range. Each effect must atomically claim only the first callback so one user analysis action produces one lifecycle analysis event, including when the first model result is rejected.
+
 Plugin-add prewarming returns immediately and runs on a dedicated queue. A newly loaded session is warmed once. A cache hit does not run warm-up again. Loader failures are not cached and can be retried; prediction failures propagate without clearing a valid cached session or changing model-specific fallback decisions.
 
 Replacing a model facade configuration creates a new lifecycle cache. New requests use the new cache, while requests already running against the old cache finish through their local references. Destroying an old cache cancels its pending timers.

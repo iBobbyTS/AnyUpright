@@ -33,6 +33,7 @@ func parameterWriteTime(preferred: CMTime, fallback: CMTime) -> CMTime {
 }
 
 struct HorizonAnalysisScratchState {
+    var hasAnalyzedFrame = false
     var detectedRotationRadians: Double?
     var detectedRotationTime = CMTime.zero
     var requestedAnalysisTime = CMTime.zero

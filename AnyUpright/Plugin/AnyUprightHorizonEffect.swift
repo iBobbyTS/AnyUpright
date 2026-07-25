@@ -99,6 +99,7 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
         analysisLock.lock()
         analysisState.detectedRotationRadians = nil
+        analysisState.hasAnalyzedFrame = false
         analysisState.detectedRotationTime = analysisRange.start
         let startNanos = analysisState.analysisStartNanos
         analysisLock.unlock()
@@ -109,12 +110,15 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
         let frameStartNanos = Self.nowNanos()
         analysisLock.lock()
-        let alreadyDetected = analysisState.detectedRotationRadians != nil
+        let alreadyAnalyzed = analysisState.hasAnalyzedFrame
+        if !alreadyAnalyzed {
+            analysisState.hasAnalyzedFrame = true
+        }
         let analysisStartNanos = analysisState.analysisStartNanos
         analysisLock.unlock()
 
-        if alreadyDetected {
-            horizonAnalysisDebugLog("analyze skipped alreadyDetected frameTime=\(frameTime)")
+        if alreadyAnalyzed {
+            horizonAnalysisDebugLog("analyze skipped alreadyAnalyzed frameTime=\(frameTime)")
             return
         }
 

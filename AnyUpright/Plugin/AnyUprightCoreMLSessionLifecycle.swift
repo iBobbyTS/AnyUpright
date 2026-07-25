@@ -148,7 +148,7 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
     }
 
     func prewarmAfterPluginAdded(key: Key) {
-        let now = Self.nowNanos()
+        let now = AUMonotonicClock.nowNanos()
         let keyLabel = keyDescription(key)
         let deadline = stateQueue.sync { () -> UInt64 in
             let entry = entryLocked(for: key)
@@ -183,14 +183,14 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
         key: Key,
         run: (Session) throws -> Output
     ) throws -> AUCoreMLSessionLifecycleRunResult<Output> {
-        let totalStart = Self.nowNanos()
+        let totalStart = AUMonotonicClock.nowNanos()
         let keyLabel = keyDescription(key)
         var pendingLogs: [String] = []
         let acquisition: Acquisition
 
         do {
             acquisition = try stateQueue.sync {
-                let now = Self.nowNanos()
+                let now = AUMonotonicClock.nowNanos()
                 let entry = entryLocked(for: key)
                 let event = entry.retentionState.markAnalysisStarted(at: now, policy: retentionPolicy)
                 scheduleExpirationLocked(
@@ -216,11 +216,11 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
         }
         pendingLogs.forEach(emit)
 
-        let predictionStart = Self.nowNanos()
+        let predictionStart = AUMonotonicClock.nowNanos()
         do {
             let output = try run(acquisition.session)
-            let predictionMilliseconds = Self.elapsedMilliseconds(since: predictionStart)
-            let totalMilliseconds = Self.elapsedMilliseconds(since: totalStart)
+            let predictionMilliseconds = AUMonotonicClock.elapsedMilliseconds(since: predictionStart)
+            let totalMilliseconds = AUMonotonicClock.elapsedMilliseconds(since: totalStart)
             emit(String(
                 format: "%@ run key=%@ cache_hit=%@ load_ms=%.3f predict_ms=%.3f total_ms=%.3f",
                 label,
@@ -244,7 +244,7 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
                 keyLabel,
                 acquisition.cacheHit ? "true" : "false",
                 acquisition.loadMilliseconds,
-                Self.elapsedMilliseconds(since: predictionStart),
+                AUMonotonicClock.elapsedMilliseconds(since: predictionStart),
                 String(describing: error)
             ))
             throw error
@@ -252,7 +252,7 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
     }
 
     private func performPrewarm(key: Key) {
-        let totalStart = Self.nowNanos()
+        let totalStart = AUMonotonicClock.nowNanos()
         let keyLabel = keyDescription(key)
         var pendingLogs: [String] = []
         let acquisition: Acquisition
@@ -273,12 +273,12 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
                 format: "%@ prewarm_cache_hit key=%@ total_ms=%.3f",
                 label,
                 keyLabel,
-                Self.elapsedMilliseconds(since: totalStart)
+                AUMonotonicClock.elapsedMilliseconds(since: totalStart)
             ))
             return
         }
 
-        let warmStart = Self.nowNanos()
+        let warmStart = AUMonotonicClock.nowNanos()
         do {
             try warmSession(acquisition.session)
             emit(String(
@@ -286,8 +286,8 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
                 label,
                 keyLabel,
                 acquisition.loadMilliseconds,
-                Self.elapsedMilliseconds(since: warmStart),
-                Self.elapsedMilliseconds(since: totalStart)
+                AUMonotonicClock.elapsedMilliseconds(since: warmStart),
+                AUMonotonicClock.elapsedMilliseconds(since: totalStart)
             ))
         } catch {
             emit(String(
@@ -295,7 +295,7 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
                 label,
                 keyLabel,
                 acquisition.loadMilliseconds,
-                Self.elapsedMilliseconds(since: warmStart),
+                AUMonotonicClock.elapsedMilliseconds(since: warmStart),
                 String(describing: error)
             ))
         }
@@ -319,9 +319,9 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
             return Acquisition(session: session, cacheHit: true, loadMilliseconds: 0)
         }
 
-        let loadStart = Self.nowNanos()
+        let loadStart = AUMonotonicClock.nowNanos()
         let session = try loadSession(key)
-        let loadMilliseconds = Self.elapsedMilliseconds(since: loadStart)
+        let loadMilliseconds = AUMonotonicClock.elapsedMilliseconds(since: loadStart)
         entry.session = session
         logs.append(String(
             format: "%@ loaded key=%@ load_ms=%.3f",
@@ -344,7 +344,7 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
 
         let timer = DispatchSource.makeTimerSource(queue: stateQueue)
         entry.timer = timer
-        let now = Self.nowNanos()
+        let now = AUMonotonicClock.nowNanos()
         let delayNanos = deadlineNanos > now ? deadlineNanos - now : 0
         let boundedDelay = min(delayNanos, UInt64(Int.max))
         timer.schedule(deadline: .now() + .nanoseconds(Int(boundedDelay)))
@@ -369,7 +369,7 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
             return
         }
 
-        let now = Self.nowNanos()
+        let now = AUMonotonicClock.nowNanos()
         guard now >= deadline else {
             scheduleExpirationLocked(
                 key: key,
@@ -398,11 +398,4 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
         }
     }
 
-    private static func nowNanos() -> UInt64 {
-        DispatchTime.now().uptimeNanoseconds
-    }
-
-    private static func elapsedMilliseconds(since startNanos: UInt64) -> Double {
-        Double(nowNanos() - startNanos) / 1_000_000.0
-    }
 }

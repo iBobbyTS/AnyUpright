@@ -47,24 +47,35 @@ final class AUScaleLSDCoreMLSession {
         guard let input = model.modelDescription.inputDescriptionsByName.first(where: { $0.value.type == .multiArray }) else {
             throw AUScaleLSDCoreMLError.invalidModel("model has no MultiArray input")
         }
-        inputName = input.key
-        inputShape = try Self.multiArrayShape(input.value, name: input.key)
-        inputElementCount = inputShape.reduce(1, *)
-        guard inputShape == [1, 1, 512, 512] else {
-            throw AUScaleLSDCoreMLError.invalidModel("expected [1, 1, 512, 512] input, got \(inputShape)")
+        let resolvedInputName = input.key
+        let resolvedInputShape = try Self.modelIO {
+            try AUCoreMLMultiArrayIO.fixedFloat32Shape(input.value, name: input.key)
         }
-        inputArray = try MLMultiArray(shape: inputShape.map(NSNumber.init(value:)), dataType: .float32)
-        inputProvider = try MLDictionaryFeatureProvider(dictionary: [inputName: MLFeatureValue(multiArray: inputArray)])
+        let resolvedInputElementCount = try Self.modelIO {
+            try AUCoreMLMultiArrayIO.elementCount(shape: resolvedInputShape)
+        }
+        guard resolvedInputShape == [1, 1, 512, 512] else {
+            throw AUScaleLSDCoreMLError.invalidModel("expected [1, 1, 512, 512] input, got \(resolvedInputShape)")
+        }
+        let resolvedInputArray = try Self.modelIO {
+            try AUCoreMLMultiArrayIO.makeContiguousFloat32Array(shape: resolvedInputShape)
+        }
+        let resolvedInputProvider = try MLDictionaryFeatureProvider(dictionary: [resolvedInputName: MLFeatureValue(multiArray: resolvedInputArray)])
 
         guard let output = model.modelDescription.outputDescriptionsByName.first(where: { description in
             guard description.value.type == .multiArray,
-                  let shape = try? Self.multiArrayShape(description.value, name: description.key) else {
+                  let shape = try? AUCoreMLMultiArrayIO.fixedFloat32Shape(description.value, name: description.key) else {
                 return false
             }
             return shape == [1, 9, 256, 256]
         }) else {
             throw AUScaleLSDCoreMLError.invalidModel("expected [1, 9, 256, 256] MultiArray output")
         }
+        inputName = resolvedInputName
+        inputShape = resolvedInputShape
+        inputElementCount = resolvedInputElementCount
+        inputArray = resolvedInputArray
+        inputProvider = resolvedInputProvider
         outputName = output.key
     }
 
@@ -75,17 +86,25 @@ final class AUScaleLSDCoreMLSession {
         predictionLock.lock()
         defer { predictionLock.unlock() }
 
-        let inputPointer = inputArray.dataPointer.bindMemory(to: Float.self, capacity: inputElementCount)
-        inputNCHW.withUnsafeBufferPointer { source in
-            inputPointer.update(from: source.baseAddress!, count: inputElementCount)
+        do {
+            try AUCoreMLMultiArrayIO.copyFloat32(inputNCHW, to: inputArray)
+        } catch AUCoreMLMultiArrayIOError.elementCountMismatch(let expected, let actual) {
+            throw AUScaleLSDCoreMLError.invalidInput(expected: expected, actual: actual)
+        } catch {
+            throw AUScaleLSDCoreMLError.invalidModel(String(describing: error))
         }
         let prediction = try model.prediction(from: inputProvider)
-        guard let output = prediction.featureValue(for: outputName)?.multiArrayValue else {
+        let tensor: AUCoreMLFloat32Tensor
+        do {
+            tensor = try AUCoreMLMultiArrayIO.readFloat32(from: prediction, name: outputName)
+        } catch AUCoreMLMultiArrayIOError.missingOutput {
             throw AUScaleLSDCoreMLError.missingOutput(outputName)
+        } catch {
+            throw AUScaleLSDCoreMLError.invalidModel(String(describing: error))
         }
         return AUScaleLSDCoreMLOutput(
-            values: try Self.floatArray(from: output),
-            shape: output.shape.map(\.intValue)
+            values: tensor.values,
+            shape: tensor.shape
         )
     }
 
@@ -93,48 +112,12 @@ final class AUScaleLSDCoreMLSession {
         _ = try run(inputNCHW: Array(repeating: 0, count: inputElementCount))
     }
 
-    private static func multiArrayShape(_ description: MLFeatureDescription, name: String) throws -> [Int] {
-        guard description.type == .multiArray,
-              let constraint = description.multiArrayConstraint else {
-            throw AUScaleLSDCoreMLError.invalidModel("\(name) is not a MultiArray")
+    private static func modelIO<T>(_ body: () throws -> T) throws -> T {
+        do {
+            return try body()
+        } catch {
+            throw AUScaleLSDCoreMLError.invalidModel(String(describing: error))
         }
-        guard constraint.dataType == .float32 else {
-            throw AUScaleLSDCoreMLError.invalidModel("\(name) is \(constraint.dataType), expected Float32")
-        }
-        return constraint.shape.map(\.intValue)
-    }
-
-    private static func floatArray(from array: MLMultiArray) throws -> [Float] {
-        guard array.dataType == .float32 else {
-            throw AUScaleLSDCoreMLError.invalidModel("output is \(array.dataType), expected Float32")
-        }
-        let shape = array.shape.map(\.intValue)
-        let count = shape.reduce(1, *)
-        let strides = array.strides.map(\.intValue)
-        var expectedStride = 1
-        var contiguousStrides = Array(repeating: 0, count: shape.count)
-        for axis in stride(from: shape.count - 1, through: 0, by: -1) {
-            contiguousStrides[axis] = expectedStride
-            expectedStride *= shape[axis]
-        }
-        let pointer = array.dataPointer.bindMemory(to: Float.self, capacity: array.count)
-        if strides == contiguousStrides {
-            return Array(UnsafeBufferPointer(start: pointer, count: count))
-        }
-
-        var result: [Float] = []
-        result.reserveCapacity(count)
-        func append(axis: Int, offset: Int) {
-            if axis == shape.count {
-                result.append(pointer[offset])
-                return
-            }
-            for index in 0..<shape[axis] {
-                append(axis: axis + 1, offset: offset + index * strides[axis])
-            }
-        }
-        append(axis: 0, offset: 0)
-        return result
     }
 }
 

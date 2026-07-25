@@ -224,9 +224,15 @@ final class AUGeoCalibCoreMLNeuralInferenceSession {
             throw AUGeoCalibCoreMLNeuralError.invalidModel("model has no inputs")
         }
         let resolvedInputName = input.key
-        let resolvedInputShape = try Self.multiArrayShape(input.value, name: input.key)
-        let resolvedInputElementCount = coreMLProduct(resolvedInputShape)
-        let resolvedInputArray = try Self.makeEmptyContiguousFloat32Array(shape: resolvedInputShape)
+        let resolvedInputShape = try Self.modelIO {
+            try AUCoreMLMultiArrayIO.fixedFloat32Shape(input.value, name: input.key)
+        }
+        let resolvedInputElementCount = try Self.modelIO {
+            try AUCoreMLMultiArrayIO.elementCount(shape: resolvedInputShape)
+        }
+        let resolvedInputArray = try Self.modelIO {
+            try AUCoreMLMultiArrayIO.makeContiguousFloat32Array(shape: resolvedInputShape)
+        }
         let resolvedInputProvider = try MLDictionaryFeatureProvider(
             dictionary: [resolvedInputName: MLFeatureValue(multiArray: resolvedInputArray)]
         )
@@ -236,7 +242,9 @@ final class AUGeoCalibCoreMLNeuralInferenceSession {
             guard let description = model.modelDescription.outputDescriptionsByName[name] else {
                 throw AUGeoCalibCoreMLNeuralError.invalidModel("missing output description \(name)")
             }
-            shapes[name] = try Self.multiArrayShape(description, name: name)
+            shapes[name] = try Self.modelIO {
+                try AUCoreMLMultiArrayIO.fixedFloat32Shape(description, name: name)
+            }
         }
         inputShape = resolvedInputShape
         inputElementCount = resolvedInputElementCount
@@ -260,16 +268,17 @@ final class AUGeoCalibCoreMLNeuralInferenceSession {
         predictionLock.lock()
         defer { predictionLock.unlock() }
 
-        let inputPointer = inputArray.dataPointer.bindMemory(to: Float.self, capacity: inputElementCount)
-        inputRGB.withUnsafeBufferPointer { source in
-            inputPointer.update(from: source.baseAddress!, count: inputElementCount)
+        do {
+            try AUCoreMLMultiArrayIO.copyFloat32(inputRGB, to: inputArray)
+        } catch {
+            throw AUGeoCalibCoreMLNeuralError.invalidInput(String(describing: error))
         }
         let output = try model.prediction(from: inputProvider)
 
-        let upField = try Self.floatArray(from: output, name: "up_field")
-        let upConfidence = try Self.floatArray(from: output, name: "up_confidence")
-        let latitudeField = try Self.floatArray(from: output, name: "latitude_field")
-        let latitudeConfidence = try Self.floatArray(from: output, name: "latitude_confidence")
+        let upField = try Self.outputTensor(from: output, name: "up_field").values
+        let upConfidence = try Self.outputTensor(from: output, name: "up_confidence").values
+        let latitudeField = try Self.outputTensor(from: output, name: "latitude_field").values
+        let latitudeConfidence = try Self.outputTensor(from: output, name: "latitude_confidence").values
 
         guard let upFieldShape = outputShapes["up_field"],
               let upConfidenceShape = outputShapes["up_confidence"],
@@ -295,82 +304,29 @@ final class AUGeoCalibCoreMLNeuralInferenceSession {
     }
 
     func warmUp() throws {
-        let zeros = Array(repeating: Float(0), count: coreMLProduct(inputShape))
+        let zeros = Array(repeating: Float(0), count: inputElementCount)
         _ = try run(inputRGB: zeros, inputShape: inputShape)
     }
 
-    private static func multiArrayShape(_ description: MLFeatureDescription, name: String) throws -> [Int] {
-        guard description.type == .multiArray,
-              let constraint = description.multiArrayConstraint else {
-            throw AUGeoCalibCoreMLNeuralError.invalidModel("\(name) is not a MultiArray")
+    private static func modelIO<T>(_ body: () throws -> T) throws -> T {
+        do {
+            return try body()
+        } catch {
+            throw AUGeoCalibCoreMLNeuralError.invalidModel(String(describing: error))
         }
-        guard constraint.dataType == .float32 else {
-            throw AUGeoCalibCoreMLNeuralError.invalidModel("\(name) is \(constraint.dataType), expected Float32")
-        }
-        return constraint.shape.map { $0.intValue }
     }
 
-    private static func makeEmptyContiguousFloat32Array(shape: [Int]) throws -> MLMultiArray {
-        let array = try MLMultiArray(shape: shape.map { NSNumber(value: $0) }, dataType: .float32)
-        guard contiguousShape(array) == shape else {
-            throw AUGeoCalibCoreMLNeuralError.invalidInput("Core ML allocated non-contiguous input array")
-        }
-        return array
-    }
-
-    private static func floatArray(from provider: MLFeatureProvider, name: String) throws -> [Float] {
-        guard let multiArray = provider.featureValue(for: name)?.multiArrayValue else {
+    private static func outputTensor(from provider: MLFeatureProvider, name: String) throws -> AUCoreMLFloat32Tensor {
+        do {
+            return try AUCoreMLMultiArrayIO.readFloat32(from: provider, name: name)
+        } catch AUCoreMLMultiArrayIOError.missingOutput {
             throw AUGeoCalibCoreMLNeuralError.missingOutput(name)
+        } catch {
+            throw AUGeoCalibCoreMLNeuralError.invalidModel(String(describing: error))
         }
-        guard multiArray.dataType == .float32 else {
-            throw AUGeoCalibCoreMLNeuralError.invalidModel("\(name) is \(multiArray.dataType), expected Float32")
-        }
-        let shape = multiArray.shape.map { $0.intValue }
-        let count = coreMLProduct(shape)
-        guard contiguousShape(multiArray) == shape else {
-            return stridedFloatArray(from: multiArray, shape: shape)
-        }
-        let pointer = multiArray.dataPointer.bindMemory(to: Float.self, capacity: count)
-        return Array(UnsafeBufferPointer(start: pointer, count: count))
-    }
-
-    private static func contiguousShape(_ array: MLMultiArray) -> [Int]? {
-        let shape = array.shape.map { $0.intValue }
-        let strides = array.strides.map { $0.intValue }
-        var expectedStride = 1
-        var expected = Array(repeating: 0, count: shape.count)
-        for index in stride(from: shape.count - 1, through: 0, by: -1) {
-            expected[index] = expectedStride
-            expectedStride *= shape[index]
-        }
-        return strides == expected ? shape : nil
-    }
-
-    private static func stridedFloatArray(from array: MLMultiArray, shape: [Int]) -> [Float] {
-        let strides = array.strides.map { $0.intValue }
-        let pointer = array.dataPointer.bindMemory(to: Float.self, capacity: array.count)
-        var output: [Float] = []
-        output.reserveCapacity(coreMLProduct(shape))
-
-        func append(axis: Int, offset: Int) {
-            if axis == shape.count {
-                output.append(pointer[offset])
-                return
-            }
-            for index in 0..<shape[axis] {
-                append(axis: axis + 1, offset: offset + index * strides[axis])
-            }
-        }
-
-        append(axis: 0, offset: 0)
-        return output
     }
 }
 
 private func geoCalibShapeDescription(_ shape: [Int]) -> String {
     shape.map(String.init).joined(separator: "x")
-}
-
-private func coreMLProduct(_ shape: [Int]) -> Int {
-    shape.reduce(1, *)
 }

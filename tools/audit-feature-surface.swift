@@ -56,11 +56,12 @@ struct AuditFeatureSurface {
         let warp = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightWarpEffect.swift"), encoding: .utf8)
         let metal = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightWarp.metal"), encoding: .utf8)
         let candidates = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightUprightCandidates.swift"), encoding: .utf8)
+        let analysisTransaction = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightFxAnalysisTransaction.swift"), encoding: .utf8)
 
         try auditRegisteredPlugins(infoPlist)
-        try auditHorizon(horizonEffect)
-        try auditStretch(stretchEffects, geometry: geometry, overlay: overlay, metal: metal)
-        try auditUpright(uprightEffects, geometry: geometry, warp: warp, metal: metal, candidates: candidates)
+        try auditHorizon(horizonEffect, transaction: analysisTransaction)
+        try auditStretch(stretchEffects, geometry: geometry, overlay: overlay, metal: metal, transaction: analysisTransaction)
+        try auditUpright(uprightEffects, geometry: geometry, warp: warp, metal: metal, candidates: candidates, transaction: analysisTransaction)
 
         print("AnyUpright feature surface audit passed")
     }
@@ -99,21 +100,24 @@ struct AuditFeatureSurface {
         }
     }
 
-    private static func auditHorizon(_ effects: String) throws {
+    private static func auditHorizon(_ effects: String, transaction: String) throws {
         try require(effects, "VNDetectHorizonRequest()", "Horizon uses Vision horizon detection")
         try require(effects, "dominantHorizonCorrectionRadians", "Horizon has a traditional line fallback")
         try require(effects, "Analyze Horizon", "Horizon exposes explicit analysis button")
         try require(effects, "Fill Frame", "Horizon exposes fill toggle")
-        try require(effects, "AUFxAnalysisProbePolicy.range", "Horizon requests a bounded representative-frame probe")
+        try require(effects, "AUFxAnalysisTransaction<Void, Double>", "Horizon owns a typed shared analysis transaction")
+        try require(transaction, "AUFxAnalysisProbePolicy.range", "Shared transaction requests a bounded representative-frame probe")
         try require(effects, "inputTime(&inputTime, fromTimelineTime:", "Horizon converts timeline time to input time")
-        try require(effects, "sampleDuration(&sampleDuration)", "Horizon uses the input sample duration")
+        try require(effects, "timingAPI.sampleDuration(&duration)", "Horizon uses the input sample duration")
         try require(effects, "analysisStateForEffect()", "Horizon rejects duplicate host analysis requests")
     }
 
-    private static func auditStretch(_ effects: String, geometry: String, overlay: String, metal: String) throws {
+    private static func auditStretch(_ effects: String, geometry: String, overlay: String, metal: String, transaction: String) throws {
         try require(effects, "class AnyUprightInnerStretchPlugIn: AnyUprightStretchModePlugIn", "Inner Stretch is registered as its own filter")
         try require(effects, "class AnyUprightOuterStretchPlugIn: AnyUprightStretchModePlugIn", "Outer Stretch is registered as its own filter")
         try require(effects, "FxAnalyzer", "Inner Stretch supports explicit frame analysis")
+        try require(effects, "AUFxAnalysisTransaction<Void, AnalysisResult>", "Inner Stretch owns a typed shared analysis transaction")
+        try require(transaction, "AUFxAnalysisProbePolicy.range", "Inner Stretch uses the shared bounded representative-frame probe")
         try require(effects, "Detect Edge and Corner", "Inner Stretch exposes explicit input-four-corner selection detection")
         try require(effects, "addPushButton", "Inner Stretch detection uses a native FxPlug push button")
         try require(effects, "selector: #selector(detectInnerStretch)", "Inner Stretch push button dispatches to detection")
@@ -165,7 +169,7 @@ struct AuditFeatureSurface {
         try require(metal, "warpState->outputToSource * float3(outputCoordinate, 1.0)", "Stretch warps use the primary output-to-source matrix")
     }
 
-    private static func auditUpright(_ effects: String, geometry: String, warp: String, metal: String, candidates: String) throws {
+    private static func auditUpright(_ effects: String, geometry: String, warp: String, metal: String, candidates: String, transaction: String) throws {
         try require(effects, "withName: \"Direction\"", "Upright exposes direction-based correction selection")
         try require(effects, "menuEntries: [\"Vertical\", \"Horizontal\", \"Full\"]", "Upright exposes vertical, horizontal, and full correction directions")
         try require(effects, "withName: \"Mode\"", "Upright exposes workflow mode selection")
@@ -173,10 +177,11 @@ struct AuditFeatureSurface {
         try require(effects, "withName: \"Analyze\"", "Upright exposes one analysis/apply action for the selected mode")
         try require(effects, "guard controlMode != .manual else", "Upright Analyze applies manual guides without running detection")
         try require(effects, "UprightAnalysisRequest(correctionMode: correctionMode, controlMode: controlMode)", "Upright Analyze starts semi-auto and full-auto candidate detection")
-        try require(effects, "AUFxAnalysisProbePolicy.range", "Upright requests a bounded representative-frame probe")
+        try require(effects, "AUFxAnalysisTransaction<UprightAnalysisRequest, [UprightDetectedCandidate]>", "Upright owns a typed shared analysis transaction")
+        try require(transaction, "AUFxAnalysisProbePolicy.range", "Upright uses the shared bounded representative-frame probe")
         try require(effects, "inputTime(&inputTime, fromTimelineTime:", "Upright converts timeline time to input time")
-        try require(effects, "sampleDuration(&sampleDuration)", "Upright uses the input sample duration")
-        try require(effects, "didProduceAnalysisResult", "Upright distinguishes an empty result from a missing analysis frame")
+        try require(effects, "timingAPI.sampleDuration(&duration)", "Upright uses the input sample duration")
+        try require(effects, "case .produced(let candidates)", "Upright distinguishes an empty result from a missing analysis frame")
         try require(effects, "controlMode == .automatic", "Upright full-auto selects candidates during parameter writeback")
         try require(effects, "selectionValueAfterToggling", "Upright semi-auto can select candidates from onscreen controls")
         try require(effects, "writeUprightManualGuides", "Upright can transfer selected automatic lines into manual guides")

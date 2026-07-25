@@ -9,56 +9,6 @@ import CoreImage
 import IOSurface
 import Vision
 
-func singleFrameAnalysisRange(near requestedTime: CMTime, within inputTimeRange: CMTimeRange) -> CMTimeRange {
-    let analysisWindow = CMTime(seconds: 0.05, preferredTimescale: 600)
-    let duration = CMTimeCompare(inputTimeRange.duration, analysisWindow) < 0 ? inputTimeRange.duration : analysisWindow
-    var start = inputTimeRange.start
-
-    if requestedTime.isValid,
-       requestedTime.isNumeric,
-       CMTimeRangeContainsTime(inputTimeRange, time: requestedTime) {
-        let latestStart = CMTimeSubtract(CMTimeRangeGetEnd(inputTimeRange), duration)
-        start = CMTimeCompare(requestedTime, latestStart) > 0 ? latestStart : requestedTime
-    }
-
-    return CMTimeRange(start: start, duration: duration)
-}
-
-func parameterWriteTime(preferred: CMTime, fallback: CMTime) -> CMTime {
-    if preferred.isValid, preferred.isNumeric {
-        return preferred
-    }
-
-    return fallback
-}
-
-struct HorizonAnalysisScratchState {
-    var hasPendingRequest = false
-    var frameGate = AUFirstUsableAnalysisFrameGate()
-    var didCompleteAnalysis = false
-    var detectedRotationRadians: Double?
-    var detectedRotationTime = CMTime.zero
-    var requestedTimelineTime = CMTime.invalid
-    var analysisStartNanos: UInt64?
-}
-
-struct UprightAnalysisScratchState {
-    var pendingAnalysisRequest: UprightAnalysisRequest?
-    var frameGate = AUFirstUsableAnalysisFrameGate()
-    var didProduceAnalysisResult = false
-    var detectedCandidates: [UprightDetectedCandidate] = []
-    var detectedPerspectiveTime = CMTime.zero
-    var requestedTimelineTime = CMTime.invalid
-}
-
-struct InnerStretchAnalysisScratchState {
-    var hasPendingInnerStretchDetection = false
-    var detectedSourcePrimitives = InnerStretchDetectedSourcePrimitives()
-    var detectedSourceSize = AUSize(width: 1.0, height: 1.0)
-    var detectedInnerStretchTime = CMTime.zero
-    var requestedAnalysisTime = CMTime.zero
-}
-
 struct AURGBFloatImage {
     var width: Int
     var height: Int

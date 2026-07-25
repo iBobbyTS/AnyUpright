@@ -13,11 +13,9 @@ import Vision
 
 @objc(AnyUprightUprightPlugIn)
 class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
-    private static let analysisDebugLogLock = NSLock()
-    private let analysisLock = NSLock()
     private let controlModeLock = NSLock()
     private let analysisContext = CIContext(options: nil)
-    private var analysisState = UprightAnalysisScratchState()
+    private let analysisTransaction = AUFxAnalysisTransaction<UprightAnalysisRequest, [UprightDetectedCandidate]>()
     private var previousControlMode: UprightControlMode?
 
     override var needsFullBuffer: Bool {
@@ -189,7 +187,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     @objc func analyze() {
-        let startNanos = Self.analysisNowNanos()
+        let startNanos = AUMonotonicClock.nowNanos()
         let time = currentParameterTime()
         let paramAPI = parameterRetrievalAPI()
         let correctionMode = uprightCorrectionMode(at: time, paramAPI: paramAPI)
@@ -203,7 +201,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             )
         )
         guard controlMode != .manual else {
-            analysisDebugLog(String(format: "analyze_manual_return elapsed_ms=%.3f", Self.analysisElapsedMilliseconds(since: startNanos)))
+            analysisDebugLog(String(format: "analyze_manual_return elapsed_ms=%.3f", AUMonotonicClock.elapsedMilliseconds(since: startNanos)))
             return
         }
 
@@ -211,7 +209,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             UprightAnalysisRequest(correctionMode: correctionMode, controlMode: controlMode),
             requestedTimelineTime: time
         )
-        analysisDebugLog(String(format: "analyze_request_submitted elapsed_ms=%.3f", Self.analysisElapsedMilliseconds(since: startNanos)))
+        analysisDebugLog(String(format: "analyze_request_submitted elapsed_ms=%.3f", AUMonotonicClock.elapsedMilliseconds(since: startNanos)))
     }
 
     private func startAnalysis(_ request: UprightAnalysisRequest, requestedTimelineTime: CMTime) {
@@ -219,123 +217,89 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             analysisDebugLog("start_forward_missing_analysis_api")
             return
         }
-        let hostState = analysisAPI.analysisStateForEffect()
-        analysisLock.lock()
-        let locallyPending = analysisState.pendingAnalysisRequest != nil
-        analysisLock.unlock()
-        guard !locallyPending,
-              hostState != kFxAnalysisState_AnalysisRequested,
-              hostState != kFxAnalysisState_AnalysisStarted else {
-            analysisDebugLog("start_forward_ignored_busy local=\(locallyPending) host_state=\(hostState)")
-            return
-        }
-        guard requestedTimelineTime.isValid, requestedTimelineTime.isNumeric else {
-            analysisDebugLog("start_forward_invalid_timeline_time time=\(requestedTimelineTime)")
-            return
-        }
-
-        analysisLock.lock()
-        guard analysisState.pendingAnalysisRequest == nil else {
-            analysisLock.unlock()
-            analysisDebugLog("start_forward_ignored_local_race")
-            return
-        }
-        analysisState.pendingAnalysisRequest = request
-        analysisState.requestedTimelineTime = requestedTimelineTime
-        analysisState.frameGate.reset()
-        analysisState.didProduceAnalysisResult = false
-        analysisState.detectedCandidates = []
-        analysisLock.unlock()
-
-        let startNanos = Self.analysisNowNanos()
+        let startNanos = AUMonotonicClock.nowNanos()
         do {
-            try analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU)
-            analysisDebugLog(String(format: "start_forward_return elapsed_ms=%.3f", Self.analysisElapsedMilliseconds(since: startNanos)))
+            let disposition = try analysisTransaction.start(
+                request: request,
+                requestedTimelineTime: requestedTimelineTime,
+                analysisStartNanos: startNanos,
+                hostIsBusy: {
+                    let state = analysisAPI.analysisStateForEffect()
+                    return state == kFxAnalysisState_AnalysisRequested || state == kFxAnalysisState_AnalysisStarted
+                },
+                startForwardAnalysis: { try analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU) }
+            )
+            switch disposition {
+            case .started:
+                analysisDebugLog(String(format: "start_forward_return elapsed_ms=%.3f", AUMonotonicClock.elapsedMilliseconds(since: startNanos)))
+            case .localBusy:
+                analysisDebugLog("start_forward_ignored_busy local=true")
+            case .hostBusy:
+                analysisDebugLog("start_forward_ignored_busy host=true")
+            case .invalidTimelineTime:
+                analysisDebugLog("start_forward_invalid_timeline_time time=\(requestedTimelineTime)")
+            }
         } catch {
-            resetPendingUprightAnalysis()
             analysisDebugLog("start_forward_error error=\(String(describing: error))")
         }
     }
 
     func desiredAnalysisTimeRange(_ desiredRange: UnsafeMutablePointer<CMTimeRange>, forInputWith inputTimeRange: CMTimeRange) throws {
-        analysisLock.lock()
-        let request = analysisState.pendingAnalysisRequest
-        let requestedTimelineTime = analysisState.requestedTimelineTime
-        analysisLock.unlock()
-        guard request != nil,
-              requestedTimelineTime.isValid,
-              requestedTimelineTime.isNumeric else {
-            resetPendingUprightAnalysis()
-            throw uprightAnalysisError("Missing a valid pending timeline time")
-        }
         guard let timingAPI = _apiManager.api(for: FxTimingAPI_v4.self) as? FxTimingAPI_v4 else {
-            resetPendingUprightAnalysis()
+            analysisTransaction.cancelCurrentRequest()
             throw uprightAnalysisError("FxTimingAPI_v4 is unavailable")
         }
-
-        var inputTime = CMTime.invalid
-        timingAPI.inputTime(&inputTime, fromTimelineTime: requestedTimelineTime)
-        guard inputTime.isValid, inputTime.isNumeric else {
-            resetPendingUprightAnalysis()
-            throw uprightAnalysisError("Could not convert the requested timeline time to input time")
+        do {
+            let details = try analysisTransaction.desiredRange(
+                within: inputTimeRange,
+                inputTimeFromTimeline: { timelineTime in
+                    var inputTime = CMTime.invalid
+                    timingAPI.inputTime(&inputTime, fromTimelineTime: timelineTime)
+                    return inputTime
+                },
+                sampleDuration: {
+                    var duration = CMTime.invalid
+                    timingAPI.sampleDuration(&duration)
+                    return duration
+                }
+            )
+            if details.usedFallbackSampleDuration {
+                analysisDebugLog("desired_range_invalid_sample_duration value=\(details.sampleDuration) fallback=0.05s")
+            }
+            desiredRange.pointee = details.range
+            analysisDebugLog(
+                "desired_range timeline=\(details.requestedTimelineTime) input=\(details.inputTime) sample_duration=\(details.sampleDuration) start=\(details.range.start) duration=\(details.range.duration) input_start=\(inputTimeRange.start) input_duration=\(inputTimeRange.duration)"
+            )
+        } catch {
+            throw uprightAnalysisError(String(describing: error))
         }
-
-        var sampleDuration = CMTime.invalid
-        timingAPI.sampleDuration(&sampleDuration)
-        if !sampleDuration.isValid || !sampleDuration.isNumeric || CMTimeCompare(sampleDuration, .zero) <= 0 {
-            analysisDebugLog("desired_range_invalid_sample_duration value=\(sampleDuration) fallback=0.05s")
-        }
-        let range = AUFxAnalysisProbePolicy.range(
-            near: inputTime,
-            within: inputTimeRange,
-            sampleDuration: sampleDuration
-        )
-        guard range.isValid, CMTimeCompare(range.duration, .zero) > 0 else {
-            resetPendingUprightAnalysis()
-            throw uprightAnalysisError("The converted input time has no analyzable range")
-        }
-        desiredRange.pointee = range
-        analysisDebugLog(
-            "desired_range timeline=\(requestedTimelineTime) input=\(inputTime) sample_duration=\(sampleDuration) start=\(range.start) duration=\(range.duration) input_start=\(inputTimeRange.start) input_duration=\(inputTimeRange.duration)"
-        )
     }
 
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
-        analysisLock.lock()
-        analysisState.frameGate.reset()
-        analysisState.didProduceAnalysisResult = false
-        analysisState.detectedCandidates = []
-        analysisState.detectedPerspectiveTime = analysisRange.start
-        analysisLock.unlock()
+        _ = analysisTransaction.setupAnalysis(range: analysisRange)
         analysisDebugLog("setup_analysis range_start=\(analysisRange.start) range_duration=\(analysisRange.duration) frame_duration=\(frameDuration)")
     }
 
     func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
-        let frameStartNanos = Self.analysisNowNanos()
+        let frameStartNanos = AUMonotonicClock.nowNanos()
         let bounds = frame.imagePixelBounds
-        let structurallyUsable = frame.ioSurface != nil
-            && bounds.right > bounds.left
-            && bounds.top > bounds.bottom
-        analysisLock.lock()
-        let request = analysisState.pendingAnalysisRequest
-        let claimedFrame = request != nil && analysisState.frameGate.claimIfUsable(structurallyUsable)
-        let receivedFrameCount = analysisState.frameGate.receivedFrameCount
-        analysisLock.unlock()
-
-        guard let request else {
-            return
-        }
-        guard claimedFrame else {
+        guard let claim = analysisTransaction.claimFrame(
+            hasIOSurface: frame.ioSurface != nil,
+            hasNonEmptyPixelBounds: bounds.right > bounds.left && bounds.top > bounds.bottom
+        ) else {
+            let structurallyUsable = frame.ioSurface != nil && bounds.right > bounds.left && bounds.top > bounds.bottom
+            let receivedFrameCount = analysisTransaction.receivedFrameCount
             analysisDebugLog("analyze_frame_skip time=\(frameTime) usable=\(structurallyUsable) callback=\(receivedFrameCount)")
             return
         }
+        let request = claim.request
         let sourceReferenceSize = analysisReferenceSize(from: frame)
         analysisDebugLog(
             "analyze_frame_start time=\(frameTime) bounds=\(bounds) reference=\(sourceReferenceSize.width)x\(sourceReferenceSize.height)"
         )
 
         if request.shouldUseCandidateDetection {
-            let detectorStartNanos = Self.analysisNowNanos()
+            let detectorStartNanos = AUMonotonicClock.nowNanos()
             do {
                 let scaleLSDCandidates = try AnyUprightScaleLSDDetector.detectCandidates(
                     in: frame,
@@ -345,14 +309,15 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 storeDetectedCandidates(
                     scaleLSDCandidates,
                     request: request,
-                    time: frameTime
+                    time: frameTime,
+                    token: claim.token
                 )
                 analysisDebugLog(
                     String(
                         format: "scalelsd_success candidates=%d detector_ms=%.3f frame_ms=%.3f",
                         scaleLSDCandidates.count,
-                        Self.analysisElapsedMilliseconds(since: detectorStartNanos),
-                        Self.analysisElapsedMilliseconds(since: frameStartNanos)
+                        AUMonotonicClock.elapsedMilliseconds(since: detectorStartNanos),
+                        AUMonotonicClock.elapsedMilliseconds(since: frameStartNanos)
                     )
                 )
                 return
@@ -361,7 +326,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                     String(
                         format: "scalelsd_error error=%@ detector_ms=%.3f",
                         String(describing: error),
-                        Self.analysisElapsedMilliseconds(since: detectorStartNanos)
+                        AUMonotonicClock.elapsedMilliseconds(since: detectorStartNanos)
                     )
                 )
                 // Fall through to the CPU detector when ScaleLSD is unavailable.
@@ -369,9 +334,8 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         }
 
         guard let grayscaleImage = AnyUprightAnalysisImage.grayscaleImage(from: frame, maxDimension: 360, context: analysisContext) else {
-            analysisLock.lock()
-            analysisState.frameGate.relinquishClaimForUnusablePreparation()
-            analysisLock.unlock()
+            analysisTransaction.relinquishFrame(token: claim.token)
+            let receivedFrameCount = analysisTransaction.receivedFrameCount
             analysisDebugLog("analyze_frame_preparation_failed callback=\(receivedFrameCount); waiting_for_next_callback")
             return
         }
@@ -428,13 +392,14 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         storeDetectedCandidates(
             candidates,
             request: request,
-            time: frameTime
+            time: frameTime,
+            token: claim.token
         )
         analysisDebugLog(
             String(
                 format: "hough_success candidates=%d frame_ms=%.3f",
                 candidates.count,
-                Self.analysisElapsedMilliseconds(since: frameStartNanos)
+                AUMonotonicClock.elapsedMilliseconds(since: frameStartNanos)
             )
         )
     }
@@ -442,45 +407,32 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private func storeDetectedCandidates(
         _ candidates: [UprightDetectedCandidate],
         request: UprightAnalysisRequest,
-        time: CMTime
+        time: CMTime,
+        token: AUFxAnalysisTransactionToken
     ) {
         let ranked = AnyUprightUprightCandidates.analysisCandidates(
             from: candidates,
             request: request
         )
-        analysisLock.lock()
-        analysisState.detectedCandidates = Array(ranked.prefix(AnyUprightUprightCandidates.slotCount))
-        analysisState.detectedPerspectiveTime = time
-        analysisState.didProduceAnalysisResult = true
-        analysisLock.unlock()
+        analysisTransaction.complete(
+            token: token,
+            outcome: .produced(Array(ranked.prefix(AnyUprightUprightCandidates.slotCount))),
+            inputFrameTime: time
+        )
     }
 
     func cleanupAnalysis() throws {
-        let cleanupStartNanos = Self.analysisNowNanos()
-        analysisLock.lock()
-        let request = analysisState.pendingAnalysisRequest
-        let candidates = analysisState.detectedCandidates
-        let requestedTimelineTime = analysisState.requestedTimelineTime
-        let detectedPerspectiveTime = analysisState.detectedPerspectiveTime
-        let didProduceAnalysisResult = analysisState.didProduceAnalysisResult
-        analysisState.pendingAnalysisRequest = nil
-        analysisState.frameGate.reset()
-        analysisState.didProduceAnalysisResult = false
-        analysisState.detectedCandidates = []
-        analysisState.detectedPerspectiveTime = .zero
-        analysisState.requestedTimelineTime = .invalid
-        analysisLock.unlock()
-
-        guard let request else {
+        let cleanupStartNanos = AUMonotonicClock.nowNanos()
+        guard let snapshot = analysisTransaction.cleanup() else {
             analysisDebugLog("cleanup_skipped missing_request")
             return
         }
-        guard didProduceAnalysisResult else {
-            analysisDebugLog("cleanup_preserved_existing_candidates no_analysis_result input_frame_time=\(detectedPerspectiveTime)")
+        guard case .produced(let candidates) = snapshot.outcome else {
+            analysisDebugLog("cleanup_preserved_existing_candidates no_analysis_result input_frame_time=\(snapshot.inputFrameTime)")
             return
         }
-        guard requestedTimelineTime.isValid, requestedTimelineTime.isNumeric else {
-            analysisDebugLog("cleanup_preserved_existing_candidates invalid_timeline_time=\(requestedTimelineTime)")
+        guard snapshot.requestedTimelineTime.isValid, snapshot.requestedTimelineTime.isNumeric else {
+            analysisDebugLog("cleanup_preserved_existing_candidates invalid_timeline_time=\(snapshot.requestedTimelineTime)")
             return
         }
         guard
@@ -491,31 +443,20 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
         writeUprightCandidateSlots(
             candidates,
-            correctionMode: request.correctionMode,
-            controlMode: request.controlMode,
+            correctionMode: snapshot.request.correctionMode,
+            controlMode: snapshot.request.controlMode,
             settingAPI: settingAPI,
-            time: requestedTimelineTime
+            time: snapshot.requestedTimelineTime
         )
 
         analysisDebugLog(
             String(
                 format: "cleanup_done candidates=%d control_mode=%d elapsed_ms=%.3f",
                 candidates.count,
-                request.controlMode.rawValue,
-                Self.analysisElapsedMilliseconds(since: cleanupStartNanos)
+                snapshot.request.controlMode.rawValue,
+                AUMonotonicClock.elapsedMilliseconds(since: cleanupStartNanos)
             )
         )
-    }
-
-    private func resetPendingUprightAnalysis() {
-        analysisLock.lock()
-        analysisState.pendingAnalysisRequest = nil
-        analysisState.frameGate.reset()
-        analysisState.didProduceAnalysisResult = false
-        analysisState.detectedCandidates = []
-        analysisState.detectedPerspectiveTime = .zero
-        analysisState.requestedTimelineTime = .invalid
-        analysisLock.unlock()
     }
 
     private func uprightAnalysisError(_ message: String) -> NSError {
@@ -801,36 +742,8 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         }
     }
 
-    private static func analysisNowNanos() -> UInt64 {
-        DispatchTime.now().uptimeNanoseconds
-    }
-
-    private static func analysisElapsedMilliseconds(since startNanos: UInt64) -> Double {
-        Double(analysisNowNanos() - startNanos) / 1_000_000.0
-    }
-
     private func analysisDebugLog(_ message: String) {
-        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightUprightAnalysis.debug") else {
-            return
-        }
-
-        let logPath = "/tmp/AnyUprightUprightAnalysis.log"
-        let timestamp = String(format: "%.3f", Date().timeIntervalSince1970)
-        guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
-            return
-        }
-
-        Self.analysisDebugLogLock.lock()
-        defer { Self.analysisDebugLogLock.unlock() }
-
-        if FileManager.default.fileExists(atPath: logPath),
-           let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-            try? handle.close()
-        } else {
-            try? data.write(to: URL(fileURLWithPath: logPath))
-        }
+        AUAnalysisDiagnostics.upright.log(message)
     }
 
     private func candidateLimit(for request: UprightAnalysisRequest) -> Int {

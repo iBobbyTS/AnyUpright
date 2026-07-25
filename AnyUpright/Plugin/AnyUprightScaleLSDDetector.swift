@@ -29,8 +29,6 @@ private final class AUScaleLSDResourceAnchor: NSObject {}
 
 enum AnyUprightScaleLSDDetector {
     private static let inputSize = 512
-    private static let debugLogLock = NSLock()
-
     static func prepareCoreMLCacheForPluginAdd() {
         do {
             let cache = try configuredCache()
@@ -45,42 +43,42 @@ enum AnyUprightScaleLSDDetector {
         request: UprightAnalysisRequest,
         context: CIContext
     ) throws -> [UprightDetectedCandidate] {
-        let totalStart = nowNanos()
+        let totalStart = AUMonotonicClock.nowNanos()
         let sourceBounds = frame.imagePixelBounds
         let referenceImageSize = AUSize(
             width: max(1.0, Double(sourceBounds.right - sourceBounds.left)),
             height: max(1.0, Double(sourceBounds.top - sourceBounds.bottom))
         )
-        let renderStart = nowNanos()
+        let renderStart = AUMonotonicClock.nowNanos()
         let source = try renderSourceRGBA(from: frame, context: context)
-        let renderMS = elapsedMilliseconds(since: renderStart)
+        let renderMS = AUMonotonicClock.elapsedMilliseconds(since: renderStart)
 
-        let preprocessStart = nowNanos()
+        let preprocessStart = AUMonotonicClock.nowNanos()
         guard let input = AnyUprightScaleLSDPreprocessor.normalizedGrayscaleNCHW(from: source) else {
             throw AUScaleLSDDetectorError.invalidInput
         }
-        let preprocessMS = elapsedMilliseconds(since: preprocessStart)
+        let preprocessMS = AUMonotonicClock.elapsedMilliseconds(since: preprocessStart)
 
         let coreMLRun = try configuredCache().run(inputNCHW: input, logger: debugLog)
         let dense = coreMLRun.output
 
-        let decodeStart = nowNanos()
+        let decodeStart = AUMonotonicClock.nowNanos()
         let lines = try AnyUprightScaleLSDPostprocessor.decode(
             denseLogits: dense.values,
             shape: dense.shape,
             imageWidth: source.width,
             imageHeight: source.height
         )
-        let decodeMS = elapsedMilliseconds(since: decodeStart)
+        let decodeMS = AUMonotonicClock.elapsedMilliseconds(since: decodeStart)
 
-        let candidatesStart = nowNanos()
+        let candidatesStart = AUMonotonicClock.nowNanos()
         let candidates = AnyUprightScaleLSDPreprocessor.detectedCandidates(
             from: lines,
             imageSize: AUSize(width: Double(source.width), height: Double(source.height)),
             referenceImageSize: referenceImageSize
         )
         let ranked = AnyUprightUprightCandidates.analysisCandidates(from: candidates, request: request)
-        let candidatesMS = elapsedMilliseconds(since: candidatesStart)
+        let candidatesMS = AUMonotonicClock.elapsedMilliseconds(since: candidatesStart)
         debugLog(
             String(
                 format: "scalelsd_stages render_ms=%.3f preprocess_ms=%.3f coreml_cache_hit=%@ coreml_load_ms=%.3f coreml_predict_ms=%.3f coreml_total_ms=%.3f decode_ms=%.3f candidates_ms=%.3f lines=%d candidates=%d total_ms=%.3f",
@@ -94,7 +92,7 @@ enum AnyUprightScaleLSDDetector {
                 candidatesMS,
                 lines.count,
                 ranked.count,
-                elapsedMilliseconds(since: totalStart)
+                AUMonotonicClock.elapsedMilliseconds(since: totalStart)
             )
         )
         return ranked
@@ -161,34 +159,7 @@ enum AnyUprightScaleLSDDetector {
         return AUScaleLSDRGBAImage(width: inputSize, height: inputSize, pixels: pixels)
     }
 
-    private static func nowNanos() -> UInt64 {
-        DispatchTime.now().uptimeNanoseconds
-    }
-
-    private static func elapsedMilliseconds(since startNanos: UInt64) -> Double {
-        Double(nowNanos() - startNanos) / 1_000_000.0
-    }
-
     private static func debugLog(_ message: String) {
-        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightUprightAnalysis.debug") else {
-            return
-        }
-
-        let logURL = URL(fileURLWithPath: "/tmp/AnyUprightUprightAnalysis.log")
-        let timestamp = String(format: "%.3f", Date().timeIntervalSince1970)
-        guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
-            return
-        }
-
-        debugLogLock.lock()
-        defer { debugLogLock.unlock() }
-        if FileManager.default.fileExists(atPath: logURL.path),
-           let handle = try? FileHandle(forWritingTo: logURL) {
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-            try? handle.close()
-        } else {
-            try? data.write(to: logURL)
-        }
+        AUAnalysisDiagnostics.upright.log(message)
     }
 }

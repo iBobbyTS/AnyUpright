@@ -22,11 +22,8 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private static let geoCalibAnalysisMaxDimension = 1920
     private static let geoCalibVerifierMaxDimension = 640
     private static let geoCalibCoreMLModelShapes = AUGeoCalibInputShapeSpec.production
-    private static let geoCalibLogLock = NSLock()
-
-    private let analysisLock = NSLock()
     private let analysisContext = CIContext(options: nil)
-    private var analysisState = HorizonAnalysisScratchState()
+    private let analysisTransaction = AUFxAnalysisTransaction<Void, Double>()
     private var geoCalibCoreMLConfigurationAttempted = false
     private var geoCalibCoreMLConfigurationAvailable = false
 
@@ -72,128 +69,92 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     @objc private func analyzeHorizon() {
-        let startNanos = Self.nowNanos()
+        let startNanos = AUMonotonicClock.nowNanos()
         guard let analysisAPI = _apiManager.api(for: FxAnalysisAPI.self) as? FxAnalysisAPI else {
             horizonAnalysisDebugLog("start missing FxAnalysisAPI")
             return
         }
-        let hostState = analysisAPI.analysisStateForEffect()
-        analysisLock.lock()
-        let locallyPending = analysisState.hasPendingRequest
-        analysisLock.unlock()
-        guard !locallyPending,
-              hostState != kFxAnalysisState_AnalysisRequested,
-              hostState != kFxAnalysisState_AnalysisStarted else {
-            horizonAnalysisDebugLog("start ignored busy local=\(locallyPending) host_state=\(hostState)")
-            return
-        }
-
         let requestedTimelineTime = currentParameterTime()
-        guard requestedTimelineTime.isValid, requestedTimelineTime.isNumeric else {
-            horizonAnalysisDebugLog("start invalid timeline time=\(requestedTimelineTime)")
-            return
-        }
-
-        analysisLock.lock()
-        guard !analysisState.hasPendingRequest else {
-            analysisLock.unlock()
-            horizonAnalysisDebugLog("start ignored local request won race")
-            return
-        }
-        analysisState.hasPendingRequest = true
-        analysisState.requestedTimelineTime = requestedTimelineTime
-        analysisState.analysisStartNanos = startNanos
-        analysisState.frameGate.reset()
-        analysisState.didCompleteAnalysis = false
-        analysisState.detectedRotationRadians = nil
-        analysisLock.unlock()
-        horizonAnalysisDebugLog("start requested_timeline=\(requestedTimelineTime)")
-
         do {
-            try analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU)
-            horizonAnalysisDebugLog(String(format: "startForwardAnalysis returned elapsed_ms=%.3f", Self.elapsedMilliseconds(since: startNanos)))
+            let disposition = try analysisTransaction.start(
+                request: (),
+                requestedTimelineTime: requestedTimelineTime,
+                analysisStartNanos: startNanos,
+                hostIsBusy: {
+                    let state = analysisAPI.analysisStateForEffect()
+                    return state == kFxAnalysisState_AnalysisRequested || state == kFxAnalysisState_AnalysisStarted
+                },
+                startForwardAnalysis: {
+                    horizonAnalysisDebugLog("start requested_timeline=\(requestedTimelineTime)")
+                    try analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU)
+                }
+            )
+            switch disposition {
+            case .started:
+                horizonAnalysisDebugLog(String(format: "startForwardAnalysis returned elapsed_ms=%.3f", AUMonotonicClock.elapsedMilliseconds(since: startNanos)))
+            case .localBusy:
+                horizonAnalysisDebugLog("start ignored busy local=true")
+            case .hostBusy:
+                horizonAnalysisDebugLog("start ignored busy host=true")
+            case .invalidTimelineTime:
+                horizonAnalysisDebugLog("start invalid timeline time=\(requestedTimelineTime)")
+            }
         } catch {
-            resetPendingHorizonAnalysis()
             horizonAnalysisDebugLog("startForwardAnalysis error=\(String(describing: error))")
         }
     }
 
     func desiredAnalysisTimeRange(_ desiredRange: UnsafeMutablePointer<CMTimeRange>, forInputWith inputTimeRange: CMTimeRange) throws {
-        analysisLock.lock()
-        let hasPendingRequest = analysisState.hasPendingRequest
-        let requestedTimelineTime = analysisState.requestedTimelineTime
-        analysisLock.unlock()
-        guard hasPendingRequest,
-              requestedTimelineTime.isValid,
-              requestedTimelineTime.isNumeric else {
-            resetPendingHorizonAnalysis()
-            throw horizonAnalysisError("Missing a valid pending timeline time")
-        }
         guard let timingAPI = _apiManager.api(for: FxTimingAPI_v4.self) as? FxTimingAPI_v4 else {
-            resetPendingHorizonAnalysis()
+            analysisTransaction.cancelCurrentRequest()
             throw horizonAnalysisError("FxTimingAPI_v4 is unavailable")
         }
-
-        var inputTime = CMTime.invalid
-        timingAPI.inputTime(&inputTime, fromTimelineTime: requestedTimelineTime)
-        guard inputTime.isValid, inputTime.isNumeric else {
-            resetPendingHorizonAnalysis()
-            throw horizonAnalysisError("Could not convert the requested timeline time to input time")
+        do {
+            let details = try analysisTransaction.desiredRange(
+                within: inputTimeRange,
+                inputTimeFromTimeline: { timelineTime in
+                    var inputTime = CMTime.invalid
+                    timingAPI.inputTime(&inputTime, fromTimelineTime: timelineTime)
+                    return inputTime
+                },
+                sampleDuration: {
+                    var duration = CMTime.invalid
+                    timingAPI.sampleDuration(&duration)
+                    return duration
+                }
+            )
+            if details.usedFallbackSampleDuration {
+                horizonAnalysisDebugLog("desired range invalid sample_duration=\(details.sampleDuration); using 0.05s fallback")
+            }
+            desiredRange.pointee = details.range
+            horizonAnalysisDebugLog("desired range timeline=\(details.requestedTimelineTime) input=\(details.inputTime) sample_duration=\(details.sampleDuration) start=\(details.range.start) duration=\(details.range.duration)")
+        } catch {
+            throw horizonAnalysisError(String(describing: error))
         }
-
-        var sampleDuration = CMTime.invalid
-        timingAPI.sampleDuration(&sampleDuration)
-        if !sampleDuration.isValid || !sampleDuration.isNumeric || CMTimeCompare(sampleDuration, .zero) <= 0 {
-            horizonAnalysisDebugLog("desired range invalid sample_duration=\(sampleDuration); using 0.05s fallback")
-        }
-        let range = AUFxAnalysisProbePolicy.range(
-            near: inputTime,
-            within: inputTimeRange,
-            sampleDuration: sampleDuration
-        )
-        guard range.isValid, CMTimeCompare(range.duration, .zero) > 0 else {
-            resetPendingHorizonAnalysis()
-            throw horizonAnalysisError("The converted input time has no analyzable range")
-        }
-        desiredRange.pointee = range
-        horizonAnalysisDebugLog("desired range timeline=\(requestedTimelineTime) input=\(inputTime) sample_duration=\(sampleDuration) start=\(range.start) duration=\(range.duration)")
     }
 
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
-        analysisLock.lock()
-        analysisState.detectedRotationRadians = nil
-        analysisState.frameGate.reset()
-        analysisState.didCompleteAnalysis = false
-        analysisState.detectedRotationTime = analysisRange.start
-        let startNanos = analysisState.analysisStartNanos
-        analysisLock.unlock()
-        let elapsed = startNanos.map(Self.elapsedMilliseconds) ?? 0.0
+        _ = analysisTransaction.setupAnalysis(range: analysisRange)
+        let elapsed = analysisTransaction.analysisStartNanos
+            .map { AUMonotonicClock.elapsedMilliseconds(since: $0) } ?? 0.0
         horizonAnalysisDebugLog(String(format: "setup rangeStart=%@ duration=%@ frameDuration=%@ since_start_ms=%.3f", String(describing: analysisRange.start), String(describing: analysisRange.duration), String(describing: frameDuration), elapsed))
     }
 
     func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
-        let frameStartNanos = Self.nowNanos()
+        let frameStartNanos = AUMonotonicClock.nowNanos()
         let bounds = frame.imagePixelBounds
-        let structurallyUsable = frame.ioSurface != nil
-            && bounds.right > bounds.left
-            && bounds.top > bounds.bottom
-        analysisLock.lock()
-        let hasPendingRequest = analysisState.hasPendingRequest
-        let claimedFrame = hasPendingRequest && analysisState.frameGate.claimIfUsable(structurallyUsable)
-        let receivedFrameCount = analysisState.frameGate.receivedFrameCount
-        let analysisStartNanos = analysisState.analysisStartNanos
-        analysisLock.unlock()
-
-        guard hasPendingRequest else {
-            return
-        }
-        guard claimedFrame else {
+        guard let claim = analysisTransaction.claimFrame(
+            hasIOSurface: frame.ioSurface != nil,
+            hasNonEmptyPixelBounds: bounds.right > bounds.left && bounds.top > bounds.bottom
+        ) else {
+            let structurallyUsable = frame.ioSurface != nil && bounds.right > bounds.left && bounds.top > bounds.bottom
+            let receivedFrameCount = analysisTransaction.receivedFrameCount
             horizonAnalysisDebugLog("analyze skipped frameTime=\(frameTime) usable=\(structurallyUsable) callback=\(receivedFrameCount)")
             return
         }
 
         var rotationRadians: Double?
-        let sinceStart = analysisStartNanos.map(Self.elapsedMilliseconds) ?? 0.0
+        let sinceStart = AUMonotonicClock.elapsedMilliseconds(since: claim.analysisStartNanos)
         horizonAnalysisDebugLog(String(format: "analyze begin frameTime=%@ bounds=%@ since_start_ms=%.3f", String(describing: frameTime), String(describing: bounds), sinceStart))
 
         switch analyzeGeoCalibHorizon(frame) {
@@ -201,17 +162,13 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             rotationRadians = correctionRadians
             horizonAnalysisDebugLog(String(format: "analyze geocalib accepted correctionDeg=%.6f", correctionRadians * 180 / Double.pi))
         case .rejected:
-            analysisLock.lock()
-            analysisState.didCompleteAnalysis = true
-            analysisLock.unlock()
+            analysisTransaction.complete(token: claim.token, outcome: .completedWithoutResult, inputFrameTime: frameTime)
             horizonAnalysisDebugLog("analyze geocalib rejected")
             return
         case .unavailable:
             horizonAnalysisDebugLog("analyze geocalib unavailable; trying fallback detectors")
             guard let image = AnyUprightAnalysisImage.ciImage(from: frame) else {
-                analysisLock.lock()
-                analysisState.frameGate.relinquishClaimForUnusablePreparation()
-                analysisLock.unlock()
+                analysisTransaction.relinquishFrame(token: claim.token)
                 horizonAnalysisDebugLog("analyze fallback no CIImage")
                 return
             }
@@ -252,45 +209,23 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         }
 
         guard let rotationRadians else {
-            analysisLock.lock()
-            analysisState.didCompleteAnalysis = true
-            analysisLock.unlock()
+            analysisTransaction.complete(token: claim.token, outcome: .completedWithoutResult, inputFrameTime: frameTime)
             horizonAnalysisDebugLog("analyze no rotation detected")
             return
         }
 
-        analysisLock.lock()
-        analysisState.detectedRotationRadians = rotationRadians
-        analysisState.detectedRotationTime = frameTime
-        analysisState.didCompleteAnalysis = true
-        analysisLock.unlock()
+        analysisTransaction.complete(token: claim.token, outcome: .produced(rotationRadians), inputFrameTime: frameTime)
         horizonAnalysisDebugLog(String(
             format: "analyze stored correctionDeg=%.6f frameTime=%@ frame_ms=%.3f since_start_ms=%.3f",
             rotationRadians * 180 / Double.pi,
             String(describing: frameTime),
-            Self.elapsedMilliseconds(since: frameStartNanos),
-            analysisStartNanos.map(Self.elapsedMilliseconds) ?? 0.0
+            AUMonotonicClock.elapsedMilliseconds(since: frameStartNanos),
+            AUMonotonicClock.elapsedMilliseconds(since: claim.analysisStartNanos)
         ))
     }
 
     func cleanupAnalysis() throws {
-        analysisLock.lock()
-        let hadPendingRequest = analysisState.hasPendingRequest
-        let rotationRadians = analysisState.detectedRotationRadians
-        let rotationTime = analysisState.detectedRotationTime
-        let requestedTimelineTime = analysisState.requestedTimelineTime
-        let didCompleteAnalysis = analysisState.didCompleteAnalysis
-        let analysisStartNanos = analysisState.analysisStartNanos
-        analysisState.hasPendingRequest = false
-        analysisState.frameGate.reset()
-        analysisState.didCompleteAnalysis = false
-        analysisState.detectedRotationRadians = nil
-        analysisState.detectedRotationTime = .zero
-        analysisState.requestedTimelineTime = .invalid
-        analysisState.analysisStartNanos = nil
-        analysisLock.unlock()
-
-        guard hadPendingRequest else {
+        guard let snapshot = analysisTransaction.cleanup() else {
             horizonAnalysisDebugLog("cleanup ignored without pending request")
             return
         }
@@ -299,35 +234,23 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             return
         }
 
-        guard let rotationRadians else {
-            horizonAnalysisDebugLog("cleanup no rotation completed=\(didCompleteAnalysis) requestedTimelineTime=\(requestedTimelineTime) inputFrameTime=\(rotationTime)")
+        guard case .produced(let rotationRadians) = snapshot.outcome else {
+            horizonAnalysisDebugLog("cleanup no rotation requestedTimelineTime=\(snapshot.requestedTimelineTime) inputFrameTime=\(snapshot.inputFrameTime)")
             return
         }
-        guard requestedTimelineTime.isValid, requestedTimelineTime.isNumeric else {
-            horizonAnalysisDebugLog("cleanup invalid requested timeline time=\(requestedTimelineTime)")
+        guard snapshot.requestedTimelineTime.isValid, snapshot.requestedTimelineTime.isNumeric else {
+            horizonAnalysisDebugLog("cleanup invalid requested timeline time=\(snapshot.requestedTimelineTime)")
             return
         }
 
-        let result = settingAPI.setFloatValue(rotationRadians, toParameter: HorizonParam.rotation.rawValue, at: requestedTimelineTime)
+        let result = settingAPI.setFloatValue(rotationRadians, toParameter: HorizonParam.rotation.rawValue, at: snapshot.requestedTimelineTime)
         horizonAnalysisDebugLog(String(
             format: "cleanup wrote correctionDeg=%.6f writeTime=%@ result=%@ since_start_ms=%.3f",
             rotationRadians * 180 / Double.pi,
-            String(describing: requestedTimelineTime),
+            String(describing: snapshot.requestedTimelineTime),
             String(describing: result),
-            analysisStartNanos.map(Self.elapsedMilliseconds) ?? 0.0
+            AUMonotonicClock.elapsedMilliseconds(since: snapshot.analysisStartNanos)
         ))
-    }
-
-    private func resetPendingHorizonAnalysis() {
-        analysisLock.lock()
-        analysisState.hasPendingRequest = false
-        analysisState.frameGate.reset()
-        analysisState.didCompleteAnalysis = false
-        analysisState.detectedRotationRadians = nil
-        analysisState.detectedRotationTime = .zero
-        analysisState.requestedTimelineTime = .invalid
-        analysisState.analysisStartNanos = nil
-        analysisLock.unlock()
     }
 
     private func horizonAnalysisError(_ message: String) -> NSError {
@@ -369,8 +292,8 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     private func runGeoCalibVerifiers(_ frame: FxImageTile) -> GeoCalibVerifierRun? {
-        let totalStart = Self.nowNanos()
-        let grayscaleStart = Self.nowNanos()
+        let totalStart = AUMonotonicClock.nowNanos()
+        let grayscaleStart = AUMonotonicClock.nowNanos()
         guard let grayscaleImage = AnyUprightAnalysisImage.grayscaleImage(
             from: frame,
             maxDimension: Self.geoCalibVerifierMaxDimension,
@@ -378,19 +301,19 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         ) else {
             return nil
         }
-        let grayscaleMilliseconds = Self.elapsedMilliseconds(since: grayscaleStart)
+        let grayscaleMilliseconds = AUMonotonicClock.elapsedMilliseconds(since: grayscaleStart)
 
         var workerResults: [GeoCalibVerifierWorkerResult] = []
         let resultLock = NSLock()
         DispatchQueue.concurrentPerform(iterations: 2) { index in
-            let start = Self.nowNanos()
+            let start = AUMonotonicClock.nowNanos()
             let estimate: AUGeoCalibHorizonVerifierEstimate
             if index == 0 {
                 estimate = AUGeoCalibHorizonVerifiers.axisHough(in: grayscaleImage)
             } else {
                 estimate = AUGeoCalibHorizonVerifiers.gradientAxis(in: grayscaleImage)
             }
-            let milliseconds = Self.elapsedMilliseconds(since: start)
+            let milliseconds = AUMonotonicClock.elapsedMilliseconds(since: start)
             resultLock.lock()
             workerResults.append(GeoCalibVerifierWorkerResult(index: index, estimate: estimate, milliseconds: milliseconds))
             resultLock.unlock()
@@ -403,12 +326,12 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             grayscaleMilliseconds: grayscaleMilliseconds,
             axisHoughMilliseconds: workerResults.first(where: { $0.index == 0 })?.milliseconds,
             gradientAxisMilliseconds: workerResults.first(where: { $0.index == 1 })?.milliseconds,
-            totalMilliseconds: Self.elapsedMilliseconds(since: totalStart)
+            totalMilliseconds: AUMonotonicClock.elapsedMilliseconds(since: totalStart)
         )
     }
 
     private func analyzeGeoCalibHorizon(_ frame: FxImageTile) -> GeoCalibHorizonAnalysisOutcome {
-        let totalStart = Self.nowNanos()
+        let totalStart = AUMonotonicClock.nowNanos()
 
         do {
             let preprocessRun = try preprocessGeoCalibInput(frame)
@@ -438,25 +361,25 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 logger: Self.horizonAnalysisDebugLog
             )
             coreMLRun = run
-            let optimizerStart = Self.nowNanos()
+            let optimizerStart = AUMonotonicClock.nowNanos()
             var result = try AUGeoCalibHorizonDetector.detect(
                 preprocessedImage: preprocessed,
                 neuralOutput: run.output,
                 verifierEstimates: []
             )
-            optimizerGateMilliseconds = Self.elapsedMilliseconds(since: optimizerStart)
+            optimizerGateMilliseconds = AUMonotonicClock.elapsedMilliseconds(since: optimizerStart)
 
             var verifierRun: GeoCalibVerifierRun?
             var verifierGateMilliseconds: Double?
             if result.accepted {
                 verifierRun = runGeoCalibVerifiers(frame)
                 if let verifierRun {
-                    let gateStart = Self.nowNanos()
+                    let gateStart = AUMonotonicClock.nowNanos()
                     result = AUGeoCalibHorizonDetector.applyVerifierGate(
                         to: result,
                         verifierEstimates: verifierRun.estimates
                     )
-                    verifierGateMilliseconds = Self.elapsedMilliseconds(since: gateStart)
+                    verifierGateMilliseconds = AUMonotonicClock.elapsedMilliseconds(since: gateStart)
                 } else {
                     horizonAnalysisDebugLog("geocalib verifier skipped: unable to render grayscale frame")
                 }
@@ -486,7 +409,7 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 "axis_hough_ms=\(Self.formatMilliseconds(verifierRun?.axisHoughMilliseconds))",
                 "gradient_axis_ms=\(Self.formatMilliseconds(verifierRun?.gradientAxisMilliseconds))",
                 "verifier_gate_ms=\(Self.formatMilliseconds(verifierGateMilliseconds))",
-                String(format: "total_ms=%.3f", Self.elapsedMilliseconds(since: totalStart)),
+                String(format: "total_ms=%.3f", AUMonotonicClock.elapsedMilliseconds(since: totalStart)),
             ]
             horizonAnalysisDebugLog("geocalib timing \(timingParts.joined(separator: " "))")
             horizonAnalysisDebugLog(String(
@@ -511,7 +434,7 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         let sourceHeight = max(1, Int(bounds.top - bounds.bottom))
         let shapeSpec = try Self.geoCalibCoreMLModelShape(forWidth: sourceWidth, height: sourceHeight)
 
-        let directStart = Self.nowNanos()
+        let directStart = AUMonotonicClock.nowNanos()
         do {
             let preprocessed = try AUGeoCalibDirectImagePreprocessor.preprocessFrame(
                 frame,
@@ -524,13 +447,13 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 inputWidth: sourceWidth,
                 inputHeight: sourceHeight,
                 renderMilliseconds: nil,
-                preprocessMilliseconds: Self.elapsedMilliseconds(since: directStart)
+                preprocessMilliseconds: AUMonotonicClock.elapsedMilliseconds(since: directStart)
             )
         } catch {
             horizonAnalysisDebugLog("geocalib direct preprocess failed; falling back to CI/CPU error=\(String(describing: error))")
         }
 
-        let renderStart = Self.nowNanos()
+        let renderStart = AUMonotonicClock.nowNanos()
         guard let rgbImage = AnyUprightAnalysisImage.rgbFloatImage(
             from: frame,
             maxDimension: Self.geoCalibAnalysisMaxDimension,
@@ -538,9 +461,9 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         ) else {
             throw AUGeoCalibHorizonDetectorError.invalidImage("unable to render RGB frame")
         }
-        let renderMilliseconds = Self.elapsedMilliseconds(since: renderStart)
+        let renderMilliseconds = AUMonotonicClock.elapsedMilliseconds(since: renderStart)
 
-        let preprocessStart = Self.nowNanos()
+        let preprocessStart = AUMonotonicClock.nowNanos()
         let preprocessed = try AUGeoCalibImagePreprocessor.preprocessRGB(
             rgbImage.pixelsNCHW,
             width: rgbImage.width,
@@ -554,7 +477,7 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             inputWidth: rgbImage.width,
             inputHeight: rgbImage.height,
             renderMilliseconds: renderMilliseconds,
-            preprocessMilliseconds: Self.elapsedMilliseconds(since: preprocessStart)
+            preprocessMilliseconds: AUMonotonicClock.elapsedMilliseconds(since: preprocessStart)
         )
     }
 
@@ -636,14 +559,6 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         try AUGeoCalibInputShapeSpec.closest(toWidth: width, height: height, in: geoCalibCoreMLModelShapes)
     }
 
-    private static func nowNanos() -> UInt64 {
-        DispatchTime.now().uptimeNanoseconds
-    }
-
-    private static func elapsedMilliseconds(since startNanos: UInt64) -> Double {
-        Double(nowNanos() - startNanos) / 1_000_000.0
-    }
-
     private static func formatMilliseconds(_ value: Double?) -> String {
         guard let value else {
             return "nil"
@@ -656,25 +571,6 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     private static func horizonAnalysisDebugLog(_ message: String) {
-        guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightGeoCalib.debug") else {
-            return
-        }
-        let logPath = "/tmp/anyupright-geocalib-debug.log"
-        let timestamp = String(format: "%.3f", Date().timeIntervalSince1970)
-        guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else {
-            return
-        }
-
-        geoCalibLogLock.lock()
-        defer { geoCalibLogLock.unlock() }
-
-        if FileManager.default.fileExists(atPath: logPath),
-           let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-            try? handle.close()
-        } else {
-            try? data.write(to: URL(fileURLWithPath: logPath))
-        }
+        AUAnalysisDiagnostics.horizon.log(message)
     }
 }

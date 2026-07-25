@@ -121,9 +121,13 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
 
 @objc(AnyUprightInnerStretchPlugIn)
 class AnyUprightInnerStretchPlugIn: AnyUprightStretchModePlugIn, FxAnalyzer {
-    private let analysisLock = NSLock()
+    private struct AnalysisResult {
+        let primitives: InnerStretchDetectedSourcePrimitives
+        let sourceSize: AUSize
+    }
+
     private let analysisContext = CIContext(options: nil)
-    private var analysisState = InnerStretchAnalysisScratchState()
+    private let analysisTransaction = AUFxAnalysisTransaction<Void, AnalysisResult>()
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         paramAPI.addPushButton(
@@ -144,82 +148,129 @@ class AnyUprightInnerStretchPlugIn: AnyUprightStretchModePlugIn, FxAnalyzer {
     }
 
     private func startInnerStretchDetection(at time: CMTime) {
-        analysisLock.lock()
-        analysisState.hasPendingInnerStretchDetection = true
-        analysisState.detectedSourcePrimitives = InnerStretchDetectedSourcePrimitives()
-        analysisState.requestedAnalysisTime = time.isValid && time.isNumeric ? time : currentParameterTime()
-        analysisLock.unlock()
-        stretchAnalysisDebugLog("start requested=\(analysisState.requestedAnalysisTime)")
-
         guard let analysisAPI = _apiManager.api(for: FxAnalysisAPI.self) as? FxAnalysisAPI else {
             stretchAnalysisDebugLog("start missing FxAnalysisAPI")
             return
         }
-
-        try? analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU)
+        let startNanos = AUMonotonicClock.nowNanos()
+        do {
+            let disposition = try analysisTransaction.start(
+                request: (),
+                requestedTimelineTime: time,
+                analysisStartNanos: startNanos,
+                hostIsBusy: {
+                    let state = analysisAPI.analysisStateForEffect()
+                    return state == kFxAnalysisState_AnalysisRequested || state == kFxAnalysisState_AnalysisStarted
+                },
+                startForwardAnalysis: {
+                    stretchAnalysisDebugLog("start requested=\(time)")
+                    try analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU)
+                }
+            )
+            switch disposition {
+            case .started:
+                stretchAnalysisDebugLog(String(format: "start returned elapsed_ms=%.3f", AUMonotonicClock.elapsedMilliseconds(since: startNanos)))
+            case .localBusy:
+                stretchAnalysisDebugLog("start ignored busy local=true")
+            case .hostBusy:
+                stretchAnalysisDebugLog("start ignored busy host=true")
+            case .invalidTimelineTime:
+                stretchAnalysisDebugLog("start invalid timeline time=\(time)")
+            }
+        } catch {
+            stretchAnalysisDebugLog("start error=\(String(describing: error))")
+        }
     }
 
     func desiredAnalysisTimeRange(_ desiredRange: UnsafeMutablePointer<CMTimeRange>, forInputWith inputTimeRange: CMTimeRange) throws {
-        analysisLock.lock()
-        let requestedTime = analysisState.requestedAnalysisTime
-        analysisLock.unlock()
-        desiredRange.pointee = singleFrameAnalysisRange(near: requestedTime, within: inputTimeRange)
+        guard let timingAPI = _apiManager.api(for: FxTimingAPI_v4.self) as? FxTimingAPI_v4 else {
+            analysisTransaction.cancelCurrentRequest()
+            throw innerStretchAnalysisError("FxTimingAPI_v4 is unavailable")
+        }
+        do {
+            let details = try analysisTransaction.desiredRange(
+                within: inputTimeRange,
+                inputTimeFromTimeline: { timelineTime in
+                    var inputTime = CMTime.invalid
+                    timingAPI.inputTime(&inputTime, fromTimelineTime: timelineTime)
+                    return inputTime
+                },
+                sampleDuration: {
+                    var duration = CMTime.invalid
+                    timingAPI.sampleDuration(&duration)
+                    return duration
+                }
+            )
+            if details.usedFallbackSampleDuration {
+                stretchAnalysisDebugLog("desired range invalid sample_duration=\(details.sampleDuration); using 0.05s fallback")
+            }
+            desiredRange.pointee = details.range
+            stretchAnalysisDebugLog("desired range timeline=\(details.requestedTimelineTime) input=\(details.inputTime) sample_duration=\(details.sampleDuration) start=\(details.range.start) duration=\(details.range.duration)")
+        } catch {
+            throw innerStretchAnalysisError(String(describing: error))
+        }
     }
 
     func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
-        analysisLock.lock()
-        analysisState.detectedSourcePrimitives = InnerStretchDetectedSourcePrimitives()
-        analysisState.detectedSourceSize = AUSize(width: 1.0, height: 1.0)
-        analysisState.detectedInnerStretchTime = analysisRange.start
-        analysisLock.unlock()
+        _ = analysisTransaction.setupAnalysis(range: analysisRange)
+        stretchAnalysisDebugLog("setup range_start=\(analysisRange.start) duration=\(analysisRange.duration) frame_duration=\(frameDuration)")
     }
 
     func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
-        analysisLock.lock()
-        let alreadyDetected = !analysisState.detectedSourcePrimitives.edges.isEmpty || !analysisState.detectedSourcePrimitives.corners.isEmpty
-        analysisLock.unlock()
-
-        if alreadyDetected {
+        let bounds = frame.imagePixelBounds
+        guard let claim = analysisTransaction.claimFrame(
+            hasIOSurface: frame.ioSurface != nil,
+            hasNonEmptyPixelBounds: bounds.right > bounds.left && bounds.top > bounds.bottom
+        ) else {
+            stretchAnalysisDebugLog("analyze skipped frame=\(frameTime) callback=\(analysisTransaction.receivedFrameCount)")
             return
         }
 
         guard let image = AnyUprightAnalysisImage.grayscaleImage(from: frame, maxDimension: 540, context: analysisContext) else {
-            stretchAnalysisDebugLog("analyze no grayscale frame")
+            analysisTransaction.relinquishFrame(token: claim.token)
+            stretchAnalysisDebugLog("analyze no grayscale frame callback=\(claim.callbackCount); waiting for next callback")
             return
         }
         let size = AUSize(width: Double(image.width), height: Double(image.height))
         let primitives = detectedSourcePrimitives(in: image)
         stretchAnalysisDebugLog("analyze image=\(image.width)x\(image.height) edges=\(primitives.edges.count) corners=\(primitives.corners.count)")
 
-        analysisLock.lock()
-        analysisState.detectedSourcePrimitives = primitives
-        analysisState.detectedSourceSize = size
-        analysisState.detectedInnerStretchTime = frameTime
-        analysisLock.unlock()
+        analysisTransaction.complete(
+            token: claim.token,
+            outcome: .produced(AnalysisResult(primitives: primitives, sourceSize: size)),
+            inputFrameTime: frameTime
+        )
     }
 
     func cleanupAnalysis() throws {
-        analysisLock.lock()
-        let pending = analysisState.hasPendingInnerStretchDetection
-        let primitives = analysisState.detectedSourcePrimitives
-        let detectedSize = analysisState.detectedSourceSize
-        let detectedTime = analysisState.detectedInnerStretchTime
-        let requestedTime = analysisState.requestedAnalysisTime
-        analysisState.hasPendingInnerStretchDetection = false
-        analysisLock.unlock()
-
-        let writeTime = parameterWriteTime(preferred: requestedTime, fallback: detectedTime)
-        guard pending,
+        guard let snapshot = analysisTransaction.cleanup() else {
+            stretchAnalysisDebugLog("cleanup ignored without pending request")
+            return
+        }
+        guard case .produced(let result) = snapshot.outcome else {
+            stretchAnalysisDebugLog("cleanup preserved existing detections callback_count=\(snapshot.callbackCount)")
+            return
+        }
+        guard snapshot.requestedTimelineTime.isValid,
+              snapshot.requestedTimelineTime.isNumeric,
               let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
             return
         }
 
         performParameterAction {
-            settingAPI.setBoolValue(true, toParameter: StretchParam.showCornerAdjuster.rawValue, at: writeTime)
-            settingAPI.setBoolValue(true, toParameter: StretchParam.chooseFromDetections.rawValue, at: writeTime)
-            writeInnerStretchDetectionPrimitives(primitives, size: detectedSize, settingAPI: settingAPI, time: writeTime)
+            settingAPI.setBoolValue(true, toParameter: StretchParam.showCornerAdjuster.rawValue, at: snapshot.requestedTimelineTime)
+            settingAPI.setBoolValue(true, toParameter: StretchParam.chooseFromDetections.rawValue, at: snapshot.requestedTimelineTime)
+            writeInnerStretchDetectionPrimitives(result.primitives, size: result.sourceSize, settingAPI: settingAPI, time: snapshot.requestedTimelineTime)
         }
-        stretchAnalysisDebugLog("cleanup pending=\(pending) writeTime=\(writeTime) edges=\(primitives.edges.count) corners=\(primitives.corners.count)")
+        stretchAnalysisDebugLog("cleanup writeTime=\(snapshot.requestedTimelineTime) edges=\(result.primitives.edges.count) corners=\(result.primitives.corners.count)")
+    }
+
+    private func innerStretchAnalysisError(_ message: String) -> NSError {
+        NSError(
+            domain: "AnyUpright.FxAnalysis",
+            code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "Inner Stretch analysis: \(message)"]
+        )
     }
 
     private func detectedSourcePrimitives(in image: AUGrayscaleImage) -> InnerStretchDetectedSourcePrimitives {
@@ -325,25 +376,7 @@ class AnyUprightInnerStretchPlugIn: AnyUprightStretchModePlugIn, FxAnalyzer {
     }
 
     private func stretchAnalysisDebugLog(_ message: String) {
-        let flagPath = "/tmp/AnyUprightStretchOSC.debug"
-        guard FileManager.default.fileExists(atPath: flagPath) else {
-            return
-        }
-
-        let logPath = "/tmp/AnyUprightStretchOSC.log"
-        let line = "[\(Date().timeIntervalSince1970)] analysis \(message)\n"
-        guard let data = line.data(using: .utf8) else {
-            return
-        }
-
-        if FileManager.default.fileExists(atPath: logPath),
-           let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: logPath)) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            _ = try? handle.write(contentsOf: data)
-        } else {
-            try? data.write(to: URL(fileURLWithPath: logPath))
-        }
+        AUAnalysisDiagnostics.innerStretch.log(message)
     }
 }
 

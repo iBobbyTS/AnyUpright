@@ -29,83 +29,18 @@ struct AUGeoCalibCoreMLModelSpec: Equatable {
     var modelURL: URL
 }
 
-struct AUGeoCalibCoreMLRunResult {
-    var output: AUGeoCalibNeuralOutput
-    var cacheHit: Bool
-    var loadMilliseconds: Double
-    var predictionMilliseconds: Double
-    var totalMilliseconds: Double
-}
-
-struct AUGeoCalibCoreMLCacheExpiryEvent {
-    var deadlineNanos: UInt64
-    var analysisCountInWindow: Int
-    var windowNanos: UInt64
-}
-
-struct AUGeoCalibCoreMLCacheExpiryPolicy {
-    static let pluginIdleNanoseconds: UInt64 = 15_000_000_000
-    static let singleAnalysisNanoseconds: UInt64 = 30_000_000_000
-    static let repeatedAnalysisNanoseconds: UInt64 = 60_000_000_000
-
-    private(set) var unloadDeadlineNanos: UInt64?
-    private(set) var analysisWindowDeadlineNanos: UInt64?
-    private(set) var analysisCountInWindow = 0
-
-    mutating func markPluginAdded(at nowNanos: UInt64) -> UInt64 {
-        let deadline = nowNanos + Self.pluginIdleNanoseconds
-        extendUnloadDeadline(to: deadline)
-        return unloadDeadlineNanos ?? deadline
-    }
-
-    mutating func markAnalysisStarted(at nowNanos: UInt64) -> AUGeoCalibCoreMLCacheExpiryEvent {
-        if let windowDeadline = analysisWindowDeadlineNanos, nowNanos <= windowDeadline {
-            analysisCountInWindow += 1
-        } else {
-            analysisCountInWindow = 1
-            analysisWindowDeadlineNanos = nowNanos + Self.singleAnalysisNanoseconds
-        }
-
-        let retentionNanos = analysisCountInWindow >= 2 ? Self.repeatedAnalysisNanoseconds : Self.singleAnalysisNanoseconds
-        let deadline = nowNanos + retentionNanos
-        extendUnloadDeadline(to: deadline)
-        return AUGeoCalibCoreMLCacheExpiryEvent(
-            deadlineNanos: unloadDeadlineNanos ?? deadline,
-            analysisCountInWindow: analysisCountInWindow,
-            windowNanos: retentionNanos
-        )
-    }
-
-    mutating func didUnload() {
-        unloadDeadlineNanos = nil
-        analysisWindowDeadlineNanos = nil
-        analysisCountInWindow = 0
-    }
-
-    private mutating func extendUnloadDeadline(to deadline: UInt64) {
-        if let current = unloadDeadlineNanos, current > deadline {
-            return
-        }
-        unloadDeadlineNanos = deadline
-    }
-}
+typealias AUGeoCalibCoreMLRunResult = AUCoreMLSessionLifecycleRunResult<AUGeoCalibNeuralOutput>
 
 final class AUGeoCalibCoreMLSharedCache {
     static let shared = AUGeoCalibCoreMLSharedCache()
 
     typealias Logger = (String) -> Void
+    private typealias LifecycleCache = AUCoreMLSessionLifecycleCache<[Int], AUGeoCalibCoreMLNeuralInferenceSession>
 
-    private final class ShapeExpiryState {
-        var policy = AUGeoCalibCoreMLCacheExpiryPolicy()
-        var timer: DispatchSourceTimer?
-        var generation: UInt64 = 0
-    }
-
-    private let queue = DispatchQueue(label: "com.anyupright.geocalib.coreml.shared-cache")
+    private let configurationLock = NSLock()
     private var modelSpecsByShape: [[Int]: AUGeoCalibCoreMLModelSpec] = [:]
-    private var sessionsByShape: [[Int]: AUGeoCalibCoreMLNeuralInferenceSession] = [:]
     private var computeUnits: MLComputeUnits = .all
-    private var expiryStatesByShape: [[Int]: ShapeExpiryState] = [:]
+    private var lifecycleCache: LifecycleCache?
 
     private init() {}
 
@@ -124,81 +59,56 @@ final class AUGeoCalibCoreMLSharedCache {
             byShape[spec.inputShape] = spec
         }
 
-        queue.sync {
-            if modelSpecsByShape == byShape, self.computeUnits == computeUnits {
-                return
-            }
-            for state in expiryStatesByShape.values {
-                state.timer?.cancel()
-            }
-            sessionsByShape.removeAll()
-            expiryStatesByShape.removeAll()
-            modelSpecsByShape = byShape
-            self.computeUnits = computeUnits
+        configurationLock.lock()
+        defer { configurationLock.unlock() }
+        if modelSpecsByShape == byShape,
+           self.computeUnits == computeUnits,
+           lifecycleCache != nil {
+            return
         }
+
+        lifecycleCache = LifecycleCache(
+            label: "geocalib coreml cache",
+            keyDescription: geoCalibShapeDescription,
+            loadSession: { shape in
+                guard let spec = byShape[shape] else {
+                    let supported = byShape.keys
+                        .map(geoCalibShapeDescription)
+                        .sorted()
+                        .joined(separator: ", ")
+                    throw AUGeoCalibCoreMLNeuralError.invalidInput(
+                        "no Core ML model spec for input shape \(geoCalibShapeDescription(shape)); supported shapes: \(supported)"
+                    )
+                }
+                let session = try AUGeoCalibCoreMLNeuralInferenceSession(
+                    modelURL: spec.modelURL,
+                    computeUnits: computeUnits
+                )
+                guard session.supportedInputShape == shape else {
+                    throw AUGeoCalibCoreMLNeuralError.invalidModel(
+                        "\(spec.modelURL.path) supports \(geoCalibShapeDescription(session.supportedInputShape)), expected \(geoCalibShapeDescription(shape))"
+                    )
+                }
+                return session
+            },
+            warmSession: { try $0.warmUp() },
+            logger: { _ in }
+        )
+        modelSpecsByShape = byShape
+        self.computeUnits = computeUnits
     }
 
     func markPluginAdded(prewarmShape: [Int]?, logger: @escaping Logger) {
-        queue.async { [weak self] in
-            guard let self else {
-                return
-            }
-            let now = geoCalibNowNanos()
-            guard let prewarmShape else {
-                logger("geocalib coreml cache plugin_added no_prewarm_shape cached_shapes=\(self.cachedShapeSummaryLocked())")
-                return
-            }
-            guard self.modelSpecsByShape[prewarmShape] != nil else {
-                logger("geocalib coreml cache plugin_added unsupported_prewarm_shape=\(geoCalibShapeDescription(prewarmShape)) cached_shapes=\(self.cachedShapeSummaryLocked())")
-                return
-            }
-
-            let state = self.expiryStateLocked(for: prewarmShape)
-            let deadline = state.policy.markPluginAdded(at: now)
-            self.scheduleExpirationLocked(
-                shape: prewarmShape,
-                state: state,
-                deadlineNanos: deadline,
-                reason: "plugin_added",
-                logger: logger
-            )
-            logger(String(
-                format: "geocalib coreml cache plugin_added shape=%@ expiry_s=%.3f cached_shapes=%@",
-                geoCalibShapeDescription(prewarmShape),
-                Double(deadline - now) / 1_000_000_000.0,
-                self.cachedShapeSummaryLocked()
-            ))
-            self.prewarmLocked(shape: prewarmShape, logger: logger)
+        guard let prewarmShape else {
+            logger("geocalib coreml cache plugin_added no_prewarm_shape")
+            return
         }
-    }
-
-    func markAnalysisStarted(inputShape: [Int], logger: @escaping Logger) {
-        queue.async { [weak self] in
-            guard let self else {
-                return
-            }
-            guard self.modelSpecsByShape[inputShape] != nil else {
-                logger("geocalib coreml cache analysis_started unsupported_shape=\(geoCalibShapeDescription(inputShape)) cached_shapes=\(self.cachedShapeSummaryLocked())")
-                return
-            }
-            let now = geoCalibNowNanos()
-            let state = self.expiryStateLocked(for: inputShape)
-            let event = state.policy.markAnalysisStarted(at: now)
-            self.scheduleExpirationLocked(
-                shape: inputShape,
-                state: state,
-                deadlineNanos: event.deadlineNanos,
-                reason: "analysis_started",
-                logger: logger
-            )
-            logger(String(
-                format: "geocalib coreml cache analysis_started shape=%@ count_in_window=%d window_s=%.0f expiry_s=%.3f cached_shapes=%@",
-                geoCalibShapeDescription(inputShape),
-                event.analysisCountInWindow,
-                Double(event.windowNanos) / 1_000_000_000.0,
-                Double(event.deadlineNanos - now) / 1_000_000_000.0,
-                self.cachedShapeSummaryLocked()
-            ))
+        do {
+            let cache = try configuredCache(for: prewarmShape)
+            cache.updateLogger(logger)
+            cache.prewarmAfterPluginAdded(key: prewarmShape)
+        } catch {
+            logger("geocalib coreml cache plugin_added unavailable shape=\(geoCalibShapeDescription(prewarmShape)) error=\(String(describing: error))")
         }
     }
 
@@ -207,79 +117,25 @@ final class AUGeoCalibCoreMLSharedCache {
         inputShape: [Int],
         logger: @escaping Logger
     ) throws -> AUGeoCalibCoreMLRunResult {
-        let totalStart = geoCalibNowNanos()
-        var cacheHit = false
-        var loadMilliseconds = 0.0
-
-        let session = try queue.sync { () throws -> AUGeoCalibCoreMLNeuralInferenceSession in
-            if let session = sessionsByShape[inputShape] {
-                cacheHit = true
-                return session
-            }
-            let loadStart = geoCalibNowNanos()
-            let session = try loadSessionLocked(shape: inputShape)
-            loadMilliseconds = geoCalibElapsedMilliseconds(since: loadStart)
-            logger(String(
-                format: "geocalib coreml cache loaded shape=%@ load_ms=%.3f model=%@",
-                geoCalibShapeDescription(inputShape),
-                loadMilliseconds,
-                modelSpecsByShape[inputShape]?.modelURL.lastPathComponent ?? "<unknown>"
-            ))
-            return session
-        }
-
-        let predictionStart = geoCalibNowNanos()
-        let output = try session.run(inputRGB: inputRGB, inputShape: inputShape)
-        let predictionMilliseconds = geoCalibElapsedMilliseconds(since: predictionStart)
-        let totalMilliseconds = geoCalibElapsedMilliseconds(since: totalStart)
-        logger(String(
-            format: "geocalib coreml cache run shape=%@ cache_hit=%@ load_ms=%.3f predict_ms=%.3f total_ms=%.3f",
-            geoCalibShapeDescription(inputShape),
-            cacheHit ? "true" : "false",
-            loadMilliseconds,
-            predictionMilliseconds,
-            totalMilliseconds
-        ))
-        return AUGeoCalibCoreMLRunResult(
-            output: output,
-            cacheHit: cacheHit,
-            loadMilliseconds: loadMilliseconds,
-            predictionMilliseconds: predictionMilliseconds,
-            totalMilliseconds: totalMilliseconds
-        )
-    }
-
-    private func prewarmLocked(shape: [Int], logger: Logger) {
-        let totalStart = geoCalibNowNanos()
-        do {
-            let session: AUGeoCalibCoreMLNeuralInferenceSession
-            var loadMilliseconds = 0.0
-            if let cached = sessionsByShape[shape] {
-                session = cached
-            } else {
-                let loadStart = geoCalibNowNanos()
-                session = try loadSessionLocked(shape: shape)
-                loadMilliseconds = geoCalibElapsedMilliseconds(since: loadStart)
-            }
-
-            let warmStart = geoCalibNowNanos()
-            try session.warmUp()
-            let warmMilliseconds = geoCalibElapsedMilliseconds(since: warmStart)
-            logger(String(
-                format: "geocalib coreml cache prewarm ok shape=%@ load_ms=%.3f warm_ms=%.3f total_ms=%.3f",
-                geoCalibShapeDescription(shape),
-                loadMilliseconds,
-                warmMilliseconds,
-                geoCalibElapsedMilliseconds(since: totalStart)
-            ))
-        } catch {
-            logger("geocalib coreml cache prewarm failed shape=\(geoCalibShapeDescription(shape)) error=\(String(describing: error))")
+        let cache = try configuredCache(for: inputShape)
+        cache.updateLogger(logger)
+        return try cache.withSessionForAnalysis(key: inputShape) { session in
+            try session.run(inputRGB: inputRGB, inputShape: inputShape)
         }
     }
 
-    private func loadSessionLocked(shape: [Int]) throws -> AUGeoCalibCoreMLNeuralInferenceSession {
-        guard let spec = modelSpecsByShape[shape] else {
-            let supported = modelSpecsByShape.keys
+    private func configuredCache(for shape: [Int]) throws -> LifecycleCache {
+        configurationLock.lock()
+        let cache = lifecycleCache
+        let supportedShapes = modelSpecsByShape.keys
+        let supportsShape = modelSpecsByShape[shape] != nil
+        configurationLock.unlock()
+
+        guard let cache else {
+            throw AUGeoCalibCoreMLNeuralError.invalidModel("Core ML shared cache is not configured")
+        }
+        guard supportsShape else {
+            let supported = supportedShapes
                 .map(geoCalibShapeDescription)
                 .sorted()
                 .joined(separator: ", ")
@@ -287,87 +143,7 @@ final class AUGeoCalibCoreMLSharedCache {
                 "no Core ML model spec for input shape \(geoCalibShapeDescription(shape)); supported shapes: \(supported)"
             )
         }
-        let session = try AUGeoCalibCoreMLNeuralInferenceSession(
-            modelURL: spec.modelURL,
-            computeUnits: computeUnits
-        )
-        guard session.supportedInputShape == shape else {
-            throw AUGeoCalibCoreMLNeuralError.invalidModel(
-                "\(spec.modelURL.path) supports \(geoCalibShapeDescription(session.supportedInputShape)), expected \(geoCalibShapeDescription(shape))"
-            )
-        }
-        sessionsByShape[shape] = session
-        return session
-    }
-
-    private func expiryStateLocked(for shape: [Int]) -> ShapeExpiryState {
-        if let state = expiryStatesByShape[shape] {
-            return state
-        }
-        let state = ShapeExpiryState()
-        expiryStatesByShape[shape] = state
-        return state
-    }
-
-    private func scheduleExpirationLocked(
-        shape: [Int],
-        state: ShapeExpiryState,
-        deadlineNanos: UInt64,
-        reason: String,
-        logger: @escaping Logger
-    ) {
-        state.generation &+= 1
-        let generation = state.generation
-        state.timer?.cancel()
-
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        state.timer = timer
-        let now = geoCalibNowNanos()
-        let delayNanos = deadlineNanos > now ? deadlineNanos - now : 0
-        timer.schedule(deadline: .now() + .nanoseconds(Int(delayNanos)))
-        timer.setEventHandler { [weak self] in
-            self?.expireIfDueLocked(shape: shape, generation: generation, logger: logger)
-        }
-        timer.resume()
-        logger(String(
-            format: "geocalib coreml cache expiry_scheduled shape=%@ reason=%@ delay_s=%.3f generation=%llu",
-            geoCalibShapeDescription(shape),
-            reason,
-            Double(delayNanos) / 1_000_000_000.0,
-            generation
-        ))
-    }
-
-    private func expireIfDueLocked(shape: [Int], generation: UInt64, logger: @escaping Logger) {
-        guard let state = expiryStatesByShape[shape],
-              generation == state.generation,
-              let deadline = state.policy.unloadDeadlineNanos else {
-            return
-        }
-
-        let now = geoCalibNowNanos()
-        guard now >= deadline else {
-            scheduleExpirationLocked(
-                shape: shape,
-                state: state,
-                deadlineNanos: deadline,
-                reason: "deadline_adjusted",
-                logger: logger
-            )
-            return
-        }
-
-        let hadSession = sessionsByShape.removeValue(forKey: shape) != nil
-        state.timer?.cancel()
-        state.timer = nil
-        state.policy.didUnload()
-        expiryStatesByShape.removeValue(forKey: shape)
-        logger("geocalib coreml cache unloaded shape=\(geoCalibShapeDescription(shape)) count=\(hadSession ? 1 : 0) cached_shapes=\(cachedShapeSummaryLocked())")
-    }
-
-    private func cachedShapeSummaryLocked() -> String {
-        let shapes = sessionsByShape.keys.map(geoCalibShapeDescription).sorted()
-        return shapes.isEmpty ? "[]" : "[\(shapes.joined(separator: ","))]"
+        return cache
     }
 }
 
@@ -597,12 +373,4 @@ private func geoCalibShapeDescription(_ shape: [Int]) -> String {
 
 private func coreMLProduct(_ shape: [Int]) -> Int {
     shape.reduce(1, *)
-}
-
-private func geoCalibNowNanos() -> UInt64 {
-    DispatchTime.now().uptimeNanoseconds
-}
-
-private func geoCalibElapsedMilliseconds(since startNanos: UInt64) -> Double {
-    Double(geoCalibNowNanos() - startNanos) / 1_000_000.0
 }

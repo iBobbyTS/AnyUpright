@@ -312,7 +312,6 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 horizonAnalysisDebugLog("geocalib coreml unavailable: no configured model resources")
                 return .unavailable
             }
-            markGeoCalibCoreMLAnalysisStarted(inputShape: preprocessed.inputShape)
             horizonAnalysisDebugLog("geocalib coreml shape=\(preprocessed.inputShape)")
             let run = try AUGeoCalibCoreMLSharedCache.shared.run(
                 inputRGB: preprocessed.inputRGBNCHW,
@@ -454,13 +453,6 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         } else {
             horizonAnalysisDebugLog("geocalib coreml prewarm skipped: input size unavailable at plugin add")
         }
-    }
-
-    private func markGeoCalibCoreMLAnalysisStarted(inputShape: [Int]) {
-        guard configureGeoCalibCoreMLCacheIfAvailable() else {
-            return
-        }
-        AUGeoCalibCoreMLSharedCache.shared.markAnalysisStarted(inputShape: inputShape, logger: Self.horizonAnalysisDebugLog)
     }
 
     private func configureGeoCalibCoreMLCacheIfAvailable() -> Bool {

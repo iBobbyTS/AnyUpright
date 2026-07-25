@@ -30,9 +30,15 @@ private final class AUScaleLSDResourceAnchor: NSObject {}
 enum AnyUprightScaleLSDDetector {
     private static let inputSize = 512
     private static let debugLogLock = NSLock()
-    private static let sessionLock = NSLock()
-    private static var cachedModelURL: URL?
-    private static var cachedSession: AUScaleLSDCoreMLSession?
+
+    static func prepareCoreMLCacheForPluginAdd() {
+        do {
+            let cache = try configuredCache()
+            try cache.prewarmAfterPluginAdded(logger: debugLog)
+        } catch {
+            debugLog("scalelsd_prewarm_unavailable error=\(String(describing: error))")
+        }
+    }
 
     static func detectCandidates(
         in frame: FxImageTile,
@@ -55,13 +61,8 @@ enum AnyUprightScaleLSDDetector {
         }
         let preprocessMS = elapsedMilliseconds(since: preprocessStart)
 
-        let sessionStart = nowNanos()
-        let inferenceSession = try session()
-        let sessionMS = elapsedMilliseconds(since: sessionStart)
-
-        let inferenceStart = nowNanos()
-        let dense = try inferenceSession.run(inputNCHW: input)
-        let inferenceMS = elapsedMilliseconds(since: inferenceStart)
+        let coreMLRun = try configuredCache().run(inputNCHW: input, logger: debugLog)
+        let dense = coreMLRun.output
 
         let decodeStart = nowNanos()
         let lines = try AnyUprightScaleLSDPostprocessor.decode(
@@ -82,11 +83,13 @@ enum AnyUprightScaleLSDDetector {
         let candidatesMS = elapsedMilliseconds(since: candidatesStart)
         debugLog(
             String(
-                format: "scalelsd_stages render_ms=%.3f preprocess_ms=%.3f session_ms=%.3f inference_ms=%.3f decode_ms=%.3f candidates_ms=%.3f lines=%d candidates=%d total_ms=%.3f",
+                format: "scalelsd_stages render_ms=%.3f preprocess_ms=%.3f coreml_cache_hit=%@ coreml_load_ms=%.3f coreml_predict_ms=%.3f coreml_total_ms=%.3f decode_ms=%.3f candidates_ms=%.3f lines=%d candidates=%d total_ms=%.3f",
                 renderMS,
                 preprocessMS,
-                sessionMS,
-                inferenceMS,
+                coreMLRun.cacheHit ? "true" : "false",
+                coreMLRun.loadMilliseconds,
+                coreMLRun.predictionMilliseconds,
+                coreMLRun.totalMilliseconds,
                 decodeMS,
                 candidatesMS,
                 lines.count,
@@ -97,17 +100,11 @@ enum AnyUprightScaleLSDDetector {
         return ranked
     }
 
-    private static func session() throws -> AUScaleLSDCoreMLSession {
+    private static func configuredCache() throws -> AUScaleLSDCoreMLSharedCache {
         let modelURL = try resolvedModelURL()
-        sessionLock.lock()
-        defer { sessionLock.unlock() }
-        if let cachedSession, cachedModelURL == modelURL {
-            return cachedSession
-        }
-        let session = try AUScaleLSDCoreMLSession(modelURL: modelURL, computeUnits: .all)
-        cachedModelURL = modelURL
-        cachedSession = session
-        return session
+        let cache = AUScaleLSDCoreMLSharedCache.shared
+        cache.configure(modelURL: modelURL, computeUnits: .all)
+        return cache
     }
 
     private static func resolvedModelURL() throws -> URL {

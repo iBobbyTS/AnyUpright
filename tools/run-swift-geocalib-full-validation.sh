@@ -8,6 +8,7 @@ BINARY="${TMPDIR:-/tmp}/AnyUprightSwiftGeoCalibFullValidation"
 xcrun swiftc -O \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightGeometry.swift" \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightLineDetection.swift" \
+  "$REPO_ROOT/AnyUpright/Plugin/AnyUprightCoreMLSessionLifecycle.swift" \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightGeoCalibNeuralOutput.swift" \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightGeoCalibCoreML.swift" \
   "$REPO_ROOT/AnyUpright/Plugin/AnyUprightGeoCalibOptimizer.swift" \

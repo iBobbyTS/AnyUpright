@@ -89,6 +89,10 @@ final class AUScaleLSDCoreMLSession {
         )
     }
 
+    func warmUp() throws {
+        _ = try run(inputNCHW: Array(repeating: 0, count: inputElementCount))
+    }
+
     private static func multiArrayShape(_ description: MLFeatureDescription, name: String) throws -> [Int] {
         guard description.type == .multiArray,
               let constraint = description.multiArrayConstraint else {
@@ -131,5 +135,71 @@ final class AUScaleLSDCoreMLSession {
         }
         append(axis: 0, offset: 0)
         return result
+    }
+}
+
+private enum AUScaleLSDCoreMLModelKey: Hashable {
+    case fixed512
+}
+
+typealias AUScaleLSDCoreMLRunResult = AUCoreMLSessionLifecycleRunResult<AUScaleLSDCoreMLOutput>
+
+final class AUScaleLSDCoreMLSharedCache {
+    static let shared = AUScaleLSDCoreMLSharedCache()
+
+    typealias Logger = (String) -> Void
+    private typealias LifecycleCache = AUCoreMLSessionLifecycleCache<AUScaleLSDCoreMLModelKey, AUScaleLSDCoreMLSession>
+
+    private let configurationLock = NSLock()
+    private var modelURL: URL?
+    private var computeUnits: MLComputeUnits = .all
+    private var lifecycleCache: LifecycleCache?
+
+    private init() {}
+
+    func configure(modelURL: URL, computeUnits: MLComputeUnits = .all) {
+        configurationLock.lock()
+        defer { configurationLock.unlock() }
+        if self.modelURL == modelURL,
+           self.computeUnits == computeUnits,
+           lifecycleCache != nil {
+            return
+        }
+
+        lifecycleCache = LifecycleCache(
+            label: "scalelsd coreml cache",
+            keyDescription: { _ in "fixed512" },
+            loadSession: { _ in
+                try AUScaleLSDCoreMLSession(modelURL: modelURL, computeUnits: computeUnits)
+            },
+            warmSession: { try $0.warmUp() },
+            logger: { _ in }
+        )
+        self.modelURL = modelURL
+        self.computeUnits = computeUnits
+    }
+
+    func prewarmAfterPluginAdded(logger: @escaping Logger) throws {
+        let cache = try configuredCache()
+        cache.updateLogger(logger)
+        cache.prewarmAfterPluginAdded(key: .fixed512)
+    }
+
+    func run(inputNCHW: [Float], logger: @escaping Logger) throws -> AUScaleLSDCoreMLRunResult {
+        let cache = try configuredCache()
+        cache.updateLogger(logger)
+        return try cache.withSessionForAnalysis(key: .fixed512) { session in
+            try session.run(inputNCHW: inputNCHW)
+        }
+    }
+
+    private func configuredCache() throws -> LifecycleCache {
+        configurationLock.lock()
+        let cache = lifecycleCache
+        configurationLock.unlock()
+        guard let cache else {
+            throw AUScaleLSDCoreMLError.invalidModel("Core ML shared cache is not configured")
+        }
+        return cache
     }
 }

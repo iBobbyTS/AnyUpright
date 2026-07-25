@@ -29,6 +29,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         addLegacyCorrectionResultParameters(paramAPI)
         addUprightGuideParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
         addUprightCandidateParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
+        AnyUprightScaleLSDDetector.prepareCoreMLCacheForPluginAdd()
     }
 
     func pluginInstanceAddedToDocument() {

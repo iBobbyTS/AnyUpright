@@ -306,6 +306,7 @@ def compile_scalelsd_exporter(args: argparse.Namespace) -> Path:
         sources=[
             DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightGeometry.swift",
             DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightScaleLSDPostprocessor.swift",
+            DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightCoreMLSessionLifecycle.swift",
             DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightScaleLSDCoreML.swift",
             DEFAULT_REPO_ROOT / "tools" / "export-scalelsd-upright-lines.swift",
         ],
@@ -332,6 +333,7 @@ def compile_geocalib_prior_exporter(args: argparse.Namespace) -> Path:
         sources=[
             DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightGeometry.swift",
             DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightLineDetection.swift",
+            DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightCoreMLSessionLifecycle.swift",
             DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightGeoCalibNeuralOutput.swift",
             DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightGeoCalibCoreML.swift",
             DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightGeoCalibOptimizer.swift",

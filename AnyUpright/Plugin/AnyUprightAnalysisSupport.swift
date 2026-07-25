@@ -33,19 +33,22 @@ func parameterWriteTime(preferred: CMTime, fallback: CMTime) -> CMTime {
 }
 
 struct HorizonAnalysisScratchState {
-    var hasAnalyzedFrame = false
+    var hasPendingRequest = false
+    var frameGate = AUFirstUsableAnalysisFrameGate()
+    var didCompleteAnalysis = false
     var detectedRotationRadians: Double?
     var detectedRotationTime = CMTime.zero
-    var requestedAnalysisTime = CMTime.zero
+    var requestedTimelineTime = CMTime.invalid
     var analysisStartNanos: UInt64?
 }
 
 struct UprightAnalysisScratchState {
     var pendingAnalysisRequest: UprightAnalysisRequest?
-    var hasAnalyzedFrame = false
+    var frameGate = AUFirstUsableAnalysisFrameGate()
+    var didProduceAnalysisResult = false
     var detectedCandidates: [UprightDetectedCandidate] = []
     var detectedPerspectiveTime = CMTime.zero
-    var requestedAnalysisTime = CMTime.zero
+    var requestedTimelineTime = CMTime.invalid
 }
 
 struct InnerStretchAnalysisScratchState {

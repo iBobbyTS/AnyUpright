@@ -66,6 +66,7 @@
 				"/Localized: Plugin/Localizable.strings",
 				Plugin/AnyUprightAnalysisSupport.swift,
 				Plugin/AnyUprightCoreMLSessionLifecycle.swift,
+				Plugin/AnyUprightFxAnalysisPolicy.swift,
 				Plugin/AnyUprightGeoCalib.metal,
 				Plugin/AnyUprightGeoCalibCoreML.swift,
 				Plugin/AnyUprightGeoCalibDirectPreprocessor.swift,

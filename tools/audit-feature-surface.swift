@@ -46,6 +46,7 @@ struct AuditFeatureSurface {
             at: pluginDirectory,
             relativePaths: [
                 "AnyUprightUprightEffect.swift",
+                "AnyUprightUprightCandidateParameters.swift",
                 "AnyUprightUprightOSCControls.swift",
                 "AnyUprightUprightParameters.swift"
             ]
@@ -103,7 +104,10 @@ struct AuditFeatureSurface {
         try require(effects, "dominantHorizonCorrectionRadians", "Horizon has a traditional line fallback")
         try require(effects, "Analyze Horizon", "Horizon exposes explicit analysis button")
         try require(effects, "Fill Frame", "Horizon exposes fill toggle")
-        try require(effects, "singleFrameAnalysisRange", "Horizon analysis targets a representative frame")
+        try require(effects, "AUFxAnalysisProbePolicy.range", "Horizon requests a bounded representative-frame probe")
+        try require(effects, "inputTime(&inputTime, fromTimelineTime:", "Horizon converts timeline time to input time")
+        try require(effects, "sampleDuration(&sampleDuration)", "Horizon uses the input sample duration")
+        try require(effects, "analysisStateForEffect()", "Horizon rejects duplicate host analysis requests")
     }
 
     private static func auditStretch(_ effects: String, geometry: String, overlay: String, metal: String) throws {
@@ -168,10 +172,14 @@ struct AuditFeatureSurface {
         try require(effects, "menuEntries: [\"Manual\", \"Semi Auto\", \"Full Auto\"]", "Upright exposes manual, semi-auto, and full-auto modes")
         try require(effects, "withName: \"Analyze\"", "Upright exposes one analysis/apply action for the selected mode")
         try require(effects, "guard controlMode != .manual else", "Upright Analyze applies manual guides without running detection")
-        try require(effects, "startAnalysis(UprightAnalysisRequest(correctionMode: correctionMode, controlMode: controlMode))", "Upright Analyze starts semi-auto and full-auto candidate detection")
-        try require(effects, "if request.controlMode == .automatic", "Upright full-auto applies selected candidates after analysis")
-        try require(effects, "writeSelectedCandidateCorrection", "Upright semi-auto can apply selected candidates from onscreen controls")
-        try require(effects, "writeGuidedCorrection", "Upright manual guides can write correction from onscreen controls")
+        try require(effects, "UprightAnalysisRequest(correctionMode: correctionMode, controlMode: controlMode)", "Upright Analyze starts semi-auto and full-auto candidate detection")
+        try require(effects, "AUFxAnalysisProbePolicy.range", "Upright requests a bounded representative-frame probe")
+        try require(effects, "inputTime(&inputTime, fromTimelineTime:", "Upright converts timeline time to input time")
+        try require(effects, "sampleDuration(&sampleDuration)", "Upright uses the input sample duration")
+        try require(effects, "didProduceAnalysisResult", "Upright distinguishes an empty result from a missing analysis frame")
+        try require(effects, "controlMode == .automatic", "Upright full-auto selects candidates during parameter writeback")
+        try require(effects, "selectionValueAfterToggling", "Upright semi-auto can select candidates from onscreen controls")
+        try require(effects, "writeUprightManualGuides", "Upright can transfer selected automatic lines into manual guides")
         try require(effects, "class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer", "Upright filter is separated from its onscreen control")
         try require(effects, "class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Upright exposes onscreen controls as a separate FxPlug class")
         try require(effects, "guide4Enabled", "Upright exposes four guide lines")
@@ -183,8 +191,8 @@ struct AuditFeatureSurface {
         try require(geometry, "uprightOutputToSourceMatrix", "Upright perspective matrix is centralized in geometry")
         try require(geometry, "isStrictlyWithinDeviationLimit", "Upright candidate filtering uses strict deviation limits")
         try require(warp, "case .upright:", "Shared warp renderer has an Upright branch")
-        try require(warp, "manualUprightOutputToSourceMatrix", "Upright manual direct matrix is routed through shared warp state")
-        try require(warp, "uprightAppliedOutputToCurrentSourceMatrix", "Upright parameter correction is routed through shared warp state")
+        try require(effects, "guidedUprightOutputToSourceMatrix", "All Upright control modes use the shared guided matrix solver")
+        try require(warp, "appliedOutputToCurrentSourceMatrix", "Upright reference correction is routed through shared warp state")
         try require(metal, "warpState->outputToSource * float3(outputCoordinate, 1.0)", "Metal renderer consumes the shared output-to-source matrix")
         try require(candidates, "case vertical = 0", "Upright correction mode stores vertical direction")
         try require(candidates, "case horizontal = 1", "Upright correction mode stores horizontal direction")

@@ -78,7 +78,6 @@
 				Plugin/AnyUprightGeometry.swift,
 				Plugin/AnyUprightHorizonEffect.swift,
 				Plugin/AnyUprightLineDetection.swift,
-				Plugin/AnyUprightMLSDCoreMLDetector.swift,
 				Plugin/AnyUprightOSCOverlayRenderer.swift,
 				Plugin/AnyUprightScaleLSDCoreML.swift,
 				Plugin/AnyUprightScaleLSDDetector.swift,

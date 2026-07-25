@@ -15,12 +15,15 @@ Primary local evidence file:
 
 ## Current Algorithm Sufficiency
 
-The current M-LSD large Core ML path plus clipping and the `pair` ranker is good
-enough for semi-auto guide proposal. It is not yet enough to treat Vertical,
-Horizontal, or Full as production-ready true auto writeback without additional
-geometry validation and rejection policy.
+ScaleLSD is the current production Upright detector. Its fixed-512 Core ML path
+and Swift postprocessor are the maintained validation target. M-LSD was removed
+from production, the offline harness, and repository tooling on 2026-07-24.
 
-Key local results from `VALID_RESULTS.json`:
+The following M-LSD measurements are retained only as a historical baseline so
+the earlier investigation does not need to be repeated. They no longer describe
+an available detector or runnable repository path.
+
+Historical local results from `VALID_RESULTS.json`:
 
 | Check | Result |
 | --- | ---: |
@@ -36,7 +39,7 @@ Key local results from `VALID_RESULTS.json`:
 | Vertical images with two matched GT lines | 178 / 217 |
 | Horizontal images with two matched GT lines | 202 / 217 |
 
-Practical read:
+Historical interpretation:
 
 - Vertical auto is close to an experimental mode, but it still needs final
   transform validation, confidence gating, and host/manual spot checks before
@@ -92,7 +95,7 @@ Recommended HoliCity download plan for AnyUpright:
 
 | Asset group | Download? | Size | Reason |
 | --- | --- | ---: | --- |
-| `perspective/image-v1/*` and `perspective/image-v1-test-valid.tar` | Yes, default | 6.995 GB | Required input RGB images for M-LSD detection and visual inspection. |
+| `perspective/image-v1/*` and `perspective/image-v1-test-valid.tar` | Yes, default | 6.995 GB | Required input RGB images for line detection and visual inspection. |
 | `perspective/camr-v1.tar` | Yes, default | 0.154 GB | Camera metadata for geometry sanity checks. |
 | `perspective/vpts-v1.tar` | Yes, default | 0.077 GB | Direct vanishing-point labels for direction-family and Full-mode validation. |
 | `split/*.zip` | Yes, default | 0.001 GB | Official split metadata. |
@@ -122,13 +125,9 @@ It reads HoliCity tar files directly from
 `/Volumes/4T/temp/AnyUprightResearchWorkspace`, projects the provided 3D
 vanishing-point directions into the image, detects line segments, and measures
 whether at least two detected segments pass near the vertical and horizontal VP
-families. It supports three detector backends:
+families. It supports two detector backends:
 
 - `--detector opencv` runs the original OpenCV LSD/Hough reference path.
-- `--detector mlsd-coreml` decodes the HoliCity images in Python, writes a
-  temporary RGBA manifest, compiles and calls
-  `tools/export-mlsd-upright-candidates.swift`, and evaluates the Swift/Core ML
-  M-LSD candidate output in the same VP-family metric.
 - `--detector scalelsd-coreml` runs the fixed-512 ScaleLSD Core ML neural
   forward plus the official-equivalent Swift postprocessor. Raw lines can be
   persisted with `--scalelsd-lines-cache` so selector iterations do not rerun
@@ -143,7 +142,7 @@ Initial 2026-07-04 smoke outputs:
 | `/Volumes/4T/temp/AnyUprightResearchWorkspace/outputs/holicity_upright_validation_sample100` | 100 | 2% diagonal | 72 / 100 | 84 / 100 | 61 / 100 | 1049.4 ms |
 | `/Volumes/4T/temp/AnyUprightResearchWorkspace/outputs/holicity_upright_validation_sample100_thr003` | 100 | 3% diagonal | 75 / 100 | 87 / 100 | 65 / 100 | 1081.6 ms |
 
-Swift/Core ML M-LSD outputs from the same 2026-07-04 harness:
+Historical Swift/Core ML M-LSD outputs from the retired 2026-07-04 harness:
 
 | Output | Images | Mode | VP distance threshold | Vertical pair | Horizontal pair | Full pair | Mean line count | Mean detector time |
 | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -227,8 +226,8 @@ comparable to the corrected same-VP metric. A full corrected rerun can reuse a
 persisted raw-line cache, but the original full run did not retain one.
 
 The neural migration and proposal-quality measurements above remain the
-research baseline. Production integration now uses ScaleLSD as the first
-Upright detector, with M-LSD and the CPU detector as fallbacks. The production
+research baseline. Production integration now uses ScaleLSD as the Upright
+model detector, with the CPU detector as its only fallback. The production
 path deliberately does not use the experimental VP/proposal rejector: it ranks
 decoded lines by monotonic normalized support score, keeps the top 10 per
 requested orientation for Semi Auto, and selects the top two per requested
@@ -278,9 +277,6 @@ Representative commands:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 tools/validate-holicity-upright.py --detector opencv --limit 100 --vp-distance-ratio 0.02
-PYTHONDONTWRITEBYTECODE=1 python3 tools/validate-holicity-upright.py --detector mlsd-coreml --mode full --limit 100 --vp-distance-ratio 0.02
-PYTHONDONTWRITEBYTECODE=1 python3 tools/validate-holicity-upright.py --detector mlsd-coreml --mode vertical --limit 10 --vp-distance-ratio 0.02
-PYTHONDONTWRITEBYTECODE=1 python3 tools/validate-holicity-upright.py --detector mlsd-coreml --mode horizontal --limit 10 --vp-distance-ratio 0.02
 PYTHONDONTWRITEBYTECODE=1 python3 tools/build-scalelsd-coreml.py --precision float16 --output /Volumes/4T/temp/AnyUprightResearchWorkspace/model_tests/scalelsd/coreml_conversion_fp16
 PYTHONDONTWRITEBYTECODE=1 python3 tools/validate-holicity-upright.py --detector scalelsd-coreml --mode full --limit 100 --vp-distance-ratio 0.02 --scalelsd-model /Volumes/4T/temp/AnyUprightResearchWorkspace/model_tests/scalelsd/coreml_conversion_fp16/compiled/scalelsd_neural_forward.mlmodelc
 PYTHONDONTWRITEBYTECODE=1 python3 tools/validate-holicity-upright.py --detector scalelsd-coreml --mode full --limit 100 --seed 20260704 --vp-distance-ratio 0.02 --scalelsd-lines-cache /Volumes/4T/temp/AnyUprightResearchWorkspace/outputs/holicity_scalelsd_coreml_fp16_testvalid_sample100_lines.json --geocalib-priors-cache /Volumes/4T/temp/AnyUprightResearchWorkspace/outputs/holicity_geocalib_testvalid_sample100_priors.json --evaluate-scalelsd-proposals
@@ -291,12 +287,12 @@ Interpretation:
 - The downloaded HoliCity `upright-core` set is usable: image, camera, and VP
   stems align cleanly, and the VP projection/metric path produces stable
   per-image results.
-- The OpenCV LSD/Hough reference path is much weaker than the current local
-  M-LSD large evidence. Its 100-image Full pair result stays only `61/100` at
+- The OpenCV LSD/Hough reference path was much weaker than the retired local
+  M-LSD historical baseline. Its 100-image Full pair result stays only `61/100` at
   the default 2% diagonal threshold, while threshold relaxation to 3% reaches
   only `65/100`.
-- The Swift/Core ML M-LSD backend is now connected to the same HoliCity harness.
-  At the default 2% diagonal threshold, the 100-image Full pair result is
+- The retired Swift/Core ML M-LSD backend was previously connected to the same
+  HoliCity harness. At the default 2% diagonal threshold, its 100-image Full pair result was
   `62/100`, close to the OpenCV `61/100` Full-pair score, but with stronger
   individual vertical-pair availability (`82/100` vs. `72/100`) and weaker
   horizontal-pair availability (`76/100` vs. `84/100`) on this sample.

@@ -302,38 +302,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                         Self.analysisElapsedMilliseconds(since: detectorStartNanos)
                     )
                 )
-                // Preserve the existing detector chain when the local ScaleLSD resource is absent.
-            }
-            let mlsdStartNanos = Self.analysisNowNanos()
-            do {
-                let mlsdCandidates = try AnyUprightMLSDCoreMLDetector.detectCandidates(
-                    in: frame,
-                    request: request,
-                    context: analysisContext
-                )
-                storeDetectedCandidates(
-                    mlsdCandidates,
-                    request: request,
-                    time: frameTime
-                )
-                analysisDebugLog(
-                    String(
-                        format: "mlsd_success candidates=%d detector_ms=%.3f frame_ms=%.3f",
-                        mlsdCandidates.count,
-                        Self.analysisElapsedMilliseconds(since: mlsdStartNanos),
-                        Self.analysisElapsedMilliseconds(since: frameStartNanos)
-                    )
-                )
-                return
-            } catch {
-                analysisDebugLog(
-                    String(
-                        format: "mlsd_error error=%@ detector_ms=%.3f",
-                        String(describing: error),
-                        Self.analysisElapsedMilliseconds(since: mlsdStartNanos)
-                    )
-                )
-                // Keep local development usable before the ignored M-LSD model bundle is installed.
+                // Fall through to the CPU detector when ScaleLSD is unavailable.
             }
         }
 

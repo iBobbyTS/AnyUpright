@@ -30,8 +30,6 @@ import numpy as np
 DEFAULT_WORKSPACE = Path("/Volumes/4T/temp/AnyUprightResearchWorkspace")
 DEFAULT_OUTPUT = DEFAULT_WORKSPACE / "outputs" / "holicity_upright_validation"
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MLSD_MODEL = DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "MLSDCoreML" / "mlsd_large_512_fp32.mlmodelc"
-DEFAULT_MLSD_EXPORTER = DEFAULT_WORKSPACE / "tools" / "export-mlsd-upright-candidates"
 DEFAULT_SCALELSD_MODEL = (
     DEFAULT_WORKSPACE
     / "model_tests"
@@ -302,20 +300,6 @@ def compile_swift_exporter(
     return exporter
 
 
-def compile_mlsd_exporter(args: argparse.Namespace) -> Path:
-    return compile_swift_exporter(
-        exporter=args.mlsd_exporter,
-        sources=[
-        DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightGeometry.swift",
-        DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightUprightCandidates.swift",
-        DEFAULT_REPO_ROOT / "AnyUpright" / "Plugin" / "AnyUprightMLSDCoreMLDetector.swift",
-        DEFAULT_REPO_ROOT / "tools" / "export-mlsd-upright-candidates.swift",
-        ],
-        rebuild=args.rebuild_mlsd_exporter,
-        defines=["AU_MLSD_CLI"],
-    )
-
-
 def compile_scalelsd_exporter(args: argparse.Namespace) -> Path:
     return compile_swift_exporter(
         exporter=args.scalelsd_exporter,
@@ -357,97 +341,6 @@ def compile_geocalib_prior_exporter(args: argparse.Namespace) -> Path:
         ],
         rebuild=args.rebuild_geocalib_prior_exporter,
     )
-
-
-def detect_lines_mlsd_coreml_batch(
-    loaded_samples: list[LoadedSample],
-    args: argparse.Namespace,
-) -> dict[str, EvaluatedSampleInput]:
-    exporter = compile_mlsd_exporter(args)
-    work_parent = args.workspace / "work"
-    work_parent.mkdir(parents=True, exist_ok=True)
-
-    if args.keep_mlsd_work:
-        temp_context = None
-        temp_root = work_parent / "holicity_mlsd_coreml"
-        if temp_root.exists():
-            shutil.rmtree(temp_root)
-        temp_root.mkdir(parents=True, exist_ok=True)
-    else:
-        temp_context = tempfile.TemporaryDirectory(prefix="holicity_mlsd_coreml_", dir=work_parent)
-        temp_root = Path(temp_context.name)
-
-    try:
-        manifest_samples: list[dict[str, object]] = []
-        for loaded in loaded_samples:
-            height, width = loaded.image.shape[:2]
-            rgba = cv2.cvtColor(loaded.image, cv2.COLOR_BGR2RGBA)
-            rgba_name = loaded.sample.stem.replace("/", "__").replace("\\", "__")
-            rgba_path = temp_root / f"{rgba_name}.rgba"
-            rgba.tofile(rgba_path)
-            manifest_samples.append(
-                {
-                    "stem": loaded.sample.stem,
-                    "width": width,
-                    "height": height,
-                    "rgba_path": str(rgba_path),
-                }
-            )
-
-        manifest_path = temp_root / "manifest.json"
-        output_path = temp_root / "mlsd-candidates.json"
-        manifest_path.write_text(json.dumps({"samples": manifest_samples}, indent=2) + "\n", encoding="utf-8")
-
-        start = time.perf_counter()
-        subprocess.run(
-            [
-                str(exporter),
-                "--manifest",
-                str(manifest_path),
-                "--model",
-                str(args.mlsd_model),
-                "--mode",
-                args.mode,
-                "--compute-units",
-                args.mlsd_compute_units,
-                "--output",
-                str(output_path),
-            ],
-            cwd=DEFAULT_REPO_ROOT,
-            check=True,
-        )
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
-        payload = json.loads(output_path.read_text(encoding="utf-8"))
-
-        loaded_by_stem = {loaded.sample.stem: loaded for loaded in loaded_samples}
-        per_sample_elapsed_ms = elapsed_ms / max(1, len(loaded_samples))
-        result: dict[str, EvaluatedSampleInput] = {}
-        for exported in payload["results"]:
-            stem = exported["stem"]
-            loaded = loaded_by_stem[stem]
-            lines = [
-                LineSegment(
-                    float(candidate["start"]["x"]),
-                    float(candidate["start"]["y"]),
-                    float(candidate["end"]["x"]),
-                    float(candidate["end"]["y"]),
-                    float(candidate["score"]),
-                )
-                for candidate in exported.get("candidates", [])
-            ]
-            result[stem] = EvaluatedSampleInput(
-                sample=loaded.sample,
-                image=loaded.image,
-                camera=loaded.camera,
-                vpts=loaded.vpts,
-                confidence=loaded.confidence,
-                lines=lines,
-                detector_elapsed_ms=per_sample_elapsed_ms,
-            )
-        return result
-    finally:
-        if temp_context is not None:
-            temp_context.cleanup()
 
 
 def detect_lines_scalelsd_coreml_batch(
@@ -1037,17 +930,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image-set", choices=["test-valid", "train"], default="test-valid")
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--seed", type=int, default=20260704)
-    parser.add_argument("--detector", choices=["opencv", "mlsd-coreml", "scalelsd-coreml"], default="opencv")
+    parser.add_argument("--detector", choices=["opencv", "scalelsd-coreml"], default="opencv")
     parser.add_argument("--mode", choices=["vertical", "horizontal", "full"], default="full")
     parser.add_argument("--max-side", type=int, default=768)
     parser.add_argument("--lsd-limit", type=int, default=80)
     parser.add_argument("--hough-limit", type=int, default=40)
     parser.add_argument("--vp-distance-ratio", type=float, default=0.02)
-    parser.add_argument("--mlsd-model", type=Path, default=DEFAULT_MLSD_MODEL)
-    parser.add_argument("--mlsd-exporter", type=Path, default=DEFAULT_MLSD_EXPORTER)
-    parser.add_argument("--mlsd-compute-units", choices=["all", "cpu", "cpuAndGPU", "cpuAndNeuralEngine"], default="all")
-    parser.add_argument("--rebuild-mlsd-exporter", action="store_true")
-    parser.add_argument("--keep-mlsd-work", action="store_true")
     parser.add_argument("--scalelsd-model", type=Path, default=DEFAULT_SCALELSD_MODEL)
     parser.add_argument("--scalelsd-exporter", type=Path, default=DEFAULT_SCALELSD_EXPORTER)
     parser.add_argument("--scalelsd-compute-units", choices=["all", "cpu", "cpuAndGPU", "cpuAndNeuralEngine"], default="all")
@@ -1081,8 +969,6 @@ def main() -> int:
             loaded.sample.stem: detect_lines_opencv(loaded, args)
             for loaded in loaded_samples
         }
-    elif args.detector == "mlsd-coreml":
-        evaluated_inputs = detect_lines_mlsd_coreml_batch(loaded_samples, args)
     else:
         evaluated_inputs = detect_lines_scalelsd_coreml_batch(loaded_samples, args)
 
@@ -1114,8 +1000,6 @@ def main() -> int:
         "mode": args.mode,
         "max_side": args.max_side,
         "vp_distance_ratio": args.vp_distance_ratio,
-        "mlsd_model": str(args.mlsd_model) if args.detector == "mlsd-coreml" else None,
-        "mlsd_compute_units": args.mlsd_compute_units if args.detector == "mlsd-coreml" else None,
         "scalelsd_model": str(args.scalelsd_model) if args.detector == "scalelsd-coreml" else None,
         "scalelsd_compute_units": args.scalelsd_compute_units if args.detector == "scalelsd-coreml" else None,
         "scalelsd_lines_cache": (

@@ -61,7 +61,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
 
         let objectSize = objectPixelSizeForOSC(defaultSize: outputSize)
         let geometry = hitGeometry(from: state, size: objectSize, mode: mode)
-        let stretch = geometry.rawCanvasStretch
+        let stretch = geometry.stretch
         let canvasFrame = objectCanvasFrame()
         let chooseFromDetections = stretchChooseFromDetections(at: time, paramAPI: paramAPI)
         if chooseFromDetections {
@@ -135,7 +135,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let canvasFrame = objectCanvasFrame()
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
-        debugCanvasMetrics(label: "hit", eventPoint: eventPoint, stretch: geometry.rawCanvasStretch, canvasFrame: canvasFrame)
+        debugCanvasMetrics(label: "hit", eventPoint: eventPoint, stretch: geometry.stretch, canvasFrame: canvasFrame)
         if mode == .innerStretch, stretchChooseFromDetections(at: time, paramAPI: paramAPI) {
             let threshold = stretchDetectionScoreThreshold(at: time, paramAPI: paramAPI)
             let edges = stretchInnerStretchDetectionEdges(at: time, paramAPI: paramAPI)
@@ -148,7 +148,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 threshold: threshold,
                 selection: selection,
                 canvasFrame: canvasFrame,
-                rawCanvasStretch: geometry.rawCanvasStretch,
+                visibleControlPoints: geometry.stretch,
                 preferredMode: nil
             )
             activePart?.pointee = hit.map { detectionPartID(for: $0.primitive) } ?? StretchOSCPart.none.rawValue
@@ -158,9 +158,6 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             forEventPoint: eventPoint,
             handles: geometry.handles,
             stretch: geometry.stretch,
-            rawCanvasHandles: geometry.rawCanvasHandles,
-            rawCanvasStretch: geometry.rawCanvasStretch,
-            useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
             rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: nil
@@ -194,7 +191,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 threshold: threshold,
                 selection: selection,
                 canvasFrame: canvasFrame,
-                rawCanvasStretch: geometry.rawCanvasStretch,
+                visibleControlPoints: geometry.stretch,
                 preferredMode: nil
             ) else {
                 forceUpdate?.pointee = false
@@ -215,9 +212,6 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             forEventPoint: eventPoint,
             handles: geometry.handles,
             stretch: geometry.stretch,
-            rawCanvasHandles: geometry.rawCanvasHandles,
-            rawCanvasStretch: geometry.rawCanvasStretch,
-            useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
             rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: nil
@@ -226,7 +220,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             ?? resolvedCanvasPoint(
                 fromEventPoint: eventPoint,
                 canvasFrame: canvasFrame,
-                rawCanvasStretch: geometry.rawCanvasStretch,
+                visibleControlPoints: geometry.stretch,
                 rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
                 preferredMode: nil
             )
@@ -237,6 +231,9 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             nonePart: StretchOSCPart.none.rawValue
         )
         let resolvedPart = resolvedPartRaw.flatMap(StretchOSCPart.init(rawValue:))
+        debugLog(
+            "mouse-down-parts host=\(activePart) local=\(resolvedEvent?.part.rawValue.description ?? "nil") resolved=\(resolvedPart?.rawValue.description ?? "nil")"
+        )
         debugOSCEventResolution(
             label: "mouse-down",
             eventPoint: eventPoint,
@@ -267,7 +264,11 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             return
         }
         let storedState = currentDragState()
-        let part = validDragPart(from: activePart) ?? storedState?.part
+        let hostPart = validDragPart(from: activePart)
+        let part = hostPart ?? storedState?.part
+        debugLog(
+            "mouse-drag-parts host=\(activePart) validHost=\(hostPart?.rawValue.description ?? "nil") stored=\(storedState?.part.rawValue.description ?? "nil") selected=\(part?.rawValue.description ?? "nil")"
+        )
 
         guard shouldEnableStretchOSCControls(from: state, mode: mode),
               let part,
@@ -282,7 +283,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let resolved = resolvedCanvasPoint(
             fromEventPoint: eventPoint,
             canvasFrame: objectCanvasFrame(),
-            rawCanvasStretch: geometry.rawCanvasStretch,
+            visibleControlPoints: geometry.stretch,
             rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: storedState?.eventCoordinateMode
         )
@@ -557,7 +558,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             threshold: threshold,
             selection: selection,
             canvasFrame: objectCanvasFrame(),
-            rawCanvasStretch: geometry.rawCanvasStretch,
+            visibleControlPoints: geometry.stretch,
             preferredMode: currentDragState()?.eventCoordinateMode
         )
         setDetectionHover(hit?.primitive, forceUpdate: forceUpdate)
@@ -571,13 +572,13 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         threshold: Double,
         selection: AUStretchDetectionSelectionState,
         canvasFrame: [AUPoint],
-        rawCanvasStretch: [AUPoint],
+        visibleControlPoints: [AUPoint],
         preferredMode: StretchOSCEventCoordinateMode?
     ) -> (primitive: AUStretchDetectionPrimitiveID, resolution: StretchOSCEventResolution)? {
         let resolutions = eventResolutions(
             fromEventPoint: eventPoint,
             canvasFrame: canvasFrame,
-            rawCanvasStretch: rawCanvasStretch,
+            visibleControlPoints: visibleControlPoints,
             rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: preferredMode
         )
@@ -717,14 +718,11 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let size = objectPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let canvasFrame = objectCanvasFrame()
-        debugCanvasMetrics(label: "hover", eventPoint: eventPoint, stretch: geometry.rawCanvasStretch, canvasFrame: canvasFrame)
+        debugCanvasMetrics(label: "hover", eventPoint: eventPoint, stretch: geometry.stretch, canvasFrame: canvasFrame)
         let hit = hitTestPart(
             forEventPoint: eventPoint,
             handles: geometry.handles,
             stretch: geometry.stretch,
-            rawCanvasHandles: geometry.rawCanvasHandles,
-            rawCanvasStretch: geometry.rawCanvasStretch,
-            useRawCanvasHitLayer: geometry.usesRawCanvasHitLayer,
             canvasFrame: canvasFrame,
             rawCanvasHitPadding: innerStretchRawCanvasHitPadding,
             preferredMode: currentDragState()?.eventCoordinateMode
@@ -855,7 +853,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     }
 
     private func sourceDetectionCanvasPoint(from objectPoint: AUPoint) -> AUPoint {
-        canvasPoint(fromObjectPoint: AnyUprightGeometry.verticallyFlippedObjectPoint(objectPoint))
+        canvasPoint(fromObjectPoint: objectPoint)
     }
 
     private func sourceDetectionCanvasLine(from objectLine: AULineSegment) -> AULineSegment {

@@ -38,9 +38,9 @@ struct AnyUprightGeometryTests {
         try testDetectionScoresNormalizeToUnitRange()
         try testInnerStretchFullFrameSelectionHasNoDYDrift()
         try testInnerStretchObjectSpacePixelsMatchFxPlugOSCEvents()
-        try testInnerStretchOSCPixelDragDoesNotFlipYAgain()
-        try testInnerStretchRawCanvasDragFlipsObjectYBeforeWriting()
-        try testInnerStretchRawCanvasLayerMatchesSourcePreview()
+        try testInnerStretchMappedSurfaceDragWritesObjectYDirectly()
+        try testInnerStretchRawCanvasDragWritesObjectYDirectly()
+        try testInnerStretchHostCanvasLayerPreservesNamedCorners()
         try testDistanceToStretchEdgeUsesOutputPixelSegments()
         try testInnerStretchAdjusterPreviewAndApplyUseSameSelection()
         try testInnerStretchOutputHandlesStayInImageSpace()
@@ -61,6 +61,7 @@ struct AnyUprightGeometryTests {
         try testInputTextureCoordinatesRespectHostTilePadding()
         try testRenderBoundaryMatrixMatchesFormerShaderYFlips()
         try testSelectionBoundaryMatrixMatchesFormerOutputFlip()
+        try testInnerStretchMotionDisplayBoundaryPreservesWarpAndMaskCorners()
         try testInnerStretchEditPreviewRequestsDestinationTile()
         try testUprightStableIdealizedImageSizeUsesPixelTransformScale()
         try testUprightStableIdealizedImageSizeUsesPixelTransformCenterRounding()
@@ -485,7 +486,7 @@ struct AnyUprightGeometryTests {
         try assertEqual(updatedInnerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "inner stretch should sample the Y-flipped image point matching the visible handle")
     }
 
-    static func testInnerStretchOSCPixelDragDoesNotFlipYAgain() throws {
+    static func testInnerStretchMappedSurfaceDragWritesObjectYDirectly() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
         let visualTopLeftOSCPixel = AUPoint(x: 45.0, y: 75.0)
@@ -501,51 +502,54 @@ struct AnyUprightGeometryTests {
         offsets.topLeftPercent = percent
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
-        try assertEqual(objectPoint, AUPoint(x: 0.225, y: 0.75), "osc pixel drag object point")
-        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "osc pixel drag percent")
-        try assertEqual(innerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "osc pixel drag should not flip Y a second time")
+        try assertEqual(objectPoint, AUPoint(x: 0.225, y: 0.75), "mapped-surface object point")
+        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "mapped-surface drag percent")
+        try assertEqual(innerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "mapped-surface object Y should map to the same visual corner")
     }
 
-    static func testInnerStretchRawCanvasDragFlipsObjectYBeforeWriting() throws {
+    static func testInnerStretchRawCanvasDragWritesObjectYDirectly() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
-        let rawCanvasTopLeftObjectPoint = AUPoint(x: 0.225, y: 0.25)
-        let correctedObjectPoint = AnyUprightGeometry.verticallyFlippedObjectPoint(rawCanvasTopLeftObjectPoint)
+        let rawCanvasTopLeftObjectPoint = AUPoint(x: 0.225, y: 0.75)
         let percent = AnyUprightGeometry.sourceCornerPercentOffset(
-            forObjectPoint: correctedObjectPoint,
+            forObjectPoint: rawCanvasTopLeftObjectPoint,
             corner: .topLeft
         )
 
         offsets.topLeftPercent = percent
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
-        try assertEqual(correctedObjectPoint, AUPoint(x: 0.225, y: 0.75), "raw canvas source drag should flip object Y")
-        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "flipped raw canvas source percent")
-        try assertEqual(innerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "flipped raw canvas drag should update the visible top-left source point")
+        try assertEqual(rawCanvasTopLeftObjectPoint, AUPoint(x: 0.225, y: 0.75), "raw-canvas object point")
+        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "raw-canvas source percent")
+        try assertEqual(innerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "raw-canvas object Y should map to the same visual corner")
     }
 
-    static func testInnerStretchRawCanvasLayerMatchesSourcePreview() throws {
+    static func testInnerStretchHostCanvasLayerPreservesNamedCorners() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
         offsets.topLeftPercent = AUPoint(x: 0.125, y: -0.15)
+        offsets.topRightPercent = AUPoint(x: -0.075, y: 0.08)
+        offsets.bottomRightPercent = AUPoint(x: -0.10, y: -0.12)
+        offsets.bottomLeftPercent = AUPoint(x: 0.05, y: 0.06)
 
         let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
-        let objectCanvasPixels = AnyUprightGeometry.objectPixelSelection(fromNormalizedObjectSelection: objectPoints, size: size)
-        let rawCanvasObjectPoints = AnyUprightGeometry.verticallyFlippedObjectSelection(objectPoints)
-        let rawCanvasPixels = AnyUprightGeometry.objectPixelSelection(fromNormalizedObjectSelection: rawCanvasObjectPoints, size: size)
+        let canvasPixels = AnyUprightGeometry.objectPixelSelection(fromNormalizedObjectSelection: objectPoints, size: size)
         let sourcePreviewHandles = AnyUprightGeometry.innerStretchOutputHandles(
             from: offsets,
             outputSize: size,
             sourceSize: size
         )
 
-        try assertEqual(objectCanvasPixels.topLeft, AUPoint(x: 45.0, y: 75.0), "object/canvas top-left keeps FxPlug object-space Y")
-        try assertEqual(sourcePreviewHandles.topLeft, AUPoint(x: 45.0, y: 25.0), "source preview top-left crosses the Y-axis boundary")
-        try assertEqual(rawCanvasPixels.topLeft, sourcePreviewHandles.topLeft, "raw Final Cut canvas layer should match the source preview handle")
-        try assertTrue(
-            objectCanvasPixels.topLeft.y != rawCanvasPixels.topLeft.y,
-            "raw canvas hit testing should pick the source-preview layer instead of adding an object-space second layer"
-        )
+        try assertTrue(objectPoints.topLeft.y > objectPoints.bottomLeft.y, "host OSC layer should remain FxPlug Y-up")
+        try assertTrue(canvasPixels.topLeft.y > canvasPixels.bottomLeft.y, "Canvas drawing and hit testing should share the Y-up layer")
+        try assertApprox(canvasPixels.topLeft.x, sourcePreviewHandles.topLeft.x, "named top-left X should remain stable across the image boundary")
+        try assertApprox(canvasPixels.topRight.x, sourcePreviewHandles.topRight.x, "named top-right X should remain stable across the image boundary")
+        try assertApprox(canvasPixels.bottomRight.x, sourcePreviewHandles.bottomRight.x, "named bottom-right X should remain stable across the image boundary")
+        try assertApprox(canvasPixels.bottomLeft.x, sourcePreviewHandles.bottomLeft.x, "named bottom-left X should remain stable across the image boundary")
+        try assertApprox(canvasPixels.topLeft.y + sourcePreviewHandles.topLeft.y, size.height, "top-left crosses the image Y boundary once")
+        try assertApprox(canvasPixels.topRight.y + sourcePreviewHandles.topRight.y, size.height, "top-right crosses the image Y boundary once")
+        try assertApprox(canvasPixels.bottomRight.y + sourcePreviewHandles.bottomRight.y, size.height, "bottom-right crosses the image Y boundary once")
+        try assertApprox(canvasPixels.bottomLeft.y + sourcePreviewHandles.bottomLeft.y, size.height, "bottom-left crosses the image Y boundary once")
     }
 
     static func testPixelStretchFlipMapsOutputHandlesToOSCRenderTargetCoordinates() throws {
@@ -1142,6 +1146,100 @@ struct AnyUprightGeometryTests {
             AnyUprightGeometry.transform(formerShaderOutput, by: selectionToRect),
             "boundary-adjusted selection matrix should match former shader output Y flip"
         )
+    }
+
+    static func testInnerStretchMotionDisplayBoundaryPreservesWarpAndMaskCorners() throws {
+        let outputSize = AUSize(width: 300.0, height: 150.0)
+        let sourceSize = AUSize(width: 600.0, height: 300.0)
+        let textureMapping = AUTextureCoordinateMapping(
+            imageOriginInTexture: AUPoint(x: 1.0, y: 1.0),
+            textureSize: AUSize(width: 602.0, height: 302.0)
+        )
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPercent = AUPoint(x: 0.12, y: -0.06)
+        offsets.topRightPercent = AUPoint(x: -0.03, y: 0.04)
+        offsets.bottomRightPercent = AUPoint(x: -0.09, y: -0.08)
+        offsets.bottomLeftPercent = AUPoint(x: 0.05, y: 0.02)
+
+        let selectedSource = AnyUprightGeometry.innerStretch(from: offsets, size: sourceSize)
+        let outputToSource = AnyUprightGeometry.stretchOutputToSourceMatrix(
+            from: offsets,
+            mode: .innerStretch,
+            showCornerAdjuster: false,
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+        let productionWarpMatrix = AnyUprightGeometry.renderBoundaryAdjustedOutputToTextureMatrix(
+            outputToSource,
+            outputSize: outputSize,
+            sourceSize: sourceSize,
+            textureMapping: textureMapping
+        )
+        let handles = AnyUprightGeometry.innerStretchOutputHandles(
+            from: offsets,
+            outputSize: outputSize,
+            sourceSize: sourceSize
+        )
+        let productionSelectionMatrix = AnyUprightGeometry.renderBoundaryAdjustedSelectionToRectMatrix(
+            AnyUprightGeometry.stretchSelectionToOutputRectMatrix(
+                from: offsets,
+                outputSize: outputSize,
+                sourceSize: sourceSize
+            ),
+            outputSize: outputSize
+        )
+
+        func verticallyFlipped(_ point: AUPoint, in size: AUSize) -> AUPoint {
+            AUPoint(x: point.x, y: size.height - point.y)
+        }
+
+        func displayedSourcePoint(for displayedOutputPoint: AUPoint) -> AUPoint {
+            let physicalOutputPoint = verticallyFlipped(displayedOutputPoint, in: outputSize)
+            let physicalTexturePoint = AnyUprightGeometry.transform(physicalOutputPoint, by: productionWarpMatrix)
+            let physicalSourcePoint = AUPoint(
+                x: physicalTexturePoint.x - textureMapping.imageOriginInTexture.x,
+                y: physicalTexturePoint.y - textureMapping.imageOriginInTexture.y
+            )
+            return verticallyFlipped(physicalSourcePoint, in: sourceSize)
+        }
+
+        func displayedMaskRectPoint(for displayedOutputPoint: AUPoint) -> AUPoint {
+            let physicalOutputPoint = verticallyFlipped(displayedOutputPoint, in: outputSize)
+            return AnyUprightGeometry.transform(physicalOutputPoint, by: productionSelectionMatrix)
+        }
+
+        let warpCases: [(String, AUPoint, AUPoint)] = [
+            ("top-left", AUPoint(x: 0.0, y: 0.0), selectedSource.topLeft),
+            ("top-right", AUPoint(x: outputSize.width, y: 0.0), selectedSource.topRight),
+            ("bottom-right", AUPoint(x: outputSize.width, y: outputSize.height), selectedSource.bottomRight),
+            ("bottom-left", AUPoint(x: 0.0, y: outputSize.height), selectedSource.bottomLeft)
+        ]
+        let maskCases: [(String, AUPoint, AUPoint)] = [
+            ("top-left", handles.topLeft, AUPoint(x: 0.0, y: 0.0)),
+            ("top-right", handles.topRight, AUPoint(x: outputSize.width, y: 0.0)),
+            ("bottom-right", handles.bottomRight, AUPoint(x: outputSize.width, y: outputSize.height)),
+            ("bottom-left", handles.bottomLeft, AUPoint(x: 0.0, y: outputSize.height))
+        ]
+
+        var failures: [String] = []
+        for (name, displayedOutput, expectedSource) in warpCases {
+            let actualSource = displayedSourcePoint(for: displayedOutput)
+            if abs(actualSource.x - expectedSource.x) > 0.001 || abs(actualSource.y - expectedSource.y) > 0.001 {
+                failures.append("warp \(name): expected displayed source \(expectedSource), got \(actualSource)")
+            }
+        }
+        for (name, displayedHandle, expectedRect) in maskCases {
+            let actualRect = displayedMaskRectPoint(for: displayedHandle)
+            if abs(actualRect.x - expectedRect.x) > 0.001 || abs(actualRect.y - expectedRect.y) > 0.001 {
+                failures.append("mask \(name): expected rect \(expectedRect), got \(actualRect)")
+            }
+        }
+
+        guard failures.isEmpty else {
+            throw TestFailure.failed(
+                "Inner Stretch Motion display-boundary reproduction failed:\n" + failures.joined(separator: "\n")
+            )
+        }
     }
 
     static func testInnerStretchEditPreviewRequestsDestinationTile() throws {

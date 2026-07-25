@@ -458,6 +458,11 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             textureSize: AUSize(width: Double(sourceTexture.width), height: Double(sourceTexture.height))
         )
         let outputToSource = outputToSourceMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
+        let selectionOutputToRect = selectionOutputToRectMatrix(
+            from: parameterState,
+            outputSize: destinationSize,
+            sourceSize: sourceSize
+        )
         let matrix = AnyUprightGeometry.renderBoundaryAdjustedOutputToTextureMatrix(
             outputToSource,
             outputSize: destinationSize,
@@ -465,7 +470,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             textureMapping: inputTextureMapping
         )
         let selectionToRect = AnyUprightGeometry.renderBoundaryAdjustedSelectionToRectMatrix(
-            selectionOutputToRectMatrix(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize),
+            selectionOutputToRect,
             outputSize: destinationSize
         )
         let sourceHandles = innerStretchOutputHandles(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)

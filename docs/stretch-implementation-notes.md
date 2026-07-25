@@ -1,8 +1,8 @@
 # Stretch Implementation Notes
 
-Last updated: 2026-07-01 17:39 MDT
-Reference commit: 25061acacefa010d1c2037887e93d1f3342addab
-Observed host versions: macOS 26.5.1, Motion Creator Studio 6.2, Final Cut Pro 12.2
+Last updated: 2026-07-25 17:14 MDT
+Reference commit: a1e6085b1fca63e703f1970635b68fe875052047
+Observed host versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 and 6.3 (450156), Final Cut Pro 12.2 and 12.3 (450152), FxPlug framework 4.3.4 (18567.3)
 
 This file records AnyUpright-specific Stretch implementation choices. Reusable debugging guidance and host observations that may help other FxPlug plug-ins live under `docs/engineering-notes/`.
 
@@ -41,8 +41,9 @@ This file records AnyUpright-specific Stretch implementation choices. Reusable d
 - Outer Stretch subclasses it through `AnyUprightOuterStretchOSCPlugIn` and fixes `fixedStretchMode` to `.outputCorners`.
 - `drawingCoordinates()` returns `kFxDrawingCoordinates_CANVAS`.
 - Object/canvas conversion goes through `FxOnScreenControlAPI_v4.convertPoint(...)`.
-- Inner Stretch uses preview-aligned raw-canvas geometry for visible OSC drawing and hit testing. The unflipped object/canvas stretch is kept only for storage, writeback, and diagnostics.
-- The explicit Inner Stretch storage-to-preview crossing uses `verticallyFlippedObjectSelection` before object-to-canvas conversion.
+- Inner Stretch visible OSC drawing, hit testing, hover, and drag routing all use the same unflipped FxPlug Y-up object/canvas geometry. The custom overlay renderer and Motion's IOSurface composition own the display-space crossing.
+- `StretchOSCEventCoordinateMode` selects the accepted host-event interpretation for hit testing and dragging. After `convertPoint(...)` returns the FxPlug Y-up object coordinate, writeback stores it directly for both `.rawCanvas` and `.mappedSurface`.
+- Corner identity remains unchanged across this boundary. A visible `topLeft` is drawn and hit as `topLeft`, then writes only the `topLeft` parameter group.
 - `AnyUprightGeometry.stretchObjectPoints`, `innerStretchObjectPoints`, `sourceCornerPercentOffset`, and `cornerPixelOffset` own the testable corner naming and parameter/object conversion semantics.
 
 ## Render And Overlay Choices
@@ -54,7 +55,8 @@ This file records AnyUpright-specific Stretch implementation choices. Reusable d
 - Render state carries `inputImageOriginInTexture` and `inputTextureSize`; shader texture lookup computes `texturePixel = sourcePixel + inputImageOriginInTexture` before dividing by `inputTextureSize`.
 - Inner Stretch edit preview does not apply `destinationImage.pixelTransform` or `sourceImage.inversePixelTransform` in shader.
 - Inner Stretch OSC points use `.canvasFramePixels`; `oscSurfacePixel(fromHostCanvasPixel:)` currently returns direct X/Y.
-- The overlay renderer converts local surface pixels to centered Metal vertices with one Y flip at the viewport boundary.
+- The overlay renderer converts these direct Y-up Canvas pixels to centered Metal vertices. Motion's composition of the returned IOSurface completes the observed display mapping; callers must not preflip points to match IOSurface memory layout.
+- Inner Stretch uses the same boundary-adjusted render matrices as the other Warp paths. The matrix converts physical output-IOSurface Y to logical output-image Y, applies the projective transform, then converts logical source-image Y to the physical input texture and adds the tile origin. Edit Mode applies the matching physical-output Y conversion before its selection-to-rect matrix.
 - Persistent OSC overlay vertices are uploaded through an `MTLBuffer`; only small constants such as viewport size use inline `setVertexBytes`.
 
 ## Final Cut And Motion Template Notes

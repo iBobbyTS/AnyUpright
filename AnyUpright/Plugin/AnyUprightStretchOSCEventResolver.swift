@@ -52,9 +52,6 @@ struct StretchOSCEventResolution {
 struct StretchOSCHitGeometry {
     var handles: [AUOSCHandle]
     var stretch: [AUPoint]
-    var rawCanvasHandles: [AUOSCHandle]
-    var rawCanvasStretch: [AUPoint]
-    var usesRawCanvasHitLayer: Bool
 }
 
 extension AnyUprightInnerStretchOSCPlugIn {
@@ -67,39 +64,19 @@ extension AnyUprightInnerStretchOSCPlugIn {
         )
     }
 
-    func rawHitTestCanvasPoints(from objectPoints: AUStretchCorners, mode: AUStretchTransformMode) -> AUStretchCorners {
-        switch mode {
-        case .outputCorners:
-            return stretchCanvasPoints(from: objectPoints)
-        case .innerStretch:
-            // Inner Stretch's render preview is top-origin image/output geometry; raw Final Cut canvas events need that same visible layer.
-            return stretchCanvasPoints(from: AnyUprightGeometry.verticallyFlippedObjectSelection(objectPoints))
-        }
-    }
-
     func hitGeometry(from state: AnyUprightParameterState, size: AUSize, mode: AUStretchTransformMode) -> StretchOSCHitGeometry {
         let objectPoints = stretchObjectPoints(from: state, size: size, mode: mode)
         let canvasPoints = stretchCanvasPoints(from: objectPoints)
-        let rawCanvasPoints = rawHitTestCanvasPoints(from: objectPoints, mode: mode)
         let handles = [
             AUOSCHandle(point: canvasPoints.topLeft, part: StretchOSCPart.topLeft.rawValue),
             AUOSCHandle(point: canvasPoints.topRight, part: StretchOSCPart.topRight.rawValue),
             AUOSCHandle(point: canvasPoints.bottomRight, part: StretchOSCPart.bottomRight.rawValue),
             AUOSCHandle(point: canvasPoints.bottomLeft, part: StretchOSCPart.bottomLeft.rawValue)
         ]
-        let rawHandles = [
-            AUOSCHandle(point: rawCanvasPoints.topLeft, part: StretchOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: rawCanvasPoints.topRight, part: StretchOSCPart.topRight.rawValue),
-            AUOSCHandle(point: rawCanvasPoints.bottomRight, part: StretchOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: rawCanvasPoints.bottomLeft, part: StretchOSCPart.bottomLeft.rawValue)
-        ]
 
         return StretchOSCHitGeometry(
             handles: handles,
-            stretch: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
-            rawCanvasHandles: rawHandles,
-            rawCanvasStretch: [rawCanvasPoints.topLeft, rawCanvasPoints.topRight, rawCanvasPoints.bottomRight, rawCanvasPoints.bottomLeft],
-            usesRawCanvasHitLayer: mode == .innerStretch
+            stretch: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]
         )
     }
 
@@ -151,9 +128,6 @@ extension AnyUprightInnerStretchOSCPlugIn {
         forEventPoint eventPoint: AUPoint,
         handles: [AUOSCHandle],
         stretch: [AUPoint],
-        rawCanvasHandles: [AUOSCHandle],
-        rawCanvasStretch: [AUPoint],
-        useRawCanvasHitLayer: Bool,
         canvasFrame: [AUPoint],
         rawCanvasHitPadding: Double,
         preferredMode: StretchOSCEventCoordinateMode?
@@ -161,14 +135,14 @@ extension AnyUprightInnerStretchOSCPlugIn {
         let resolutions = eventResolutions(
             fromEventPoint: eventPoint,
             canvasFrame: canvasFrame,
-            rawCanvasStretch: rawCanvasStretch,
+            visibleControlPoints: stretch,
             rawCanvasHitPadding: rawCanvasHitPadding,
             preferredMode: preferredMode
         )
         let hitRadius = 24.0
         var closestHandleHit: (part: StretchOSCPart, resolution: StretchOSCEventResolution, distance: Double)?
 
-        for candidate in hitCandidates(for: resolutions, handles: handles, stretch: stretch, rawCanvasHandles: rawCanvasHandles, rawCanvasStretch: rawCanvasStretch, useRawCanvasHitLayer: useRawCanvasHitLayer) {
+        for candidate in hitCandidates(for: resolutions, handles: handles, stretch: stretch) {
             let resolution = candidate.resolution
             for handle in candidate.handles {
                 let dx = resolution.canvasPoint.x - handle.point.x
@@ -189,7 +163,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
 
         let edgeHitRadius = 14.0
         var closestEdgeHit: (part: StretchOSCPart, resolution: StretchOSCEventResolution, distance: Double)?
-        for candidate in hitCandidates(for: resolutions, handles: handles, stretch: stretch, rawCanvasHandles: rawCanvasHandles, rawCanvasStretch: rawCanvasStretch, useRawCanvasHitLayer: useRawCanvasHitLayer) {
+        for candidate in hitCandidates(for: resolutions, handles: handles, stretch: stretch) {
             let resolution = candidate.resolution
             let edges: [(StretchOSCPart, AUPoint, AUPoint)] = [
                 (.topEdge, candidate.stretch[0], candidate.stretch[1]),
@@ -211,7 +185,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
             return (closestEdgeHit.part, closestEdgeHit.resolution)
         }
 
-        for candidate in hitCandidates(for: resolutions, handles: handles, stretch: stretch, rawCanvasHandles: rawCanvasHandles, rawCanvasStretch: rawCanvasStretch, useRawCanvasHitLayer: useRawCanvasHitLayer) {
+        for candidate in hitCandidates(for: resolutions, handles: handles, stretch: stretch) {
             if isPoint(candidate.resolution.canvasPoint, insideStretch: candidate.stretch) {
                 return (.stretch, candidate.resolution)
             }
@@ -223,15 +197,12 @@ extension AnyUprightInnerStretchOSCPlugIn {
     func hitCandidates(
         for resolutions: [StretchOSCEventResolution],
         handles: [AUOSCHandle],
-        stretch: [AUPoint],
-        rawCanvasHandles: [AUOSCHandle],
-        rawCanvasStretch: [AUPoint],
-        useRawCanvasHitLayer: Bool
+        stretch: [AUPoint]
     ) -> [(resolution: StretchOSCEventResolution, handles: [AUOSCHandle], stretch: [AUPoint])] {
         resolutions.map { resolution in
-            if resolution.coordinateMode == .rawCanvas || useRawCanvasHitLayer {
-                return (resolution, rawCanvasHandles, rawCanvasStretch)
-            }
+            // FxPlug CANVAS callbacks and the points passed to the OSC renderer
+            // share this Y-up layer. The renderer/host composition owns the
+            // display-space crossing.
             return (resolution, handles, stretch)
         }
     }
@@ -239,7 +210,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
     func eventResolutions(
         fromEventPoint eventPoint: AUPoint,
         canvasFrame: [AUPoint],
-        rawCanvasStretch: [AUPoint],
+        visibleControlPoints: [AUPoint],
         rawCanvasHitPadding: Double,
         preferredMode: StretchOSCEventCoordinateMode?
     ) -> [StretchOSCEventResolution] {
@@ -262,7 +233,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
             forInitialEventPoint: eventPoint,
             mappedCanvasPoint: mapped.canvasPoint,
             canvasFrame: canvasFrame,
-            visibleControlPoints: rawCanvasStretch,
+            visibleControlPoints: visibleControlPoints,
             hitPadding: rawCanvasHitPadding,
             hostBundleIdentifier: AnyUprightHostContext.hostBundleIdentifier
         )
@@ -273,14 +244,14 @@ extension AnyUprightInnerStretchOSCPlugIn {
     func resolvedCanvasPoint(
         fromEventPoint eventPoint: AUPoint,
         canvasFrame: [AUPoint],
-        rawCanvasStretch: [AUPoint],
+        visibleControlPoints: [AUPoint],
         rawCanvasHitPadding: Double,
         preferredMode: StretchOSCEventCoordinateMode?
     ) -> StretchOSCEventResolution {
         return eventResolutions(
             fromEventPoint: eventPoint,
             canvasFrame: canvasFrame,
-            rawCanvasStretch: rawCanvasStretch,
+            visibleControlPoints: visibleControlPoints,
             rawCanvasHitPadding: rawCanvasHitPadding,
             preferredMode: preferredMode
         ).first
@@ -310,17 +281,14 @@ extension AnyUprightInnerStretchOSCPlugIn {
     }
 
     func dragObjectPoint(from resolution: StretchOSCEventResolution, mode: AUStretchTransformMode, sourceSize: AUSize) -> AUPoint {
-        let rawObjectPoint = objectPoint(fromCanvasPoint: resolution.canvasPoint)
-        return innerStretchDragPoint(from: rawObjectPoint, mode: mode, coordinateMode: resolution.coordinateMode)
+        let objectPoint = objectPoint(fromCanvasPoint: resolution.canvasPoint)
+        return innerStretchDragPoint(from: objectPoint, mode: mode, coordinateMode: resolution.coordinateMode)
     }
 
     func innerStretchDragPoint(from point: AUPoint, mode: AUStretchTransformMode, coordinateMode: StretchOSCEventCoordinateMode) -> AUPoint {
-        guard mode == .innerStretch,
-              coordinateMode == .rawCanvas else {
-            return point
-        }
-
-        return AnyUprightGeometry.verticallyFlippedObjectPoint(point)
+        // Canvas conversion already returns FxPlug's Y-up object coordinates.
+        // Parameter writeback must not apply another Y conversion.
+        point
     }
 
     func distance(from point: AUPoint, toSegmentStart start: AUPoint, end: AUPoint) -> Double {

@@ -226,8 +226,9 @@ comparable to the corrected same-VP metric. A full corrected rerun can reuse a
 persisted raw-line cache, but the original full run did not retain one.
 
 The neural migration and proposal-quality measurements above remain the
-research baseline. Production integration now uses ScaleLSD as the Upright
-model detector, with the CPU detector as its only fallback. The production
+research baseline. Production integration now uses ScaleLSD as the only
+Upright model detector for Semi Auto and Full Auto. A model or Metal input
+failure preserves existing candidates instead of substituting CPU Hough lines. The production
 path deliberately does not use the experimental VP/proposal rejector: it ranks
 decoded lines by monotonic normalized support score, keeps the top 10 per
 requested orientation for Semi Auto, and selects the top two per requested

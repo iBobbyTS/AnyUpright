@@ -303,8 +303,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             do {
                 let scaleLSDCandidates = try AnyUprightScaleLSDDetector.detectCandidates(
                     in: frame,
-                    request: request,
-                    context: analysisContext
+                    request: request
                 )
                 storeDetectedCandidates(
                     scaleLSDCandidates,
@@ -329,7 +328,8 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                         AUMonotonicClock.elapsedMilliseconds(since: detectorStartNanos)
                     )
                 )
-                // Fall through to the CPU detector when ScaleLSD is unavailable.
+                analysisTransaction.relinquishFrame(token: claim.token)
+                return
             }
         }
 

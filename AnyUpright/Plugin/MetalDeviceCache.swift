@@ -135,6 +135,10 @@ class MetalDeviceCache: NSObject {
         
         return nil
     }
+
+    func analysisDevice(preferredRegistryID registryID: UInt64) -> MTLDevice? {
+        AUAppleSiliconMetalDeviceResolver.resolve(preferredRegistryID: registryID)
+    }
     
     func pipelineState(with registryID:UInt64, pixelFormat:MTLPixelFormat) -> MTLRenderPipelineState? {
         cacheItem(with: registryID, pixelFormat: pixelFormat)?.pipelineState

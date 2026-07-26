@@ -19,7 +19,6 @@ enum HorizonParam: UInt32 {
 
 @objc(AnyUprightHorizonPlugIn)
 class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
-    private static let geoCalibAnalysisMaxDimension = 1920
     private static let geoCalibVerifierMaxDimension = 640
     private static let geoCalibCoreMLModelShapes = AUGeoCalibInputShapeSpec.production
     private let analysisContext = CIContext(options: nil)
@@ -434,49 +433,18 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         let sourceHeight = max(1, Int(bounds.top - bounds.bottom))
         let shapeSpec = try Self.geoCalibCoreMLModelShape(forWidth: sourceWidth, height: sourceHeight)
 
-        let directStart = AUMonotonicClock.nowNanos()
-        do {
-            let preprocessed = try AUGeoCalibDirectImagePreprocessor.preprocessFrame(
-                frame,
-                targetInputShape: shapeSpec.inputShape
-            )
-            return GeoCalibPreprocessRun(
-                preprocessed: preprocessed,
-                source: "metal_direct",
-                shapeLabel: shapeSpec.label,
-                inputWidth: sourceWidth,
-                inputHeight: sourceHeight,
-                renderMilliseconds: nil,
-                preprocessMilliseconds: AUMonotonicClock.elapsedMilliseconds(since: directStart)
-            )
-        } catch {
-            horizonAnalysisDebugLog("geocalib direct preprocess failed; falling back to CI/CPU error=\(String(describing: error))")
-        }
-
-        let renderStart = AUMonotonicClock.nowNanos()
-        guard let rgbImage = AnyUprightAnalysisImage.rgbFloatImage(
-            from: frame,
-            maxDimension: Self.geoCalibAnalysisMaxDimension,
-            context: analysisContext
-        ) else {
-            throw AUGeoCalibHorizonDetectorError.invalidImage("unable to render RGB frame")
-        }
-        let renderMilliseconds = AUMonotonicClock.elapsedMilliseconds(since: renderStart)
-
         let preprocessStart = AUMonotonicClock.nowNanos()
-        let preprocessed = try AUGeoCalibImagePreprocessor.preprocessRGB(
-            rgbImage.pixelsNCHW,
-            width: rgbImage.width,
-            height: rgbImage.height,
+        let preprocessed = try AUGeoCalibDirectImagePreprocessor.preprocessFrame(
+            frame,
             targetInputShape: shapeSpec.inputShape
         )
         return GeoCalibPreprocessRun(
             preprocessed: preprocessed,
-            source: "ci_cpu_fallback",
+            source: "metal_mps_lanczos",
             shapeLabel: shapeSpec.label,
-            inputWidth: rgbImage.width,
-            inputHeight: rgbImage.height,
-            renderMilliseconds: renderMilliseconds,
+            inputWidth: sourceWidth,
+            inputHeight: sourceHeight,
+            renderMilliseconds: nil,
             preprocessMilliseconds: AUMonotonicClock.elapsedMilliseconds(since: preprocessStart)
         )
     }

@@ -3,7 +3,6 @@
 //  AnyUpright
 //
 
-import CoreImage
 import CoreML
 import Dispatch
 import Foundation
@@ -40,8 +39,7 @@ enum AnyUprightScaleLSDDetector {
 
     static func detectCandidates(
         in frame: FxImageTile,
-        request: UprightAnalysisRequest,
-        context: CIContext
+        request: UprightAnalysisRequest
     ) throws -> [UprightDetectedCandidate] {
         let totalStart = AUMonotonicClock.nowNanos()
         let sourceBounds = frame.imagePixelBounds
@@ -49,14 +47,8 @@ enum AnyUprightScaleLSDDetector {
             width: max(1.0, Double(sourceBounds.right - sourceBounds.left)),
             height: max(1.0, Double(sourceBounds.top - sourceBounds.bottom))
         )
-        let renderStart = AUMonotonicClock.nowNanos()
-        let source = try renderSourceRGBA(from: frame, context: context)
-        let renderMS = AUMonotonicClock.elapsedMilliseconds(since: renderStart)
-
         let preprocessStart = AUMonotonicClock.nowNanos()
-        guard let input = AnyUprightScaleLSDPreprocessor.normalizedGrayscaleNCHW(from: source) else {
-            throw AUScaleLSDDetectorError.invalidInput
-        }
+        let input = try resampledGrayscaleInput(from: frame)
         let preprocessMS = AUMonotonicClock.elapsedMilliseconds(since: preprocessStart)
 
         let coreMLRun = try configuredCache().run(inputNCHW: input, logger: debugLog)
@@ -66,23 +58,22 @@ enum AnyUprightScaleLSDDetector {
         let lines = try AnyUprightScaleLSDPostprocessor.decode(
             denseLogits: dense.values,
             shape: dense.shape,
-            imageWidth: source.width,
-            imageHeight: source.height
+            imageWidth: inputSize,
+            imageHeight: inputSize
         )
         let decodeMS = AUMonotonicClock.elapsedMilliseconds(since: decodeStart)
 
         let candidatesStart = AUMonotonicClock.nowNanos()
         let candidates = AnyUprightScaleLSDPreprocessor.detectedCandidates(
             from: lines,
-            imageSize: AUSize(width: Double(source.width), height: Double(source.height)),
+            imageSize: AUSize(width: Double(inputSize), height: Double(inputSize)),
             referenceImageSize: referenceImageSize
         )
         let ranked = AnyUprightUprightCandidates.analysisCandidates(from: candidates, request: request)
         let candidatesMS = AUMonotonicClock.elapsedMilliseconds(since: candidatesStart)
         debugLog(
             String(
-                format: "scalelsd_stages render_ms=%.3f preprocess_ms=%.3f coreml_cache_hit=%@ coreml_load_ms=%.3f coreml_predict_ms=%.3f coreml_total_ms=%.3f decode_ms=%.3f candidates_ms=%.3f lines=%d candidates=%d total_ms=%.3f",
-                renderMS,
+                format: "scalelsd_stages preprocess_ms=%.3f coreml_cache_hit=%@ coreml_load_ms=%.3f coreml_predict_ms=%.3f coreml_total_ms=%.3f decode_ms=%.3f candidates_ms=%.3f lines=%d candidates=%d total_ms=%.3f",
                 preprocessMS,
                 coreMLRun.cacheHit ? "true" : "false",
                 coreMLRun.loadMilliseconds,
@@ -125,38 +116,52 @@ enum AnyUprightScaleLSDDetector {
         throw AUScaleLSDDetectorError.missingModel(candidates)
     }
 
-    private static func renderSourceRGBA(
-        from frame: FxImageTile,
-        context: CIContext
-    ) throws -> AUScaleLSDRGBAImage {
-        guard let sourceImage = AnyUprightAnalysisImage.ciImage(from: frame) else {
+    private static func resampledGrayscaleInput(from frame: FxImageTile) throws -> [Float] {
+        guard frame.ioSurface != nil else {
             throw AUScaleLSDDetectorError.missingFrameImage
         }
         let bounds = frame.imagePixelBounds
         let sourceWidth = max(1, Int(bounds.right - bounds.left))
         let sourceHeight = max(1, Int(bounds.top - bounds.bottom))
-        let originNormalized = sourceImage.transformed(
-            by: CGAffineTransform(
-                translationX: -CGFloat(bounds.left),
-                y: -CGFloat(bounds.bottom)
+        guard let device = MetalDeviceCache.deviceCache.analysisDevice(preferredRegistryID: frame.deviceRegistryID),
+              let sourceTexture = frame.metalTexture(for: device) else {
+            throw AUScaleLSDDetectorError.missingFrameImage
+        }
+        debugLog(
+            "scalelsd_metal_source requested_registry_id=\(frame.deviceRegistryID) resolved_registry_id=\(device.registryID) "
+                + "surface=\(frame.ioSurface.width)x\(frame.ioSurface.height) texture=\(sourceTexture.width)x\(sourceTexture.height) "
+                + "image_bounds=\(frame.imagePixelBounds) tile_bounds=\(frame.tilePixelBounds)"
+        )
+        let pixelFormat = MetalDeviceCache.FxMTLPixelFormat(for: frame)
+        let lease = MetalDeviceCache.deviceCache.commandQueueLease(
+            with: device.registryID,
+            pixelFormat: pixelFormat
+        )
+        defer { lease?.returnToCache() }
+        guard let commandQueue = lease?.commandQueue ?? device.makeCommandQueue() else {
+            throw AUScaleLSDDetectorError.invalidInput
+        }
+
+        do {
+            let tensor = try AUAppleSiliconImageResampler.resample(
+                sourceTexture: sourceTexture,
+                sourceWidth: sourceWidth,
+                sourceHeight: sourceHeight,
+                targetWidth: inputSize,
+                targetHeight: inputSize,
+                layout: .stretch,
+                channels: .grayscale,
+                commandQueue: commandQueue
             )
-        )
-        let analysisImage = originNormalized.transformed(
-            by: CGAffineTransform(
-                scaleX: CGFloat(inputSize) / CGFloat(sourceWidth),
-                y: CGFloat(inputSize) / CGFloat(sourceHeight)
-            )
-        )
-        var pixels = [UInt8](repeating: 0, count: inputSize * inputSize * 4)
-        context.render(
-            analysisImage,
-            toBitmap: &pixels,
-            rowBytes: inputSize * 4,
-            bounds: CGRect(x: 0, y: 0, width: inputSize, height: inputSize),
-            format: .RGBA8,
-            colorSpace: CGColorSpaceCreateDeviceRGB()
-        )
-        return AUScaleLSDRGBAImage(width: inputSize, height: inputSize, pixels: pixels)
+            guard tensor.shape == [1, 1, inputSize, inputSize] else {
+                throw AUScaleLSDDetectorError.invalidInput
+            }
+            return tensor.values
+        } catch let error as AUScaleLSDDetectorError {
+            throw error
+        } catch {
+            throw AUScaleLSDDetectorError.invalidInput
+        }
     }
 
     private static func debugLog(_ message: String) {

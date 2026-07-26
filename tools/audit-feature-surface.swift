@@ -60,7 +60,7 @@ struct AuditFeatureSurface {
 
         try auditRegisteredPlugins(infoPlist)
         try auditHorizon(horizonEffect, transaction: analysisTransaction)
-        try auditStretch(stretchEffects, geometry: geometry, overlay: overlay, metal: metal, transaction: analysisTransaction)
+        try auditStretch(stretchEffects, geometry: geometry, overlay: overlay, metal: metal)
         try auditUpright(uprightEffects, geometry: geometry, warp: warp, metal: metal, candidates: candidates, transaction: analysisTransaction)
 
         print("AnyUpright feature surface audit passed")
@@ -81,7 +81,7 @@ struct AuditFeatureSurface {
 
         let expected = [
             FeaturePluginExpectation(className: "AnyUprightHorizonPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
-            FeaturePluginExpectation(className: "AnyUprightInnerStretchPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
+            FeaturePluginExpectation(className: "AnyUprightInnerStretchPlugIn", protocols: ["FxFilter"]),
             FeaturePluginExpectation(className: "AnyUprightOuterStretchPlugIn", protocols: ["FxFilter"]),
             FeaturePluginExpectation(className: "AnyUprightInnerStretchOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]),
             FeaturePluginExpectation(className: "AnyUprightOuterStretchOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["81C621CF-4119-46E9-BC04-47A1539A8B54"]),
@@ -112,33 +112,16 @@ struct AuditFeatureSurface {
         try require(effects, "analysisStateForEffect()", "Horizon rejects duplicate host analysis requests")
     }
 
-    private static func auditStretch(_ effects: String, geometry: String, overlay: String, metal: String, transaction: String) throws {
+    private static func auditStretch(_ effects: String, geometry: String, overlay: String, metal: String) throws {
         try require(effects, "class AnyUprightInnerStretchPlugIn: AnyUprightStretchModePlugIn", "Inner Stretch is registered as its own filter")
         try require(effects, "class AnyUprightOuterStretchPlugIn: AnyUprightStretchModePlugIn", "Outer Stretch is registered as its own filter")
-        try require(effects, "FxAnalyzer", "Inner Stretch supports explicit frame analysis")
-        try require(effects, "AUFxAnalysisTransaction<Void, AnalysisResult>", "Inner Stretch owns a typed shared analysis transaction")
-        try require(transaction, "AUFxAnalysisProbePolicy.range", "Inner Stretch uses the shared bounded representative-frame probe")
-        try require(effects, "Detect Edge and Corner", "Inner Stretch exposes explicit input-four-corner selection detection")
-        try require(effects, "addPushButton", "Inner Stretch detection uses a native FxPlug push button")
-        try require(effects, "selector: #selector(detectInnerStretch)", "Inner Stretch push button dispatches to detection")
-        try reject(effects, "addCustomParameter", "Inner Stretch detection should not use a custom parameter for button UI")
-        try reject(effects, "kFxParameterFlag_CUSTOM_UI", "Inner Stretch detection should not replace the standard parameter UI")
-        try reject(effects, "FxCustomParameterViewHost_v2", "Inner Stretch should not provide a custom inspector view for its detection button")
-        try reject(effects, "defaultValue: NSData()", "Inner Stretch native button should not use data-backed custom value storage")
-        try reject(effects, "retainedDetectInnerStretchButtonViews", "Inner Stretch native button should not retain custom parameter views")
-        try reject(effects, "createView(forParameterID", "Inner Stretch native button should not create a custom detection button view")
-        try reject(effects, "NSButton(title: \"Detect Edge and Corner\"", "Inner Stretch detection should not expose its own AppKit button")
-        try require(effects, "detectSupportedLineSegments", "Inner Stretch detects independent edge primitives instead of rectangle candidates")
-        try require(effects, "Score Threshold", "Inner Stretch exposes a normalized detection-score threshold")
-        try require(effects, "Choose from detections", "Inner Stretch can switch OSC hit testing from manual handles to detected primitives")
-        try require(effects, "chooseFromDetections", "Inner Stretch exposes detection-choice mode as a persistent FxPlug parameter")
-        try require(effects, "writeInnerStretchDetectionPrimitives", "Inner Stretch detection writes primitive slots instead of moving the current stretch")
-        try require(effects, "stretchInnerStretchDetectionEdges", "Inner Stretch OSC reads detected edge primitives")
-        try require(effects, "stretchInnerStretchDetectionCorners", "Inner Stretch OSC reads detected corner primitives")
-        try require(effects, "sourceDetectionOverlaySegments", "Inner Stretch OSC draws detected edge/corner overlays")
-        try require(effects, "toggleDetectionSelection", "Inner Stretch OSC can select detected edges/corners for writeback")
-        try reject(effects, "VNDetectRectanglesRequest()", "Inner Stretch detection overlay should not be limited to closed rectangle observations")
-        try reject(effects, "writeDetectedInnerStretchOffsets", "Inner Stretch detection should not directly move the existing stretch")
+        try reject(effects, "FxAnalyzer", "Inner Stretch remains a manual-only filter")
+        try reject(effects, "Detect Edge and Corner", "Inner Stretch does not expose analysis controls")
+        try reject(effects, "Score Threshold", "Inner Stretch does not expose detection thresholds")
+        try reject(effects, "Choose from detections", "Inner Stretch does not expose candidate-selection mode")
+        try reject(effects, "detectInnerStretch", "Inner Stretch has no detector callback")
+        try reject(effects, "InnerStretchDetection", "Inner Stretch has no detection parameter slots")
+        try reject(effects, "sourceDetection", "Inner Stretch OSC has no detection overlay path")
         try require(effects, "override var fixedStretchMode: AUStretchTransformMode", "Stretch filters choose fixed modes")
         try require(effects, "class AnyUprightOuterStretchOSCPlugIn: AnyUprightInnerStretchOSCPlugIn", "Outer Stretch exposes its own onscreen control")
         try require(effects, "parameterFlags: hiddenFlags()", "Stretch fixed mode parameter is hidden from the inspector")
@@ -153,8 +136,6 @@ struct AuditFeatureSurface {
         try require(geometry, "innerStretchDefault", "Inner Stretch defines its default input selection")
         try require(geometry, "innerStretchInset = 0.10", "Inner Stretch defaults to the central 80 percent of the source frame")
         try require(geometry, "innerStretchObjectPoints", "Inner Stretch converts persistent offsets into object-space handles")
-        try require(geometry, "imageSelection(fromNormalizedObjectPoints", "Detected corner selections can be ordered into an inner stretch")
-        try require(geometry, "imageSelection(fromNormalizedObjectLines", "Detected edge selections can be intersected into an inner stretch")
         try require(geometry, "guard !showCornerAdjuster else", "Inner Stretch mode can preview handles without warping")
         try require(geometry, "sourceCornerPercentOffset", "Inner Stretch OSC writes resolution-independent corner offsets")
         try require(geometry, "cornerPixelOffset", "Outer Stretch OSC writes stable corner pixel offsets")

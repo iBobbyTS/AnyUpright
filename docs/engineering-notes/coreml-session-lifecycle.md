@@ -34,7 +34,7 @@ All cache state is protected by a private serial queue. Acquiring a session and 
 
 Prediction runs outside the state queue. The analysis closure holds a local strong session reference, allowing an expiry timer to remove the cached reference without interrupting an in-flight prediction. Every timer reschedule increments a generation; an older timer cannot unload a session whose deadline was extended later.
 
-FxAnalysis may deliver several frames for the shared Horizon/Upright/Inner Stretch two-sample probe range. `AUFxAnalysisTransaction` atomically claims only the first frame that can enter an effect's analysis path, so one user action produces one lifecycle analysis event, including when the model result is rejected. A callback whose image cannot be prepared releases the claim for a later callback; this is frame availability handling, not a model retry policy.
+FxAnalysis may deliver several frames for the shared Horizon/Upright two-sample probe range. `AUFxAnalysisTransaction` atomically claims only the first frame that can enter an effect's analysis path, so one user action produces one lifecycle analysis event, including when the model result is rejected. A callback whose image cannot be prepared releases the claim for a later callback; this is frame availability handling, not a model retry policy.
 
 Plugin-add prewarming returns immediately and runs on a dedicated queue. A newly loaded session is warmed once. A cache hit does not run warm-up again. Loader failures are not cached and can be retried; prediction failures propagate without clearing a valid cached session or changing model-specific fallback decisions.
 

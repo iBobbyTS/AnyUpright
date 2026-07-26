@@ -2,7 +2,7 @@
 
 ## Scope
 
-Horizon, Upright, and Inner Stretch use the same narrow time-range policy and the shared `AUFxAnalysisTransaction`. The transaction instances remain effect-local; no request or result state is shared across effects.
+Horizon and Upright use the same narrow time-range policy and the shared `AUFxAnalysisTransaction`. The transaction instances remain effect-local; no request or result state is shared across effects. Inner Stretch is manual-only and does not participate in FxAnalysis.
 
 ## Time Domains
 
@@ -22,4 +22,4 @@ Before starting, the transaction checks both its local pending request and the h
 
 Every callback increments a diagnostic count. A frame needs an IOSurface and non-empty pixel bounds before it may claim the request. The first claimant runs detection; later callbacks return without inference. If that claimant cannot produce any readable/preprocessed image through the primary or fallback path, it releases the claim so the next callback in the two-sample probe can take over.
 
-Horizon rejected/no-detection outcomes are completed analyses but do not write Rotation. Upright and Inner Stretch record a produced result even when it contains zero candidates or primitives, allowing a valid empty result to clear old slots. If no callback can be prepared, cleanup preserves the existing parameters and selection state.
+Horizon rejected/no-detection outcomes are completed analyses but do not write Rotation. Upright records a produced result even when it contains zero candidates, allowing a valid empty result to clear old slots. If no callback can be prepared, cleanup preserves the existing parameters and selection state.

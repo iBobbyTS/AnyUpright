@@ -4,8 +4,6 @@
 //
 
 import Foundation
-import CoreImage
-import IOSurface
 
 class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
     var fixedStretchMode: AUStretchTransformMode {
@@ -34,8 +32,6 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
                 defaultValue: true,
                 parameterFlags: defaultFlags()
             )
-            addStretchChooseFromDetections(paramAPI, parameterFlags: defaultFlags())
-            addInnerStretchDetectionScoreThreshold(paramAPI, parameterFlags: defaultFlags())
         } else {
             paramAPI.addToggleButton(
                 withName: "Edit Mode",
@@ -43,7 +39,6 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
                 defaultValue: false,
                 parameterFlags: hiddenFlags()
             )
-            addStretchChooseFromDetections(paramAPI, parameterFlags: hiddenFlags())
         }
 
         let cornerGroupFlags = showsCornerParameters ? collapsedFlags() : hiddenCollapsedFlags()
@@ -52,9 +47,6 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         addCornerParameters(paramAPI, title: "Bottom Right", groupID: StretchGroup.bottomRight.rawValue, percentX: .bottomRightPercentX, percentY: .bottomRightPercentY, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
         addCornerParameters(paramAPI, title: "Bottom Left", groupID: StretchGroup.bottomLeft.rawValue, percentX: .bottomLeftPercentX, percentY: .bottomLeftPercentY, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
 
-        if showsSourceEditMode {
-            addInnerStretchDetectionPrimitiveParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), hiddenFlags: hiddenFlags())
-        }
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {
@@ -120,263 +112,9 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
 }
 
 @objc(AnyUprightInnerStretchPlugIn)
-class AnyUprightInnerStretchPlugIn: AnyUprightStretchModePlugIn, FxAnalyzer {
-    private struct AnalysisResult {
-        let primitives: InnerStretchDetectedSourcePrimitives
-        let sourceSize: AUSize
-    }
-
-    private let analysisContext = CIContext(options: nil)
-    private let analysisTransaction = AUFxAnalysisTransaction<Void, AnalysisResult>()
-
-    override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
-        paramAPI.addPushButton(
-            withName: "Detect Edge and Corner",
-            parameterID: StretchParam.detectInnerStretch.rawValue,
-            selector: #selector(detectInnerStretch),
-            parameterFlags: defaultFlags()
-        )
-        try super.addEffectParameters(paramAPI)
-    }
-
+class AnyUprightInnerStretchPlugIn: AnyUprightStretchModePlugIn {
     override var fixedStretchMode: AUStretchTransformMode {
         .innerStretch
-    }
-
-    @objc private func detectInnerStretch() {
-        startInnerStretchDetection(at: currentParameterTime())
-    }
-
-    private func startInnerStretchDetection(at time: CMTime) {
-        guard let analysisAPI = _apiManager.api(for: FxAnalysisAPI.self) as? FxAnalysisAPI else {
-            stretchAnalysisDebugLog("start missing FxAnalysisAPI")
-            return
-        }
-        let startNanos = AUMonotonicClock.nowNanos()
-        do {
-            let disposition = try analysisTransaction.start(
-                request: (),
-                requestedTimelineTime: time,
-                analysisStartNanos: startNanos,
-                hostIsBusy: {
-                    let state = analysisAPI.analysisStateForEffect()
-                    return state == kFxAnalysisState_AnalysisRequested || state == kFxAnalysisState_AnalysisStarted
-                },
-                startForwardAnalysis: {
-                    stretchAnalysisDebugLog("start requested=\(time)")
-                    try analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU)
-                }
-            )
-            switch disposition {
-            case .started:
-                stretchAnalysisDebugLog(String(format: "start returned elapsed_ms=%.3f", AUMonotonicClock.elapsedMilliseconds(since: startNanos)))
-            case .localBusy:
-                stretchAnalysisDebugLog("start ignored busy local=true")
-            case .hostBusy:
-                stretchAnalysisDebugLog("start ignored busy host=true")
-            case .invalidTimelineTime:
-                stretchAnalysisDebugLog("start invalid timeline time=\(time)")
-            }
-        } catch {
-            stretchAnalysisDebugLog("start error=\(String(describing: error))")
-        }
-    }
-
-    func desiredAnalysisTimeRange(_ desiredRange: UnsafeMutablePointer<CMTimeRange>, forInputWith inputTimeRange: CMTimeRange) throws {
-        guard let timingAPI = _apiManager.api(for: FxTimingAPI_v4.self) as? FxTimingAPI_v4 else {
-            analysisTransaction.cancelCurrentRequest()
-            throw innerStretchAnalysisError("FxTimingAPI_v4 is unavailable")
-        }
-        do {
-            let details = try analysisTransaction.desiredRange(
-                within: inputTimeRange,
-                inputTimeFromTimeline: { timelineTime in
-                    var inputTime = CMTime.invalid
-                    timingAPI.inputTime(&inputTime, fromTimelineTime: timelineTime)
-                    return inputTime
-                },
-                sampleDuration: {
-                    var duration = CMTime.invalid
-                    timingAPI.sampleDuration(&duration)
-                    return duration
-                }
-            )
-            if details.usedFallbackSampleDuration {
-                stretchAnalysisDebugLog("desired range invalid sample_duration=\(details.sampleDuration); using 0.05s fallback")
-            }
-            desiredRange.pointee = details.range
-            stretchAnalysisDebugLog("desired range timeline=\(details.requestedTimelineTime) input=\(details.inputTime) sample_duration=\(details.sampleDuration) start=\(details.range.start) duration=\(details.range.duration)")
-        } catch {
-            throw innerStretchAnalysisError(String(describing: error))
-        }
-    }
-
-    func setupAnalysis(for analysisRange: CMTimeRange, frameDuration: CMTime) throws {
-        _ = analysisTransaction.setupAnalysis(range: analysisRange)
-        stretchAnalysisDebugLog("setup range_start=\(analysisRange.start) duration=\(analysisRange.duration) frame_duration=\(frameDuration)")
-    }
-
-    func analyzeFrame(_ frame: FxImageTile, at frameTime: CMTime) throws {
-        let bounds = frame.imagePixelBounds
-        guard let claim = analysisTransaction.claimFrame(
-            hasIOSurface: frame.ioSurface != nil,
-            hasNonEmptyPixelBounds: bounds.right > bounds.left && bounds.top > bounds.bottom
-        ) else {
-            stretchAnalysisDebugLog("analyze skipped frame=\(frameTime) callback=\(analysisTransaction.receivedFrameCount)")
-            return
-        }
-
-        guard let image = AnyUprightAnalysisImage.grayscaleImage(from: frame, maxDimension: 540, context: analysisContext) else {
-            analysisTransaction.relinquishFrame(token: claim.token)
-            stretchAnalysisDebugLog("analyze no grayscale frame callback=\(claim.callbackCount); waiting for next callback")
-            return
-        }
-        let size = AUSize(width: Double(image.width), height: Double(image.height))
-        let primitives = detectedSourcePrimitives(in: image)
-        stretchAnalysisDebugLog("analyze image=\(image.width)x\(image.height) edges=\(primitives.edges.count) corners=\(primitives.corners.count)")
-
-        analysisTransaction.complete(
-            token: claim.token,
-            outcome: .produced(AnalysisResult(primitives: primitives, sourceSize: size)),
-            inputFrameTime: frameTime
-        )
-    }
-
-    func cleanupAnalysis() throws {
-        guard let snapshot = analysisTransaction.cleanup() else {
-            stretchAnalysisDebugLog("cleanup ignored without pending request")
-            return
-        }
-        guard case .produced(let result) = snapshot.outcome else {
-            stretchAnalysisDebugLog("cleanup preserved existing detections callback_count=\(snapshot.callbackCount)")
-            return
-        }
-        guard snapshot.requestedTimelineTime.isValid,
-              snapshot.requestedTimelineTime.isNumeric,
-              let settingAPI = _apiManager.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5 else {
-            return
-        }
-
-        performParameterAction {
-            settingAPI.setBoolValue(true, toParameter: StretchParam.showCornerAdjuster.rawValue, at: snapshot.requestedTimelineTime)
-            settingAPI.setBoolValue(true, toParameter: StretchParam.chooseFromDetections.rawValue, at: snapshot.requestedTimelineTime)
-            writeInnerStretchDetectionPrimitives(result.primitives, size: result.sourceSize, settingAPI: settingAPI, time: snapshot.requestedTimelineTime)
-        }
-        stretchAnalysisDebugLog("cleanup writeTime=\(snapshot.requestedTimelineTime) edges=\(result.primitives.edges.count) corners=\(result.primitives.corners.count)")
-    }
-
-    private func innerStretchAnalysisError(_ message: String) -> NSError {
-        NSError(
-            domain: "AnyUpright.FxAnalysis",
-            code: 3,
-            userInfo: [NSLocalizedDescriptionKey: "Inner Stretch analysis: \(message)"]
-        )
-    }
-
-    private func detectedSourcePrimitives(in image: AUGrayscaleImage) -> InnerStretchDetectedSourcePrimitives {
-        let vertical = detectedSourceEdges(in: image, orientation: .vertical)
-        let horizontal = detectedSourceEdges(in: image, orientation: .horizontal)
-        let selectedEdges = Array((vertical + horizontal)
-            .sorted { $0.score > $1.score }
-            .prefix(AnyUprightInnerStretchDetectionEdges.slotCount))
-        let maxEdgeScore = selectedEdges.reduce(0.0) { max($0, $1.score) }
-        let normalizedEdges = selectedEdges.map { edge in
-            InnerStretchDetectedSourceEdge(
-                line: edge.line,
-                score: AnyUprightGeometry.normalizedScore(edge.score, maximum: maxEdgeScore)
-            )
-        }
-        let corners = detectedSourceCorners(from: selectedEdges, size: AUSize(width: Double(image.width), height: Double(image.height)))
-        let maxCornerScore = corners.reduce(0.0) { max($0, $1.score) }
-        let normalizedCorners = corners.map { corner in
-            InnerStretchDetectedSourceCorner(
-                point: corner.point,
-                score: AnyUprightGeometry.normalizedScore(corner.score, maximum: maxCornerScore)
-            )
-        }
-
-        return InnerStretchDetectedSourcePrimitives(edges: normalizedEdges, corners: normalizedCorners)
-    }
-
-    private func detectedSourceEdges(in image: AUGrayscaleImage, orientation: AUReferenceOrientation) -> [AUDetectedLineSegment] {
-        let minimumLength: Double
-        let voteThreshold: Int
-        switch orientation {
-        case .horizontal:
-            minimumLength = max(16.0, Double(image.width) * 0.08)
-            voteThreshold = max(16, image.width / 12)
-        case .vertical:
-            minimumLength = max(16.0, Double(image.height) * 0.08)
-            voteThreshold = max(16, image.height / 12)
-        }
-
-        return AnyUprightLineDetection.detectSupportedLineSegments(
-            in: image,
-            options: AULineDetectionOptions(
-                orientation: orientation,
-                maxDeviationRadians: .pi / 5.0,
-                edgeThreshold: 36.0,
-                voteThreshold: voteThreshold,
-                maxLines: max(12, AnyUprightInnerStretchDetectionEdges.slotCount / 2),
-                nonMaximumThetaRadius: 3,
-                nonMaximumRhoRadius: 6
-            )
-        )
-        .filter { $0.line.length >= minimumLength }
-    }
-
-    private func detectedSourceCorners(from edges: [AUDetectedLineSegment], size: AUSize) -> [InnerStretchDetectedSourceCorner] {
-        let vertical = edges.filter { $0.orientation == .vertical }
-        let horizontal = edges.filter { $0.orientation == .horizontal }
-        let tolerance = max(10.0, min(size.width, size.height) * 0.035)
-        let mergeRadius = max(6.0, min(size.width, size.height) * 0.018)
-        var rawCorners: [InnerStretchDetectedSourceCorner] = []
-
-        for verticalEdge in vertical {
-            for horizontalEdge in horizontal {
-                guard let point = AnyUprightGeometry.intersection(of: verticalEdge.line, and: horizontalEdge.line),
-                      point.x >= 0.0,
-                      point.x <= size.width - 1.0,
-                      point.y >= 0.0,
-                      point.y <= size.height - 1.0 else {
-                    continue
-                }
-
-                let verticalDistance = verticalEdge.line.distance(to: point)
-                let horizontalDistance = horizontalEdge.line.distance(to: point)
-                let distance = max(verticalDistance, horizontalDistance)
-                guard distance <= tolerance else {
-                    continue
-                }
-
-                let proximity = max(0.25, 1.0 - distance / tolerance)
-                rawCorners.append(InnerStretchDetectedSourceCorner(
-                    point: point,
-                    score: (verticalEdge.score + horizontalEdge.score) * 0.5 * proximity
-                ))
-            }
-        }
-
-        var selected: [InnerStretchDetectedSourceCorner] = []
-        for corner in rawCorners.sorted(by: { $0.score > $1.score }) {
-            let duplicate = selected.contains { existing in
-                hypot(existing.point.x - corner.point.x, existing.point.y - corner.point.y) <= mergeRadius
-            }
-            if duplicate {
-                continue
-            }
-
-            selected.append(corner)
-            if selected.count >= AnyUprightInnerStretchDetectionCorners.slotCount {
-                break
-            }
-        }
-
-        return selected
-    }
-
-    private func stretchAnalysisDebugLog(_ message: String) {
-        AUAnalysisDiagnostics.innerStretch.log(message)
     }
 }
 

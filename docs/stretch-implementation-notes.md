@@ -1,7 +1,7 @@
 # Stretch Implementation Notes
 
-Last updated: 2026-07-25 17:14 MDT
-Reference commit: a1e6085b1fca63e703f1970635b68fe875052047
+Last updated: 2026-07-25 20:35 MDT
+Reference commit: 660ee0736c22d6dc430f3887a07eb219259b41c4
 Observed host versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 and 6.3 (450156), Final Cut Pro 12.2 and 12.3 (450152), FxPlug framework 4.3.4 (18567.3)
 
 This file records AnyUpright-specific Stretch implementation choices. Reusable debugging guidance and host observations that may help other FxPlug plug-ins live under `docs/engineering-notes/`.
@@ -14,7 +14,7 @@ This file records AnyUpright-specific Stretch implementation choices. Reusable d
 - Mirror modes were accidental exploratory work and are not part of current Stretch behavior.
 - `AnyUpright Inner Stretch` defaults to the central 80% input selection.
 - The full-frame Inner Stretch case remains a regression fixture for identity/no-offset render checks, not the current product default.
-- `AnyUpright Inner Stretch` includes an explicit `Detect Edge and Corner` native FxPlug push button on parameter channel `./216`. Clicking it starts FxAnalysis and runs independent edge/corner detection on one representative frame, but it does not move the current Inner Stretch. Detected line segments and intersections are written into hidden primitive slots with scores normalized to 0...1, then the plug-in enables `Edit Mode` and `Choose from detections`. `Score Threshold` controls which edge lines and corner crosses are drawn while `Choose from detections` is enabled. `Choose from detections` is a persistent inspector checkbox that temporarily moves OSC display and hit testing from the manual stretch to detected primitives. The selection itself is transient OSC state: first selecting a point hides lines, first selecting a line hides points, repeated clicks toggle selections, and four selected points or four selected lines write the Inner Stretch then automatically turn the checkbox off. FCP visibility requires `Inner Stretch.moef` publish settings to target the push-button parameter (channel `./216`), choice parameter (channel `./218`), and threshold parameter (channel `./217` in the current development template); the raw FxPlug parameters can exist in Motion while remaining invisible in FCP if they are not published by the template.
+- `AnyUpright Inner Stretch` is manual-only. It does not implement `FxAnalyzer` or expose detector, score-threshold, or candidate-selection parameters. Former parameter IDs `216...218`, groups `384...385`, and hidden detection-slot ranges starting at `400` and `600` are retired and must not be reused.
 
 ## Inner Stretch
 
@@ -23,7 +23,6 @@ This file records AnyUpright-specific Stretch implementation choices. Reusable d
 - The filter-output dimming follows the clip/image and can render even when the host does not instantiate or dispatch the FxPlug OSC.
 - The interactive white outline, blue handles, yellow hover/drag highlights, hit testing, and drag writeback are owned by the FxPlug OSC layer.
 - Inner Stretch corner coordinate groups are hidden from the inspector; users position the input selection through onscreen handles.
-- Automatic Inner Stretch detection fills fixed hidden edge/corner primitive slots, enables `Edit Mode`, and enables `Choose from detections`. While `Choose from detections` is enabled, detected edges draw as green lines and detected corners draw as green crosses when their normalized scores meet `Score Threshold`; the manual stretch remains visible but stops receiving hits. Selected detected points/lines can write the Inner Stretch after four same-kind selections, then `Choose from detections` automatically turns off and the green detection overlay hides. False positives are ignored by raising the threshold, not selecting them, or correcting the result afterward with the manual handles.
 - Dragging Inner Stretch handles writes hidden source-corner percentage offsets and clears matching pixel offsets so render-time source geometry is independent of OSC surface size.
 - A previous point-parameter writeback experiment was backed out: Motion Studio 6.2 accepted `setXValue(_:yValue:)` during OSC drags, but later reads returned default points. The current path uses float-parameter writeback.
 

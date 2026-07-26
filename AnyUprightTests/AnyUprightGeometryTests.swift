@@ -27,15 +27,8 @@ struct AnyUprightGeometryTests {
         try testStretchOutputCornersKeepTheirNamedPositions()
         try testInnerStretchDefaultsToCentralEightyPercent()
         try testInnerStretchObjectDragPreservesCentralBase()
-        try testDetectedInnerStretchOffsetsUseImageCoordinates()
-        try testDetectedInnerStretchObjectConversionUsesImageCoordinates()
-        try testDetectedSourceLineObjectConversionUsesImageCoordinates()
-        try testLineIntersectionFindsDetectedCorner()
-        try testDetectionPointSelectionOrdersInnerStretchCorners()
-        try testDetectionLineSelectionBuildsStretchFromIntersections()
-        try testDetectionLineSelectionRejectsInvalidInputs()
-        try testDetectionSelectionStateFiltersByPrimitiveKind()
-        try testDetectionScoresNormalizeToUnitRange()
+        try testInnerStretchWritebackUsesImageCoordinates()
+        try testLineIntersectionFindsCrossingPoint()
         try testInnerStretchFullFrameSelectionHasNoDYDrift()
         try testInnerStretchObjectSpacePixelsMatchFxPlugOSCEvents()
         try testInnerStretchMappedSurfaceDragWritesObjectYDirectly()
@@ -255,78 +248,27 @@ struct AnyUprightGeometryTests {
         try assertEqual(innerStretch.topLeft, AUPoint(x: 40.0, y: 20.0), "source dragged top-left source point")
     }
 
-    static func testDetectedInnerStretchOffsetsUseImageCoordinates() throws {
+    static func testInnerStretchWritebackUsesImageCoordinates() throws {
         let size = AUSize(width: 200.0, height: 100.0)
-        let normalizedLowerLeftStretch = AUStretchCorners(
-            topLeft: AUPoint(x: 0.20, y: 0.80),
-            topRight: AUPoint(x: 0.85, y: 0.70),
-            bottomRight: AUPoint(x: 0.90, y: 0.15),
-            bottomLeft: AUPoint(x: 0.15, y: 0.10)
-        )
-        let detectedInnerStretch = AnyUprightGeometry.imageSelection(
-            fromNormalizedLowerLeftStretch: normalizedLowerLeftStretch,
-            size: size
-        )
-        let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: detectedInnerStretch, size: size)
-        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
-        let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
-
-        try assertEqual(detectedInnerStretch.topLeft, AUPoint(x: 40.0, y: 20.0), "detected top-left image point")
-        try assertEqual(detectedInnerStretch.topRight, AUPoint(x: 170.0, y: 30.0), "detected top-right image point")
-        try assertEqual(detectedInnerStretch.bottomRight, AUPoint(x: 180.0, y: 85.0), "detected bottom-right image point")
-        try assertEqual(detectedInnerStretch.bottomLeft, AUPoint(x: 30.0, y: 90.0), "detected bottom-left image point")
-        try assertEqual(innerStretch.topLeft, detectedInnerStretch.topLeft, "inner stretch top-left writeback")
-        try assertEqual(innerStretch.topRight, detectedInnerStretch.topRight, "inner stretch top-right writeback")
-        try assertEqual(innerStretch.bottomRight, detectedInnerStretch.bottomRight, "inner stretch bottom-right writeback")
-        try assertEqual(innerStretch.bottomLeft, detectedInnerStretch.bottomLeft, "inner stretch bottom-left writeback")
-        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "object top-left after detection")
-        try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.15, y: 0.10), "object bottom-left after detection")
-    }
-
-    static func testDetectedInnerStretchObjectConversionUsesImageCoordinates() throws {
-        let size = AUSize(width: 200.0, height: 100.0)
-        let imageSelection = AUStretchCorners(
+        let selectedInnerStretch = AUStretchCorners(
             topLeft: AUPoint(x: 40.0, y: 20.0),
             topRight: AUPoint(x: 170.0, y: 30.0),
             bottomRight: AUPoint(x: 180.0, y: 85.0),
             bottomLeft: AUPoint(x: 30.0, y: 90.0)
         )
+        let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: selectedInnerStretch, size: size)
+        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
+        let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
 
-        let objectSelection = AnyUprightGeometry.normalizedObjectSelection(fromImageSelection: imageSelection, size: size)
-
-        try assertEqual(objectSelection.topLeft, AUPoint(x: 0.20, y: 0.80), "top-left object point")
-        try assertEqual(objectSelection.topRight, AUPoint(x: 0.85, y: 0.70), "top-right object point")
-        try assertEqual(objectSelection.bottomRight, AUPoint(x: 0.90, y: 0.15), "bottom-right object point")
-        try assertEqual(objectSelection.bottomLeft, AUPoint(x: 0.15, y: 0.10), "bottom-left object point")
+        try assertEqual(innerStretch.topLeft, selectedInnerStretch.topLeft, "inner stretch top-left writeback")
+        try assertEqual(innerStretch.topRight, selectedInnerStretch.topRight, "inner stretch top-right writeback")
+        try assertEqual(innerStretch.bottomRight, selectedInnerStretch.bottomRight, "inner stretch bottom-right writeback")
+        try assertEqual(innerStretch.bottomLeft, selectedInnerStretch.bottomLeft, "inner stretch bottom-left writeback")
+        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "object top-left after writeback")
+        try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.15, y: 0.10), "object bottom-left after writeback")
     }
 
-    static func testDetectionScoresNormalizeToUnitRange() throws {
-        let scores = AnyUprightGeometry.normalizedScores([10.0, 5.0, -2.0, .infinity])
-
-        try assertEqual(scores.count, 4, "normalized score count")
-        try assertApprox(scores[0], 1.0, "maximum score")
-        try assertApprox(scores[1], 0.5, "half score")
-        try assertApprox(scores[2], 0.0, "negative score clamps to zero")
-        try assertApprox(scores[3], 0.0, "non-finite score clamps to zero")
-        let zeroScores = AnyUprightGeometry.normalizedScores([0.0, 0.0])
-        try assertApprox(zeroScores[0], 0.0, "first zero score")
-        try assertApprox(zeroScores[1], 0.0, "second zero score")
-    }
-
-    static func testDetectedSourceLineObjectConversionUsesImageCoordinates() throws {
-        let size = AUSize(width: 200.0, height: 100.0)
-        let imageLine = AULineSegment(
-            start: AUPoint(x: 20.0, y: 10.0),
-            end: AUPoint(x: 180.0, y: 85.0)
-        )
-
-        let objectLine = AnyUprightGeometry.normalizedObjectLine(fromImageLine: imageLine, size: size)
-
-        try assertEqual(objectLine.start, AUPoint(x: 0.10, y: 0.90), "line start object point")
-        try assertEqual(objectLine.end, AUPoint(x: 0.90, y: 0.15), "line end object point")
-    }
-
-    static func testLineIntersectionFindsDetectedCorner() throws {
+    static func testLineIntersectionFindsCrossingPoint() throws {
         let vertical = AULineSegment(start: AUPoint(x: 40.0, y: 5.0), end: AUPoint(x: 50.0, y: 95.0))
         let horizontal = AULineSegment(start: AUPoint(x: 10.0, y: 30.0), end: AUPoint(x: 110.0, y: 20.0))
 
@@ -334,92 +276,6 @@ struct AnyUprightGeometryTests {
 
         try assertApprox(point.x, 42.42, "corner x", accuracy: 0.01)
         try assertApprox(point.y, 26.76, "corner y", accuracy: 0.01)
-    }
-
-    static func testDetectionPointSelectionOrdersInnerStretchCorners() throws {
-        let size = AUSize(width: 200.0, height: 100.0)
-        let points = [
-            AUPoint(x: 0.90, y: 0.15),
-            AUPoint(x: 0.20, y: 0.80),
-            AUPoint(x: 0.15, y: 0.10),
-            AUPoint(x: 0.85, y: 0.70)
-        ]
-
-        let stretch = try unwrap(AnyUprightGeometry.imageSelection(fromNormalizedObjectPoints: points, size: size), "ordered detection point stretch")
-        let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: stretch, size: size)
-        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
-
-        try assertEqual(stretch.topLeft, AUPoint(x: 40.0, y: 20.0), "ordered point top-left")
-        try assertEqual(stretch.topRight, AUPoint(x: 170.0, y: 30.0), "ordered point top-right")
-        try assertEqual(stretch.bottomRight, AUPoint(x: 180.0, y: 85.0), "ordered point bottom-right")
-        try assertEqual(stretch.bottomLeft, AUPoint(x: 30.0, y: 90.0), "ordered point bottom-left")
-        try assertEqual(innerStretch.topLeft, stretch.topLeft, "point selection writeback top-left")
-        try assertEqual(innerStretch.topRight, stretch.topRight, "point selection writeback top-right")
-        try assertEqual(innerStretch.bottomRight, stretch.bottomRight, "point selection writeback bottom-right")
-        try assertEqual(innerStretch.bottomLeft, stretch.bottomLeft, "point selection writeback bottom-left")
-    }
-
-    static func testDetectionLineSelectionBuildsStretchFromIntersections() throws {
-        let size = AUSize(width: 200.0, height: 100.0)
-        let imageLines = [
-            AULineSegment(start: AUPoint(x: 35.0, y: 20.0), end: AUPoint(x: 175.0, y: 30.0)),
-            AULineSegment(start: AUPoint(x: 30.0, y: 90.0), end: AUPoint(x: 185.0, y: 85.0)),
-            AULineSegment(start: AUPoint(x: 40.0, y: 18.0), end: AUPoint(x: 30.0, y: 92.0)),
-            AULineSegment(start: AUPoint(x: 170.0, y: 28.0), end: AUPoint(x: 180.0, y: 88.0))
-        ]
-        let objectLines = imageLines.map { AnyUprightGeometry.normalizedObjectLine(fromImageLine: $0, size: size) }
-
-        let stretch = try unwrap(AnyUprightGeometry.imageSelection(fromNormalizedObjectLines: objectLines, size: size), "line intersection stretch")
-        let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: stretch, size: size)
-        let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
-
-        try assertTrue(AnyUprightGeometry.isConvexImageSelection(stretch), "line selection should create a convex stretch")
-        try assertApprox(innerStretch.topLeft.x, stretch.topLeft.x, "line writeback top-left x")
-        try assertApprox(innerStretch.topRight.y, stretch.topRight.y, "line writeback top-right y")
-        try assertApprox(innerStretch.bottomRight.x, stretch.bottomRight.x, "line writeback bottom-right x")
-        try assertApprox(innerStretch.bottomLeft.y, stretch.bottomLeft.y, "line writeback bottom-left y")
-    }
-
-    static func testDetectionLineSelectionRejectsInvalidInputs() throws {
-        let size = AUSize(width: 200.0, height: 100.0)
-        let parallelLines = [
-            AULineSegment(start: AUPoint(x: 20.0, y: 20.0), end: AUPoint(x: 180.0, y: 20.0)),
-            AULineSegment(start: AUPoint(x: 20.0, y: 40.0), end: AUPoint(x: 180.0, y: 40.0)),
-            AULineSegment(start: AUPoint(x: 20.0, y: 60.0), end: AUPoint(x: 180.0, y: 60.0)),
-            AULineSegment(start: AUPoint(x: 20.0, y: 80.0), end: AUPoint(x: 180.0, y: 80.0))
-        ].map { AnyUprightGeometry.normalizedObjectLine(fromImageLine: $0, size: size) }
-
-        try assertNil(AnyUprightGeometry.imageSelection(fromNormalizedObjectLines: parallelLines, size: size), "four horizontal lines cannot form a stretch")
-        try assertNil(AnyUprightGeometry.imageSelection(fromNormalizedObjectLines: Array(parallelLines.prefix(3)), size: size), "three lines cannot form a stretch")
-        try assertNil(
-            AnyUprightGeometry.orderedImageSelection(from: [
-                AUPoint(x: 10.0, y: 10.0),
-                AUPoint(x: 10.0, y: 10.0),
-                AUPoint(x: 100.0, y: 100.0),
-                AUPoint(x: 20.0, y: 90.0)
-            ]),
-            "duplicate points cannot form a stretch"
-        )
-    }
-
-    static func testDetectionSelectionStateFiltersByPrimitiveKind() throws {
-        var selection = AUStretchDetectionSelectionState()
-        let corner = AUStretchDetectionPrimitiveID(kind: .corner, index: 3)
-        let edge = AUStretchDetectionPrimitiveID(kind: .edge, index: 2)
-
-        selection.toggle(corner)
-        try assertTrue(selection.shouldShowCorner(index: 4), "selecting a point should keep other points visible")
-        try assertTrue(!selection.shouldShowEdge(index: 2), "selecting a point should hide lines")
-        selection.toggle(edge)
-        try assertTrue(selection.selectedEdgeIndexes.isEmpty, "hidden edge selection should be ignored while points are selected")
-        selection.toggle(corner)
-        try assertTrue(selection.isEmpty, "repeating the same point should cancel selection")
-        try assertTrue(selection.shouldShowCorner(index: 4), "empty selection should show points")
-        try assertTrue(selection.shouldShowEdge(index: 2), "empty selection should show lines")
-
-        selection.toggle(edge)
-        try assertTrue(!selection.shouldShowCorner(index: 3), "selecting a line should hide points")
-        try assertTrue(selection.shouldShowEdge(index: 8), "selecting a line should keep other lines visible")
     }
 
     static func testInnerStretchFullFrameSelectionHasNoDYDrift() throws {

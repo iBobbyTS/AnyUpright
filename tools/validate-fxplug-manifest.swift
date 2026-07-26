@@ -54,7 +54,7 @@ struct ValidateFxPlugManifest {
                 displayNameKey: "AnyUpright::Inner Stretch Name",
                 descriptionKey: "AnyUpright::Inner Stretch Description",
                 uuid: "9BB4C7D9-9384-4C8F-927D-4F716DA78B14",
-                protocols: ["FxFilter", "FxAnalyzer"],
+                protocols: ["FxFilter"],
                 localizedDisplayName: "AnyUpright Inner Stretch",
                 localizedDescription: "Select an input selection and stretch it to the full frame."
             ),

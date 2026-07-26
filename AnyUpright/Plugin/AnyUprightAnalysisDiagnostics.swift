@@ -65,9 +65,4 @@ enum AUAnalysisDiagnostics {
         markerPath: "/tmp/AnyUprightUprightAnalysis.debug",
         logPath: "/tmp/AnyUprightUprightAnalysis.log"
     )
-    static let innerStretch = AUAnalysisLogger(
-        markerPath: "/tmp/AnyUprightStretchOSC.debug",
-        logPath: "/tmp/AnyUprightStretchOSC.log",
-        prefix: "analysis "
-    )
 }

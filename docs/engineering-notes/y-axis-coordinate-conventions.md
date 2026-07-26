@@ -1,7 +1,7 @@
 # Y-Axis Coordinate Conventions
 
-Last updated: 2026-07-25 17:14 MDT
-Reference commit: a1e6085b1fca63e703f1970635b68fe875052047
+Last updated: 2026-07-25 19:24 MDT
+Reference commit: ba18278f95604ecdb7de27fca0f50fe110ba1a4c
 Observed host versions: macOS 26.5.1 (25F80), Motion Creator Studio 6.2 (447036) and 6.3 (450156), Final Cut Pro 12.2 and 12.3 (450152), Xcode 26.5 (17F42), FxPlug framework 4.3.4 (18567.3)
 
 This note records reusable Y-axis guidance for four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../stretch-implementation-notes.md`.
@@ -55,7 +55,8 @@ y = base.y - percent.y * height - pixels.y
 - Event interpretation and persistent writeback are separate concerns. Raw-canvas and mapped-surface candidates choose how to resolve the host event, but both accepted canvas points are converted through FxPlug into Y-up object coordinates before parameter writeback.
 - Preserve the accepted event interpretation for the entire drag, then write the converted object point directly. Do not reuse the preview drawing layer's `y = 1 - y` transform for persistent parameters.
 - Observed on Motion Creator Studio 6.3: the Inner Stretch path resolves as `.rawCanvas`. Applying an additional preview-to-storage flip changed an upper object Y near `0.663` into `0.337`; the OSC drag feedback could still look locally coherent while the persisted edit mask and final render moved to the vertically mirrored location.
-- This failure signature separates the layers: a correct live overlay with a mirrored mask and final render means the visible/hit layer is likely correct and the persisted Y value is wrong. When both the mask and applied render agree on the wrong position, inspect their shared parameter source before changing either renderer.
+- A correct live overlay with a mirrored edit mask and applied render proves only that the interaction layer is probably correct. It does not identify the shared fault as parameter writeback: the mask and Warp can also share an incorrect physical output-coordinate boundary.
+- Compare the stored object-space corner values with the OSC geometry before changing writeback. If the stored named corners match the dragged OSC corners but both the edit mask and Warp are mirrored, inspect the shared render boundary before changing parameters or hit testing.
 
 ### Metal Render Vertices
 
@@ -71,7 +72,33 @@ metalY = surfaceHeight / 2 - surfaceY
 ```
 
 - Apply the same conversion to overlay primitive origins and axes so fragment distance fields align with drawn vertices. Motion's composition of the returned IOSurface is part of the observed final orientation, so do not infer that the renderer input must be top-down from IOSurface memory layout alone.
-- Observed for Inner Stretch Warp in Motion 6.3: the Metal interpolant carries physical output-IOSurface coordinates, while projective geometry is defined in logical image coordinates and the input texture uses physical texture coordinates. Compose both boundaries into the render matrix: flip output Y before the projective transform, then flip source Y into the input texture. The two flips cancel for identity, so identity alone cannot validate this path.
+- Observed for Inner Stretch Warp in Motion 6.3: the Metal interpolant carries physical output-IOSurface coordinates, while projective geometry is defined in logical image coordinates and the input texture uses physical texture coordinates. The complete sampling chain is:
+
+```text
+physical output IOSurface
+    -> flip output Y
+logical output image
+    -> projective output-to-source transform
+logical source image
+    -> flip source Y
+physical input texture
+    -> apply input tile origin
+texture sample
+```
+
+- Let `Fout` flip Y using the output height, `Fsrc` flip Y using the source height, `H` map logical output-image points to logical source-image points, and `Torigin` apply the input texture origin. The shader matrix is:
+
+```text
+M = Torigin * Fsrc * H * Fout
+```
+
+- The edit-mode mask has the same physical output boundary. If `S` maps logical selection-output points into the logical full-frame rectangle, its render matrix is:
+
+```text
+Mmask = S * Fout
+```
+
+- The output and source flips are independent boundaries, not an optional orientation correction. When `H` is identity and source/output sizes match, `Fsrc * H * Fout` is also identity. Consequently both the correct two-flip implementation and an incorrect zero-flip implementation can render an upright identity image.
 
 ## Practical Rules
 
@@ -83,6 +110,9 @@ metalY = surfaceHeight / 2 - surfaceY
 - If the visible source-selection stretch moves correctly but hit targets are mirrored, inspect raw canvas versus mapped surface event resolution before changing render preview or homography.
 - If the visible video/export is shifted while OSC controls are correct, inspect render tile/source texture origin before changing OSC or object-space math.
 - If an offline CPU render and the live Metal render disagree while using the same project geometry matrix, inspect the source-image-to-input-texture boundary and the fragment output-coordinate boundary before changing the solver.
+- If OSC and stored named corners agree but the edit mask and applied Warp are wrong in the same way, inspect their shared physical output-coordinate boundary before changing parameter writeback.
+- Never use an upright identity render to choose between zero flips and two flips. Validate output and source boundaries independently with asymmetric projective geometry.
+- Do not infer that removing both flips is correct merely because a source-only flip inverts identity. That experiment distinguishes one flip from zero or two, but it cannot distinguish zero from two.
 - If a reference line should become vertical or horizontal after correction, verify the transformed source line in image/output coordinates. Do not infer correctness from the stored endpoint signs alone.
 
 ## Regression Surfaces To Keep
@@ -102,6 +132,28 @@ A robust four-corner control should have deterministic checks for:
 - Inner Stretch render matrices mapping displayed output TL/TR/BR/BL to displayed source TL/TR/BR/BL after both host render-boundary conversions, including non-zero texture origins.
 - Legacy boundary-adjusted render matrices matching their explicit output-image and source-texture Y conversions.
 
+### Mandatory Inner Stretch Host-Equivalent Fixture
+
+The Inner Stretch Warp boundary must be tested with four non-symmetric corners. Every corner needs a distinct X and Y so a vertical mirror, horizontal mirror, diagonal swap, or corner permutation is observable. Identity and axis-aligned rectangles are smoke tests only.
+
+For each displayed output corner, the deterministic oracle must simulate the same boundaries as Motion:
+
+```text
+displayed output point
+    -> flip Y into physical output-IOSurface coordinates
+    -> apply the production shader matrix
+    -> remove the input texture tile origin
+    -> flip Y from physical input texture to displayed source image
+```
+
+Assert that displayed output `TL/TR/BR/BL` samples the corresponding logical source `TL/TR/BR/BL`. Include a non-zero input texture origin.
+
+Motion validation has two separate fixtures:
+
+- Use a blue solid background to inspect only the edit mask. Its dimmed boundary and the OSC's four named edges must coincide.
+- Use a non-symmetric photo to inspect the applied Warp. Moving one logical source corner must move only the corresponding displayed output sample; the other three named corners must retain their identities.
+- Record the host version and active XPC plug-in build. A passing simulation is not sufficient until these two fixtures agree in Motion.
+
 ## Previous Wrong Attempts
 
 - Full center-offset compensation for Final Cut vertical pan made the control frame stay fixed in the preview area instead of following the video/canvas geometry.
@@ -111,6 +163,7 @@ A robust four-corner control should have deterministic checks for:
 - Applying the source-selection preview drawing `1 - y` conversion during parameter writeback mirrored the persisted Y. Motion 6.3 runtime logs showed the affected path was `.rawCanvas`, disproving the earlier mapped-surface hypothesis.
 - Preflipping Y-up FxPlug CANVAS points before custom OSC drawing made a visual top-left handle appear at the bottom while hit callbacks still used the host Canvas layer. Hit testing and overlay drawing input must share the same Canvas points; the renderer/host composition owns the visual crossing.
 - Adding only a source-texture Y flip to Inner Stretch Warp inverted the default identity image, but the inverse conclusion was also wrong: removing both flips keeps identity upright while mirroring asymmetric projective geometry. Validate with a non-symmetric four-corner fixture and model both physical output and physical input boundaries.
+- Treating the edit mask and final Warp failing in the same direction as proof of bad persisted parameters was wrong. Both renderers shared the physical output-coordinate boundary, so they could agree on the same mirrored result while the OSC and stored logical corners were correct.
 - Applying `FxImageTile.pixelTransform` to a base edit preview was incorrect in the observed host path. The preview was rendered into filter output, and Motion/Final Cut applied object/view transforms after plug-in rendering, so applying the host transform in shader double-moved the overlay.
 - Treating visually correct guide overlays as proof that stored guide endpoints were already in image-space Y-down coordinates was wrong. Object-space storage can draw correctly through host conversion and still require a Y flip before image-space line solving.
 - Leaving one output-coordinate Y flip and one input-texture Y flip inside the shader made render orientation hard to reason about. The production model should name both boundaries and preferably compose them into a testable render matrix.

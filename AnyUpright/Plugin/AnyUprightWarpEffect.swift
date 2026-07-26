@@ -492,7 +492,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             innerStretchBottomLeft: vector_float2(Float(sourceHandles.bottomLeft.x), Float(sourceHandles.bottomLeft.y)),
             renderMode: renderMode,
             usesNearestSampling: usesNearestSampling(outputToSource: outputToSource, outputSize: destinationSize, sourceSize: sourceSize),
-            ratioMode: appliedStretchRatioMode(from: parameterState).rawValue,
+            reserved1: 0,
             reserved2: 0
         )
     }
@@ -685,26 +685,6 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         guard AnyUprightEffectKind(rawValue: state.effectKind) == .stretch,
               AUStretchTransformMode(rawValue: state.stretchMode) == .innerStretch else {
             return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: outputSize)
-        }
-
-        let ratioMode = appliedStretchRatioMode(from: state)
-        if ratioMode == .fit {
-            let correctionOutputSize = stableOutputSize(from: state, fallback: outputSize)
-            let correctionSourceSize = stableInputSize(from: state, fallback: sourceSize)
-            let correction = AnyUprightGeometry.innerStretchRatioTargetToOutputRectMatrix(
-                from: cornerOffsets(from: state),
-                ratioMode: ratioMode,
-                outputSize: correctionOutputSize,
-                sourceSize: correctionSourceSize
-            )
-            return AnyUprightGeometry.appliedOutputToCurrentSourceMatrix(
-                correction,
-                fillFrame: false,
-                outputSize: outputSize,
-                sourceSize: outputSize,
-                correctionOutputSize: correctionOutputSize,
-                correctionSourceSize: correctionOutputSize
-            )
         }
 
         return AnyUprightGeometry.stretchSelectionToOutputRectMatrix(

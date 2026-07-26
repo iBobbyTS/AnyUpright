@@ -122,7 +122,7 @@ struct AuditFeatureSurface {
         try require(effects, "withName: \"Ratio\"", "Inner Stretch exposes a manual ratio policy")
         try require(effects, "menuEntries: [\"None\", \"Fit\", \"Fill\"]", "Inner Stretch ratio policy exposes None, Fit, and Fill")
         try require(geometry, "innerStretchAverageAspectRatio", "Inner Stretch ratio averages opposing edge lengths in shared geometry")
-        try require(metal, "outsideTarget", "Inner Stretch Fit preserves the original frame outside the fitted target")
+        try reject(metal, "outsideTarget", "Inner Stretch Fit does not switch to an unwarped background outside the fitted target")
         try reject(effects, "detectInnerStretch", "Inner Stretch has no detector callback")
         try reject(effects, "InnerStretchDetection", "Inner Stretch has no detection parameter slots")
         try reject(effects, "sourceDetection", "Inner Stretch OSC has no detection overlay path")

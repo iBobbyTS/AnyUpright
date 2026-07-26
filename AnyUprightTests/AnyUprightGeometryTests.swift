@@ -65,6 +65,7 @@ struct AnyUprightGeometryTests {
         try testInnerStretchRatioFitCentersTargetInsideOutput()
         try testInnerStretchRatioFillCentersTargetAroundOutput()
         try testInnerStretchRatioModesMapTargetCornersToSelection()
+        try testInnerStretchRatioFitExtrapolatesQuadrilateralOutsideTarget()
         try testInnerStretchApplyMatrixIsStableAcrossMotionPreviewSizes()
         try testStretchEditPreviewKeepsCurrentRequestIdentity()
         try testStretchOutputCornersApplyMatrixIsStableAcrossMotionPreviewSizes()
@@ -1323,6 +1324,25 @@ struct AnyUprightGeometryTests {
         )
         try assertMaps(noneMatrix, AUPoint(x: 0.0, y: 0.0), to: selection.topLeft)
         try assertMaps(noneMatrix, AUPoint(x: outputSize.width, y: outputSize.height), to: selection.bottomRight)
+    }
+
+    static func testInnerStretchRatioFitExtrapolatesQuadrilateralOutsideTarget() throws {
+        let outputSize = AUSize(width: 200.0, height: 200.0)
+        let sourceSize = AUSize(width: 200.0, height: 100.0)
+        let offsets = AUCornerOffsets()
+        let matrix = AnyUprightGeometry.stretchOutputToSourceMatrix(
+            from: offsets,
+            mode: .innerStretch,
+            showCornerAdjuster: false,
+            outputSize: outputSize,
+            sourceSize: sourceSize,
+            ratioMode: .fit
+        )
+
+        // The fitted 2:1 target occupies y=50...150. Continuing its mapping
+        // upward maps beyond the selected source quad instead of switching to
+        // the unwarped full-frame coordinate at y=0.
+        try assertMaps(matrix, AUPoint(x: 100.0, y: 0.0), to: AUPoint(x: 100.0, y: -30.0))
     }
 
     static func testInnerStretchApplyMatrixIsStableAcrossMotionPreviewSizes() throws {

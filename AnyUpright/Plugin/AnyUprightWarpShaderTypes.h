@@ -55,7 +55,7 @@ typedef struct AnyUprightWarpState {
     vector_float2 innerStretchBottomLeft;
     int renderMode;
     int usesNearestSampling;
-    int ratioMode;
+    int reserved1;
     int reserved2;
 } AnyUprightWarpState;
 

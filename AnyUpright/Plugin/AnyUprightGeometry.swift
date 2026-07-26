@@ -1647,21 +1647,6 @@ enum AnyUprightGeometry {
         )
     }
 
-    static func innerStretchRatioTargetToOutputRectMatrix(
-        from offsets: AUCornerOffsets,
-        ratioMode: AUStretchRatioMode,
-        outputSize: AUSize,
-        sourceSize: AUSize
-    ) -> simd_float3x3 {
-        let selection = innerStretch(from: offsets, size: sourceSize)
-        let targetRect = innerStretchRatioTargetRect(
-            for: selection,
-            outputSize: outputSize,
-            ratioMode: ratioMode
-        )
-        return homography(from: targetRect, to: AUStretchCorners.fullFrame(outputSize))
-    }
-
     static func stretchSelectionToOutputRectMatrix(
         from offsets: AUCornerOffsets,
         outputSize: AUSize,

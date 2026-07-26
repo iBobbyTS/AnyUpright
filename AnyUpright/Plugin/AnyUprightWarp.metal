@@ -123,25 +123,6 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
     }
 
     float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
-    if (warpState->ratioMode == 1) {
-        float3 ratioHomogeneous = warpState->selectionOutputToRect * float3(outputCoordinate, 1.0);
-        if (fabs(ratioHomogeneous.z) >= 0.000001) {
-            float2 ratioPoint = ratioHomogeneous.xy / ratioHomogeneous.z;
-            float2 outputSize = max(warpState->outputSize, float2(1.0));
-            bool outsideTarget = ratioPoint.x < 0.0 || ratioPoint.y < 0.0
-                || ratioPoint.x > outputSize.x || ratioPoint.y > outputSize.y;
-            if (outsideTarget) {
-                float2 logicalOutput = float2(outputCoordinate.x, outputSize.y - outputCoordinate.y);
-                float2 logicalSource = logicalOutput * (warpState->inputSize / outputSize);
-                float2 texturePixel = float2(logicalSource.x, warpState->inputSize.y - logicalSource.y)
-                    + warpState->inputImageOriginInTexture;
-                bool identityScale = all(abs(warpState->inputSize - outputSize) < float2(0.5));
-                return identityScale
-                    ? sampleInputImage(colorTexture, nearestTextureSampler, texturePixel, warpState)
-                    : sampleInputImage(colorTexture, linearTextureSampler, texturePixel, warpState);
-            }
-        }
-    }
     float3 sourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
     if (fabs(sourceHomogeneous.z) < 0.000001) {
         return float4(0.0, 0.0, 0.0, 1.0);

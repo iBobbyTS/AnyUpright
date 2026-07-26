@@ -105,6 +105,12 @@ enum AUStretchTransformMode: Int32 {
     case innerStretch = 1
 }
 
+enum AUStretchRatioMode: Int32 {
+    case none = 0
+    case fit = 1
+    case fill = 2
+}
+
 enum AUStretchCorner {
     case topLeft
     case topRight
@@ -1540,7 +1546,8 @@ enum AnyUprightGeometry {
         mode: AUStretchTransformMode,
         showCornerAdjuster: Bool,
         outputSize: AUSize,
-        sourceSize: AUSize
+        sourceSize: AUSize,
+        ratioMode: AUStretchRatioMode = .none
     ) -> simd_float3x3 {
         switch mode {
         case .outputCorners:
@@ -1553,7 +1560,12 @@ enum AnyUprightGeometry {
             }
 
             let selectedInnerStretch = innerStretch(from: offsets, size: sourceSize)
-            return homography(from: AUStretchCorners.fullFrame(outputSize), to: selectedInnerStretch)
+            let targetRect = innerStretchRatioTargetRect(
+                for: selectedInnerStretch,
+                outputSize: outputSize,
+                ratioMode: ratioMode
+            )
+            return homography(from: targetRect, to: selectedInnerStretch)
         }
     }
 
@@ -1564,7 +1576,8 @@ enum AnyUprightGeometry {
         outputSize: AUSize,
         sourceSize: AUSize,
         correctionOutputSize: AUSize,
-        correctionSourceSize: AUSize
+        correctionSourceSize: AUSize,
+        ratioMode: AUStretchRatioMode = .none
     ) -> simd_float3x3 {
         guard !showCornerAdjuster else {
             return identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: sourceSize)
@@ -1575,7 +1588,8 @@ enum AnyUprightGeometry {
             mode: mode,
             showCornerAdjuster: false,
             outputSize: correctionOutputSize,
-            sourceSize: correctionSourceSize
+            sourceSize: correctionSourceSize,
+            ratioMode: ratioMode
         )
         return appliedOutputToCurrentSourceMatrix(
             correction,
@@ -1585,6 +1599,67 @@ enum AnyUprightGeometry {
             correctionOutputSize: correctionOutputSize,
             correctionSourceSize: correctionSourceSize
         )
+    }
+
+    static func innerStretchAverageAspectRatio(_ selection: AUStretchCorners) -> Double? {
+        func length(_ first: AUPoint, _ second: AUPoint) -> Double {
+            hypot(second.x - first.x, second.y - first.y)
+        }
+
+        let averageWidth = (length(selection.topLeft, selection.topRight)
+            + length(selection.bottomLeft, selection.bottomRight)) / 2.0
+        let averageHeight = (length(selection.topLeft, selection.bottomLeft)
+            + length(selection.topRight, selection.bottomRight)) / 2.0
+        guard averageWidth.isFinite,
+              averageHeight.isFinite,
+              averageWidth > 0.000001,
+              averageHeight > 0.000001 else {
+            return nil
+        }
+        return averageWidth / averageHeight
+    }
+
+    static func innerStretchRatioTargetRect(
+        for selection: AUStretchCorners,
+        outputSize: AUSize,
+        ratioMode: AUStretchRatioMode
+    ) -> AUStretchCorners {
+        guard ratioMode != .none,
+              outputSize.width > 0.0,
+              outputSize.height > 0.0,
+              let selectionAspect = innerStretchAverageAspectRatio(selection) else {
+            return AUStretchCorners.fullFrame(outputSize)
+        }
+
+        let outputAspect = outputSize.width / outputSize.height
+        let usesWidth = ratioMode == .fit
+            ? selectionAspect >= outputAspect
+            : selectionAspect < outputAspect
+        let width = usesWidth ? outputSize.width : outputSize.height * selectionAspect
+        let height = usesWidth ? outputSize.width / selectionAspect : outputSize.height
+        let left = (outputSize.width - width) / 2.0
+        let top = (outputSize.height - height) / 2.0
+        return AUStretchCorners(
+            topLeft: AUPoint(x: left, y: top),
+            topRight: AUPoint(x: left + width, y: top),
+            bottomRight: AUPoint(x: left + width, y: top + height),
+            bottomLeft: AUPoint(x: left, y: top + height)
+        )
+    }
+
+    static func innerStretchRatioTargetToOutputRectMatrix(
+        from offsets: AUCornerOffsets,
+        ratioMode: AUStretchRatioMode,
+        outputSize: AUSize,
+        sourceSize: AUSize
+    ) -> simd_float3x3 {
+        let selection = innerStretch(from: offsets, size: sourceSize)
+        let targetRect = innerStretchRatioTargetRect(
+            for: selection,
+            outputSize: outputSize,
+            ratioMode: ratioMode
+        )
+        return homography(from: targetRect, to: AUStretchCorners.fullFrame(outputSize))
     }
 
     static func stretchSelectionToOutputRectMatrix(

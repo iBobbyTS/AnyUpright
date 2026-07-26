@@ -25,6 +25,7 @@ enum StretchParam: UInt32 {
     case bottomLeftPixelX = 214
     case bottomLeftPixelY = 215
     // Parameter IDs 216...218 are retired and must not be reused.
+    case ratio = 219
 }
 
 enum StretchGroup: UInt32, CaseIterable {
@@ -55,13 +56,16 @@ func stretchParameterState(
 
     var mode = Int32(fixedMode?.rawValue ?? AUStretchTransformMode.innerStretch.rawValue)
     var showCornerAdjuster = ObjCBool(true)
+    var ratio = Int32(AUStretchRatioMode.none.rawValue)
 
     if fixedMode == nil {
         paramAPI.getIntValue(&mode, fromParameter: StretchParam.mode.rawValue, at: time)
     }
     paramAPI.getBoolValue(&showCornerAdjuster, fromParameter: StretchParam.showCornerAdjuster.rawValue, at: time)
+    paramAPI.getIntValue(&ratio, fromParameter: StretchParam.ratio.rawValue, at: time)
     result.stretchMode = mode
     result.showCornerAdjuster = showCornerAdjuster.boolValue ? 1 : 0
+    result.stretchRatioMode = ratio
 
     result.topLeftPercentX = stretchFloatParam(paramAPI, .topLeftPercentX, time)
     result.topLeftPercentY = stretchFloatParam(paramAPI, .topLeftPercentY, time)

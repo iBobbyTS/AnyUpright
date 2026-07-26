@@ -25,6 +25,14 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         addFixedModeParameter(paramAPI)
 
+        paramAPI.addPopupMenu(
+            withName: "Ratio",
+            parameterID: StretchParam.ratio.rawValue,
+            defaultValue: UInt32(AUStretchRatioMode.none.rawValue),
+            menuEntries: ["None", "Fit", "Fill"],
+            parameterFlags: showsSourceEditMode ? defaultFlags() : hiddenFlags()
+        )
+
         if showsSourceEditMode {
             paramAPI.addToggleButton(
                 withName: "Edit Mode",

@@ -17,6 +17,7 @@ struct AnyUprightParameterState {
     var effectKind: Int32 = 0
     var fillFrame: Int32 = 0
     var stretchMode: Int32 = AUStretchTransformMode.innerStretch.rawValue
+    var stretchRatioMode: Int32 = AUStretchRatioMode.none.rawValue
     var showCornerAdjuster: Int32 = 1
     var uprightCorrectionMode: Int32 = 0
     var uprightControlMode: Int32 = 0
@@ -491,7 +492,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             innerStretchBottomLeft: vector_float2(Float(sourceHandles.bottomLeft.x), Float(sourceHandles.bottomLeft.y)),
             renderMode: renderMode,
             usesNearestSampling: usesNearestSampling(outputToSource: outputToSource, outputSize: destinationSize, sourceSize: sourceSize),
-            reserved1: 0,
+            ratioMode: appliedStretchRatioMode(from: parameterState).rawValue,
             reserved2: 0
         )
     }
@@ -529,13 +530,15 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
         case .stretch:
             let mode = AUStretchTransformMode(rawValue: state.stretchMode) ?? .outputCorners
+            let ratioMode = appliedStretchRatioMode(from: state)
             guard state.showCornerAdjuster == 0 else {
                 return AnyUprightGeometry.stretchOutputToSourceMatrix(
                     from: cornerOffsets(from: state),
                     mode: mode,
                     showCornerAdjuster: true,
                     outputSize: outputSize,
-                    sourceSize: sourceSize
+                    sourceSize: sourceSize,
+                    ratioMode: ratioMode
                 )
             }
 
@@ -546,7 +549,8 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
                 outputSize: outputSize,
                 sourceSize: sourceSize,
                 correctionOutputSize: stableOutputSize(from: state, fallback: outputSize),
-                correctionSourceSize: stableInputSize(from: state, fallback: sourceSize)
+                correctionSourceSize: stableInputSize(from: state, fallback: sourceSize),
+                ratioMode: ratioMode
             )
 
         case .upright:
@@ -683,11 +687,40 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: outputSize)
         }
 
+        let ratioMode = appliedStretchRatioMode(from: state)
+        if ratioMode == .fit {
+            let correctionOutputSize = stableOutputSize(from: state, fallback: outputSize)
+            let correctionSourceSize = stableInputSize(from: state, fallback: sourceSize)
+            let correction = AnyUprightGeometry.innerStretchRatioTargetToOutputRectMatrix(
+                from: cornerOffsets(from: state),
+                ratioMode: ratioMode,
+                outputSize: correctionOutputSize,
+                sourceSize: correctionSourceSize
+            )
+            return AnyUprightGeometry.appliedOutputToCurrentSourceMatrix(
+                correction,
+                fillFrame: false,
+                outputSize: outputSize,
+                sourceSize: outputSize,
+                correctionOutputSize: correctionOutputSize,
+                correctionSourceSize: correctionOutputSize
+            )
+        }
+
         return AnyUprightGeometry.stretchSelectionToOutputRectMatrix(
             from: cornerOffsets(from: state),
             outputSize: outputSize,
             sourceSize: sourceSize
         )
+    }
+
+    private func appliedStretchRatioMode(from state: AnyUprightParameterState) -> AUStretchRatioMode {
+        guard AnyUprightEffectKind(rawValue: state.effectKind) == .stretch,
+              AUStretchTransformMode(rawValue: state.stretchMode) == .innerStretch,
+              state.showCornerAdjuster == 0 else {
+            return .none
+        }
+        return AUStretchRatioMode(rawValue: state.stretchRatioMode) ?? .none
     }
 
     private func innerStretchOutputHandles(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> AUStretchCorners {

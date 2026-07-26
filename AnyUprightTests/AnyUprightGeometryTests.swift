@@ -61,6 +61,10 @@ struct AnyUprightGeometryTests {
         try testUprightStableIdealizedImageSizeMergesMotionPreviewRounding()
         try testUprightStableIdealizedImageSizeMergesMotionPanRounding()
         try testInnerStretchModeShowsAdjusterBeforeApplyingWarp()
+        try testInnerStretchRatioUsesAverageOpposingEdgeLengths()
+        try testInnerStretchRatioFitCentersTargetInsideOutput()
+        try testInnerStretchRatioFillCentersTargetAroundOutput()
+        try testInnerStretchRatioModesMapTargetCornersToSelection()
         try testInnerStretchApplyMatrixIsStableAcrossMotionPreviewSizes()
         try testStretchEditPreviewKeepsCurrentRequestIdentity()
         try testStretchOutputCornersApplyMatrixIsStableAcrossMotionPreviewSizes()
@@ -1233,6 +1237,92 @@ struct AnyUprightGeometryTests {
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: innerStretch.topRight)
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: innerStretch.bottomRight)
         try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: innerStretch.bottomLeft)
+    }
+
+    static func testInnerStretchRatioUsesAverageOpposingEdgeLengths() throws {
+        let selection = AUStretchCorners(
+            topLeft: AUPoint(x: 0.0, y: 0.0),
+            topRight: AUPoint(x: 180.0, y: 0.0),
+            bottomRight: AUPoint(x: 160.0, y: 100.0),
+            bottomLeft: AUPoint(x: 20.0, y: 100.0)
+        )
+        let expectedWidth = (180.0 + 140.0) / 2.0
+        let expectedHeight = hypot(20.0, 100.0)
+        let ratio = try unwrap(
+            AnyUprightGeometry.innerStretchAverageAspectRatio(selection),
+            "inner stretch average aspect ratio"
+        )
+
+        try assertApprox(ratio, expectedWidth / expectedHeight, "ratio should average top/bottom and left/right edge lengths")
+    }
+
+    static func testInnerStretchRatioFitCentersTargetInsideOutput() throws {
+        let selection = AUStretchCorners.fullFrame(AUSize(width: 160.0, height: 90.0))
+        let target = AnyUprightGeometry.innerStretchRatioTargetRect(
+            for: selection,
+            outputSize: AUSize(width: 200.0, height: 200.0),
+            ratioMode: .fit
+        )
+
+        try assertEqual(target.topLeft, AUPoint(x: 0.0, y: 43.75), "fit target top-left")
+        try assertEqual(target.topRight, AUPoint(x: 200.0, y: 43.75), "fit target top-right")
+        try assertEqual(target.bottomRight, AUPoint(x: 200.0, y: 156.25), "fit target bottom-right")
+        try assertEqual(target.bottomLeft, AUPoint(x: 0.0, y: 156.25), "fit target bottom-left")
+    }
+
+    static func testInnerStretchRatioFillCentersTargetAroundOutput() throws {
+        let selection = AUStretchCorners.fullFrame(AUSize(width: 160.0, height: 90.0))
+        let target = AnyUprightGeometry.innerStretchRatioTargetRect(
+            for: selection,
+            outputSize: AUSize(width: 200.0, height: 200.0),
+            ratioMode: .fill
+        )
+        let expectedWidth = 200.0 * 16.0 / 9.0
+        let expectedLeft = (200.0 - expectedWidth) / 2.0
+
+        try assertApprox(target.topLeft.x, expectedLeft, "fill target left")
+        try assertApprox(target.topRight.x, expectedLeft + expectedWidth, "fill target right")
+        try assertApprox(target.topLeft.y, 0.0, "fill target top")
+        try assertApprox(target.bottomLeft.y, 200.0, "fill target bottom")
+    }
+
+    static func testInnerStretchRatioModesMapTargetCornersToSelection() throws {
+        let outputSize = AUSize(width: 200.0, height: 200.0)
+        let sourceSize = AUSize(width: 200.0, height: 100.0)
+        let offsets = AUCornerOffsets()
+        let selection = AnyUprightGeometry.innerStretch(from: offsets, size: sourceSize)
+
+        for ratioMode in [AUStretchRatioMode.fit, .fill] {
+            let target = AnyUprightGeometry.innerStretchRatioTargetRect(
+                for: selection,
+                outputSize: outputSize,
+                ratioMode: ratioMode
+            )
+            let matrix = AnyUprightGeometry.stretchOutputToSourceMatrix(
+                from: offsets,
+                mode: .innerStretch,
+                showCornerAdjuster: false,
+                outputSize: outputSize,
+                sourceSize: sourceSize,
+                ratioMode: ratioMode
+            )
+
+            try assertMaps(matrix, target.topLeft, to: selection.topLeft)
+            try assertMaps(matrix, target.topRight, to: selection.topRight)
+            try assertMaps(matrix, target.bottomRight, to: selection.bottomRight)
+            try assertMaps(matrix, target.bottomLeft, to: selection.bottomLeft)
+        }
+
+        let noneMatrix = AnyUprightGeometry.stretchOutputToSourceMatrix(
+            from: offsets,
+            mode: .innerStretch,
+            showCornerAdjuster: false,
+            outputSize: outputSize,
+            sourceSize: sourceSize,
+            ratioMode: .none
+        )
+        try assertMaps(noneMatrix, AUPoint(x: 0.0, y: 0.0), to: selection.topLeft)
+        try assertMaps(noneMatrix, AUPoint(x: outputSize.width, y: outputSize.height), to: selection.bottomRight)
     }
 
     static func testInnerStretchApplyMatrixIsStableAcrossMotionPreviewSizes() throws {

@@ -56,6 +56,7 @@ This file records AnyUpright-specific Stretch implementation choices. Reusable d
 - Inner Stretch OSC points use `.canvasFramePixels`; `oscSurfacePixel(fromHostCanvasPixel:)` currently returns direct X/Y.
 - The overlay renderer converts these direct Y-up Canvas pixels to centered Metal vertices. Motion's composition of the returned IOSurface completes the observed display mapping; callers must not preflip points to match IOSurface memory layout.
 - Inner Stretch uses the same boundary-adjusted render matrices as the other Warp paths. The matrix converts physical output-IOSurface Y to logical output-image Y, applies the projective transform, then converts logical source-image Y to the physical input texture and adds the tile origin. Edit Mode applies the matching physical-output Y conversion before its selection-to-rect matrix.
+- Inner Stretch owns a `Ratio` render policy independent of OSC storage. `None` maps the full output to the selected quadrilateral. `Fit` and `Fill` derive a target aspect ratio from the average opposing edge lengths and map a centered target rectangle to the same selection. Fit samples the original input mapping outside that rectangle; Fill lets the target rectangle extend beyond the output and crops it. The four stored corners are never rewritten by this policy.
 - Persistent OSC overlay vertices are uploaded through an `MTLBuffer`; only small constants such as viewport size use inline `setVertexBytes`.
 
 ## Final Cut And Motion Template Notes

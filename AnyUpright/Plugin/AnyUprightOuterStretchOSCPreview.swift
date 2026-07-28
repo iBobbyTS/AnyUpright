@@ -137,15 +137,12 @@ enum AUOuterStretchOSCPreviewRenderer {
             return nil
         }
 
-        let bounds = layout.physicalBounds
-        let previewWidth = Float(layout.textureWidth)
-        let previewHeight = Float(layout.textureHeight)
-        var vertices = [
-            AnyUprightVertex2D(position: vector_float2(previewWidth / 2.0, -previewHeight / 2.0), outputCoordinate: vector_float2(Float(bounds.right), Float(bounds.bottom))),
-            AnyUprightVertex2D(position: vector_float2(-previewWidth / 2.0, -previewHeight / 2.0), outputCoordinate: vector_float2(Float(bounds.left), Float(bounds.bottom))),
-            AnyUprightVertex2D(position: vector_float2(previewWidth / 2.0, previewHeight / 2.0), outputCoordinate: vector_float2(Float(bounds.right), Float(bounds.top))),
-            AnyUprightVertex2D(position: vector_float2(-previewWidth / 2.0, previewHeight / 2.0), outputCoordinate: vector_float2(Float(bounds.left), Float(bounds.top)))
-        ]
+        var vertices = layout.offscreenVertices.map {
+            AnyUprightVertex2D(
+                position: vector_float2(Float($0.position.x), Float($0.position.y)),
+                outputCoordinate: vector_float2(Float($0.outputCoordinate.x), Float($0.outputCoordinate.y))
+            )
+        }
         var viewportSize = simd_uint2(UInt32(layout.textureWidth), UInt32(layout.textureHeight))
         encoder.setViewport(MTLViewport(originX: 0.0, originY: 0.0, width: Double(layout.textureWidth), height: Double(layout.textureHeight), znear: -1.0, zfar: 1.0))
         encoder.setRenderPipelineState(pipeline)

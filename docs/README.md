@@ -12,7 +12,8 @@ AnyUpright is a suite of FxPlug effects for single-frame-assisted perspective an
 - The shared geometry layer now includes line candidate filtering, horizon correction estimation, and centered perspective parameter estimation from reference lines.
 - Stretch and Upright expose FxPlug onscreen controls through separate `FxOnScreenControl` plug-in entries linked to their filter UUIDs with `supportedPlugins`.
 - Inner Stretch edit-mode dimming is rendered into the filter output itself, so the selected source area follows the video image even when host OSC drawing is unavailable. The interactive outline, handles, hover highlights, hit testing, and drag writeback are owned by the FxPlug OSC layer.
-- `tools/render-warp-previews.swift` generates CPU-rendered preview PNGs from the same geometry matrices used by the Metal renderer, so matrix semantics can be checked without launching a host app.
+- `tools/render-warp-previews.swift` generates CPU-rendered preview PNGs from the same geometry matrices used by the Metal renderer, so matrix semantics can be checked without launching a host app. It does not model Motion's composition of an OSC IOSurface.
+- `tools/render-outer-stretch-motion-host.swift` loads the production `default.metallib`, runs the production Outer Stretch preview and OSC texture shaders with production vertex helpers, then applies Motion's observed final OSC-surface Y composition. Use it for Outer Stretch exterior-preview orientation work.
 
 ## Engineering Notes
 
@@ -255,6 +256,20 @@ It writes ignored PNG files under `.agent-work/test-assets/`:
 - `upright-centered-preview.png`: applies centered vertical/horizontal perspective plus rotation.
 
 The preview renderer is CPU-only and exists to prove mapping semantics. Playback in Motion and Final Cut still uses the shared Metal warp.
+
+For Outer Stretch exterior-preview debugging, use the Metal host simulator instead of the CPU preview. It deliberately keeps the plug-in's offscreen preview pass, OSC texture pass, and Motion's final surface composition as separate stages:
+
+```sh
+xcrun swiftc -parse-as-library \
+  -import-objc-header 'AnyUpright/Plugin/XPC Service-Bridging-Header.h' \
+  -F /Library/Developer/SDKs/FxPlug.sdk/Library/Frameworks \
+  AnyUpright/Plugin/AnyUprightGeometry.swift \
+  AnyUpright/Plugin/AnyUprightOuterStretchOSCPreviewGeometry.swift \
+  tools/render-outer-stretch-motion-host.swift \
+  -o /tmp/AnyUprightOuterStretchMotionHost
+```
+
+Pass the `default.metallib` from a Debug XPC build and an output PNG path. The fixed pure-blue fixture makes exterior alpha placement visible without source-image detail.
 
 ### Motion Validation Checklist
 

@@ -5,6 +5,16 @@
 
 import Foundation
 
+struct AUOuterStretchOSCPreviewVertexGeometry {
+    let position: AUPoint
+    let outputCoordinate: AUPoint
+}
+
+struct AUOSCTextureOverlayVertexGeometry {
+    let position: AUPoint
+    let textureCoordinate: AUPoint
+}
+
 struct AUOuterStretchOSCPreviewLayout {
     static let maximumTextureDimension = 1600
 
@@ -12,6 +22,55 @@ struct AUOuterStretchOSCPreviewLayout {
     let textureWidth: Int
     let textureHeight: Int
     let objectFrame: [AUPoint]
+
+    var offscreenVertices: [AUOuterStretchOSCPreviewVertexGeometry] {
+        let halfWidth = Double(textureWidth) / 2.0
+        let halfHeight = Double(textureHeight) / 2.0
+        return [
+            AUOuterStretchOSCPreviewVertexGeometry(
+                position: AUPoint(x: halfWidth, y: -halfHeight),
+                outputCoordinate: AUPoint(x: physicalBounds.right, y: physicalBounds.top)
+            ),
+            AUOuterStretchOSCPreviewVertexGeometry(
+                position: AUPoint(x: -halfWidth, y: -halfHeight),
+                outputCoordinate: AUPoint(x: physicalBounds.left, y: physicalBounds.top)
+            ),
+            AUOuterStretchOSCPreviewVertexGeometry(
+                position: AUPoint(x: halfWidth, y: halfHeight),
+                outputCoordinate: AUPoint(x: physicalBounds.right, y: physicalBounds.bottom)
+            ),
+            AUOuterStretchOSCPreviewVertexGeometry(
+                position: AUPoint(x: -halfWidth, y: halfHeight),
+                outputCoordinate: AUPoint(x: physicalBounds.left, y: physicalBounds.bottom)
+            )
+        ]
+    }
+
+    static func textureOverlayVertices(
+        surfacePixels: [AUPoint],
+        surfaceSize: AUSize
+    ) -> [AUOSCTextureOverlayVertexGeometry] {
+        guard surfacePixels.count == 4 else {
+            return []
+        }
+
+        func vertex(_ index: Int, textureCoordinate: AUPoint) -> AUOSCTextureOverlayVertexGeometry {
+            AUOSCTextureOverlayVertexGeometry(
+                position: oscMetalCenteredPixel(
+                    fromSurfacePixel: surfacePixels[index],
+                    surfaceSize: surfaceSize
+                ),
+                textureCoordinate: textureCoordinate
+            )
+        }
+
+        return [
+            vertex(2, textureCoordinate: AUPoint(x: 1.0, y: 1.0)),
+            vertex(3, textureCoordinate: AUPoint(x: 0.0, y: 1.0)),
+            vertex(1, textureCoordinate: AUPoint(x: 1.0, y: 0.0)),
+            vertex(0, textureCoordinate: AUPoint(x: 0.0, y: 0.0))
+        ]
+    }
 
     static func make(corners: AUStretchCorners, outputSize: AUSize) -> AUOuterStretchOSCPreviewLayout? {
         let width = max(1.0, outputSize.width)

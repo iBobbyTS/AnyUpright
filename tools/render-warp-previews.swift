@@ -213,9 +213,9 @@ struct RenderWarpPreviews {
                 }
 
                 if !isInsideCanvas {
-                    // Reproduce the current Motion OSC composition: the final Warp and
-                    // control geometry remain upright, while only the cached preview layer
-                    // crosses the host Canvas boundary with its Y direction reversed.
+                    // Legacy CPU approximation of the observed Motion result. The
+                    // authoritative host simulation runs the production Metal passes in
+                    // render-outer-stretch-motion-host.swift.
                     let previewPoint = AUPoint(
                         x: canvasPoint.x,
                         y: canvasSize.height - canvasPoint.y

@@ -520,18 +520,16 @@ final class AnyUprightOSCOverlayRenderer {
                 height: height
             )
         }
-        func vertex(_ index: Int, _ uv: SIMD2<Float>) -> AnyUprightTextureOverlayVertex2D {
+        let geometry = AUOuterStretchOSCPreviewLayout.textureOverlayVertices(
+            surfacePixels: pixels.map { AUPoint(x: $0.x, y: $0.y) },
+            surfaceSize: AUSize(width: width, height: height)
+        )
+        return geometry.map {
             AnyUprightTextureOverlayVertex2D(
-                position: metalCenteredPixel(pixels[index], width: width, height: height),
-                textureCoordinate: uv
+                position: SIMD2<Float>(Float($0.position.x), Float($0.position.y)),
+                textureCoordinate: SIMD2<Float>(Float($0.textureCoordinate.x), Float($0.textureCoordinate.y))
             )
         }
-        return [
-            vertex(2, SIMD2<Float>(1.0, 1.0)),
-            vertex(3, SIMD2<Float>(0.0, 1.0)),
-            vertex(1, SIMD2<Float>(1.0, 0.0)),
-            vertex(0, SIMD2<Float>(0.0, 0.0))
-        ]
     }
 
     private func appendLine(

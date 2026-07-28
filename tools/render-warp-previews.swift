@@ -64,6 +64,24 @@ struct RGBAImage {
 @main
 struct RenderWarpPreviews {
     static func main() throws {
+        let arguments = Array(CommandLine.arguments.dropFirst())
+        if arguments.first == "--outer-stretch-osc-repro" {
+            guard arguments.count == 3 else {
+                throw WarpPreviewFailure.failed(
+                    "Usage: render-warp-previews --outer-stretch-osc-repro <input-image> <output-png>"
+                )
+            }
+            let inputURL = URL(fileURLWithPath: arguments[1])
+            let outputURL = URL(fileURLWithPath: arguments[2])
+            try FileManager.default.createDirectory(
+                at: outputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try renderOuterStretchOSCReproduction(inputURL: inputURL, outputURL: outputURL)
+            print("Rendered Outer Stretch OSC reproduction in \(outputURL.path)")
+            return
+        }
+
         let assetDirectory = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? ".agent-work/test-assets")
         let outputDirectory = URL(fileURLWithPath: CommandLine.arguments.dropFirst().dropFirst().first ?? ".agent-work/warp-previews")
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
@@ -151,6 +169,96 @@ struct RenderWarpPreviews {
         )
         try assertMaps(matrix, outputStretch.topLeft, to: AUPoint(x: 0.0, y: 0.0), label: "output corner top-left maps to source frame")
         try saveWarped(image, outputSize: size, outputToSource: matrix, url: outputDirectory.appendingPathComponent("stretch-output-corners-preview.png"))
+    }
+
+    private static func renderOuterStretchOSCReproduction(inputURL: URL, outputURL: URL) throws {
+        let source = try loadRGBA(inputURL)
+        let canvasWidth = 1200
+        let canvasHeight = max(1, Int((Double(canvasWidth) * Double(source.height) / Double(source.width)).rounded()))
+        let canvasSize = AUSize(width: Double(canvasWidth), height: Double(canvasHeight))
+        let sourceSize = AUSize(width: Double(source.width), height: Double(source.height))
+        let outputCorners = AUStretchCorners(
+            topLeft: AUPoint(x: -canvasSize.width * 0.16, y: -canvasSize.height * 0.18),
+            topRight: AUPoint(x: canvasSize.width, y: 0.0),
+            bottomRight: AUPoint(x: canvasSize.width, y: canvasSize.height),
+            bottomLeft: AUPoint(x: 0.0, y: canvasSize.height)
+        )
+        let outputToSource = AnyUprightGeometry.homography(
+            from: outputCorners,
+            to: AUStretchCorners.fullFrame(sourceSize)
+        )
+
+        let leftMargin = 240
+        let topMargin = 220
+        let rightMargin = 80
+        let bottomMargin = 220
+        let outputWidth = leftMargin + canvasWidth + rightMargin
+        let outputHeight = topMargin + canvasHeight + bottomMargin
+        var rgba = Array(repeating: UInt8(0), count: outputWidth * outputHeight * 4)
+        var exteriorAboveLitPixels = 0
+        var exteriorBelowLitPixels = 0
+
+        for outputY in 0..<outputHeight {
+            for outputX in 0..<outputWidth {
+                let canvasPoint = AUPoint(
+                    x: Double(outputX - leftMargin),
+                    y: Double(outputY - topMargin)
+                )
+                let isInsideCanvas = pointIsInsideCanvas(canvasPoint, size: canvasSize)
+                var color: (UInt8, UInt8, UInt8, UInt8) = (15, 15, 15, 255)
+
+                if isInsideCanvas && pointIsInsideQuad(canvasPoint, corners: outputCorners) {
+                    let sourcePoint = AnyUprightGeometry.transform(canvasPoint, by: outputToSource)
+                    color = source.sample(x: sourcePoint.x, y: sourcePoint.y)
+                }
+
+                if !isInsideCanvas {
+                    // Reproduce the current Motion OSC composition: the final Warp and
+                    // control geometry remain upright, while only the cached preview layer
+                    // crosses the host Canvas boundary with its Y direction reversed.
+                    let previewPoint = AUPoint(
+                        x: canvasPoint.x,
+                        y: canvasSize.height - canvasPoint.y
+                    )
+                    if !pointIsInsideCanvas(previewPoint, size: canvasSize),
+                       pointIsInsideQuad(previewPoint, corners: outputCorners) {
+                        let sourcePoint = AnyUprightGeometry.transform(previewPoint, by: outputToSource)
+                        let sampled = source.sample(x: sourcePoint.x, y: sourcePoint.y)
+                        color = dimmed(sampled, factor: 0.40)
+                        if Int(sampled.0) + Int(sampled.1) + Int(sampled.2) > 30 {
+                            if canvasPoint.y < 0.0 {
+                                exteriorAboveLitPixels += 1
+                            } else if canvasPoint.y > canvasSize.height {
+                                exteriorBelowLitPixels += 1
+                            }
+                        }
+                    }
+                }
+
+                let lineCoverage = coverage(
+                    distance: AnyUprightGeometry.distanceToSelectionEdge(from: canvasPoint, stretch: outputCorners),
+                    radius: 2.0
+                )
+                color = mix(color, (210, 174, 0, 255), lineCoverage)
+                let handleCoverage = selectionHandleCoverage(canvasPoint, handles: outputCorners, radius: 8.0)
+                color = mix(color, (0, 92, 116, 255), handleCoverage)
+
+                let index = (outputY * outputWidth + outputX) * 4
+                rgba[index] = color.0
+                rgba[index + 1] = color.1
+                rgba[index + 2] = color.2
+                rgba[index + 3] = color.3
+            }
+        }
+
+        try assertTrue(exteriorBelowLitPixels > 100, "Outer Stretch reproduction should contain visible preview pixels below the canvas")
+        try saveRGBA(RGBAImage(width: outputWidth, height: outputHeight, pixels: rgba), url: outputURL)
+        print(
+            "Outer Stretch OSC reproduction: source=\(source.width)x\(source.height) " +
+            "canvas=\(canvasWidth)x\(canvasHeight) " +
+            "topLeft=(\(Int(outputCorners.topLeft.x)),\(Int(outputCorners.topLeft.y))) " +
+            "exteriorLitAbove=\(exteriorAboveLitPixels) exteriorLitBelow=\(exteriorBelowLitPixels)"
+        )
     }
 
     private static func renderUprightPreview(assetDirectory: URL, outputDirectory: URL) throws {
@@ -307,6 +415,27 @@ struct RenderWarpPreviews {
             rectPoint.x <= outputSize.width &&
             rectPoint.y >= 0.0 &&
             rectPoint.y <= outputSize.height
+    }
+
+    private static func pointIsInsideCanvas(_ point: AUPoint, size: AUSize) -> Bool {
+        point.x >= 0.0 && point.x <= size.width && point.y >= 0.0 && point.y <= size.height
+    }
+
+    private static func pointIsInsideQuad(_ point: AUPoint, corners: AUStretchCorners) -> Bool {
+        let points = [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft]
+        var hasPositive = false
+        var hasNegative = false
+        for index in points.indices {
+            let start = points[index]
+            let end = points[(index + 1) % points.count]
+            let cross = (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x)
+            hasPositive = hasPositive || cross > 0.000001
+            hasNegative = hasNegative || cross < -0.000001
+            if hasPositive && hasNegative {
+                return false
+            }
+        }
+        return true
     }
 
     private static func loadRGBA(_ url: URL) throws -> RGBAImage {

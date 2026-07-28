@@ -14,6 +14,7 @@ private enum UprightV2GuideSelectorTestFailure: Error, CustomStringConvertible {
 struct AnyUprightUprightV2GuideSelectorTests {
     static func main() throws {
         try testSelectionPolicies()
+        try testCorrectionModeFiltersFullHypothesisGuides()
         try testRepresentativeLinesBalanceQualityAndCoverage()
         try testSemiAutomaticRepresentativeLimit()
         try testInvalidAndDuplicateSupportersAreIgnored()
@@ -29,6 +30,7 @@ struct AnyUprightUprightV2GuideSelectorTests {
             "Semi Auto Full should use the existing per-orientation candidate limit"
         )
         try require(semi?.applyRiskGate == false, "Semi Auto Full should expose a risky best family for manual review")
+        try require(semi?.correctionMode == .full, "Semi Auto Full should export both Full hypothesis families")
 
         let automatic = AnyUprightUprightV2GuideSelector.selectionPolicy(
             for: UprightAnalysisRequest(correctionMode: .full, controlMode: .automatic)
@@ -39,17 +41,92 @@ struct AnyUprightUprightV2GuideSelectorTests {
         )
         try require(automatic?.applyRiskGate == true, "Full Auto should retain the risk gate")
 
+        let vertical = AnyUprightUprightV2GuideSelector.selectionPolicy(
+            for: UprightAnalysisRequest(correctionMode: .vertical, controlMode: .semiAutomatic)
+        )
         try require(
-            AnyUprightUprightV2GuideSelector.selectionPolicy(
-                for: UprightAnalysisRequest(correctionMode: .vertical, controlMode: .semiAutomatic)
-            ) == nil,
-            "single-direction Semi Auto should retain the score-only selector"
+            vertical?.correctionMode == .vertical,
+            "Vertical Semi Auto should rank a Full hypothesis and export only its vertical family"
+        )
+        let horizontal = AnyUprightUprightV2GuideSelector.selectionPolicy(
+            for: UprightAnalysisRequest(correctionMode: .horizontal, controlMode: .automatic)
+        )
+        try require(
+            horizontal?.correctionMode == .horizontal,
+            "Horizontal Full Auto should rank a Full hypothesis and export only its horizontal family"
         )
         try require(
             AnyUprightUprightV2GuideSelector.selectionPolicy(
                 for: UprightAnalysisRequest(correctionMode: .full, controlMode: .manual)
             ) == nil,
             "Manual should not run V2 candidate selection"
+        )
+    }
+
+    private static func testCorrectionModeFiltersFullHypothesisGuides() throws {
+        let lines = [
+            AUScaleLSDLineSegment(
+                start: AUPoint(x: 10, y: 10),
+                end: AUPoint(x: 15, y: 90),
+                score: 100
+            ),
+            AUScaleLSDLineSegment(
+                start: AUPoint(x: 90, y: 10),
+                end: AUPoint(x: 85, y: 90),
+                score: 90
+            ),
+            AUScaleLSDLineSegment(
+                start: AUPoint(x: 10, y: 20),
+                end: AUPoint(x: 90, y: 25),
+                score: 80
+            ),
+            AUScaleLSDLineSegment(
+                start: AUPoint(x: 10, y: 80),
+                end: AUPoint(x: 90, y: 75),
+                score: 70
+            ),
+        ]
+        let imageSize = AUSize(width: 100, height: 100)
+
+        func guides(for correctionMode: UprightCorrectionMode) throws -> [UprightDetectedCandidate] {
+            let policy = try unwrap(
+                AnyUprightUprightV2GuideSelector.selectionPolicy(
+                    for: UprightAnalysisRequest(
+                        correctionMode: correctionMode,
+                        controlMode: .automatic
+                    )
+                ),
+                "automatic mode should have a V2 policy"
+            )
+            return AnyUprightUprightV2GuideSelector.representativeGuides(
+                verticalSupporterIndexes: [0, 1],
+                horizontalSupporterIndexes: [2, 3],
+                lines: lines,
+                imageSize: imageSize,
+                policy: policy
+            )
+        }
+
+        let vertical = try guides(for: .vertical)
+        try require(vertical.count == 2, "Vertical should retain the two Full hypothesis vertical guides")
+        try require(
+            vertical.allSatisfy { $0.orientation == .vertical },
+            "Vertical should not export the Full hypothesis horizontal family"
+        )
+
+        let horizontal = try guides(for: .horizontal)
+        try require(horizontal.count == 2, "Horizontal should retain the two Full hypothesis horizontal guides")
+        try require(
+            horizontal.allSatisfy { $0.orientation == .horizontal },
+            "Horizontal should not export the Full hypothesis vertical family"
+        )
+
+        let full = try guides(for: .full)
+        try require(full.count == 4, "Full should continue exporting both hypothesis families")
+        try require(
+            full.filter { $0.orientation == .vertical }.count == 2
+                && full.filter { $0.orientation == .horizontal }.count == 2,
+            "Full should preserve two guides per orientation"
         )
     }
 
@@ -140,5 +217,12 @@ struct AnyUprightUprightV2GuideSelectorTests {
         guard condition() else {
             throw UprightV2GuideSelectorTestFailure.failed(message)
         }
+    }
+
+    private static func unwrap<T>(_ value: T?, _ message: String) throws -> T {
+        guard let value else {
+            throw UprightV2GuideSelectorTestFailure.failed(message)
+        }
+        return value
     }
 }

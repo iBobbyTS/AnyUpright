@@ -6,6 +6,7 @@
 import Foundation
 
 struct AUUprightV2GuideSelectionPolicy {
+    var correctionMode: UprightCorrectionMode
     var maximumGuidesPerOrientation: Int
     var applyRiskGate: Bool
 }
@@ -27,19 +28,18 @@ enum AnyUprightUprightV2GuideSelector {
     static func selectionPolicy(
         for request: UprightAnalysisRequest
     ) -> AUUprightV2GuideSelectionPolicy? {
-        guard request.correctionMode == .full else {
-            return nil
-        }
         switch request.controlMode {
         case .manual:
             return nil
         case .semiAutomatic:
             return AUUprightV2GuideSelectionPolicy(
+                correctionMode: request.correctionMode,
                 maximumGuidesPerOrientation: AnyUprightUprightCandidates.semiAutomaticLimitPerOrientation,
                 applyRiskGate: false
             )
         case .automatic:
             return AUUprightV2GuideSelectionPolicy(
+                correctionMode: request.correctionMode,
                 maximumGuidesPerOrientation: AnyUprightUprightCandidates.automaticLimitPerOrientation,
                 applyRiskGate: true
             )
@@ -78,22 +78,15 @@ enum AnyUprightUprightV2GuideSelector {
                 horizontalSupporterCount: 0
             )
         }
-        let vertical = representativeCandidates(
-            supporterIndexes: selection.candidate.verticalSupporters,
-            orientation: .vertical,
+        let guides = representativeGuides(
+            verticalSupporterIndexes: selection.candidate.verticalSupporters,
+            horizontalSupporterIndexes: selection.candidate.horizontalSupporters,
             lines: lines,
             imageSize: imageSize,
-            maximumCount: policy.maximumGuidesPerOrientation
-        )
-        let horizontal = representativeCandidates(
-            supporterIndexes: selection.candidate.horizontalSupporters,
-            orientation: .horizontal,
-            lines: lines,
-            imageSize: imageSize,
-            maximumCount: policy.maximumGuidesPerOrientation
+            policy: policy
         )
         return AUUprightV2GuideSelection(
-            guides: vertical + horizontal,
+            guides: guides,
             selected: true,
             preparedLineCount: pool.preparedLineCount,
             vpClusterCount: pool.vpClusterCount,
@@ -104,6 +97,34 @@ enum AnyUprightUprightV2GuideSelector {
             verticalSupporterCount: selection.candidate.verticalSupporters.count,
             horizontalSupporterCount: selection.candidate.horizontalSupporters.count
         )
+    }
+
+    static func representativeGuides(
+        verticalSupporterIndexes: [Int],
+        horizontalSupporterIndexes: [Int],
+        lines: [AUScaleLSDLineSegment],
+        imageSize: AUSize,
+        policy: AUUprightV2GuideSelectionPolicy
+    ) -> [UprightDetectedCandidate] {
+        let vertical = policy.correctionMode.includesVertical
+            ? representativeCandidates(
+                supporterIndexes: verticalSupporterIndexes,
+                orientation: .vertical,
+                lines: lines,
+                imageSize: imageSize,
+                maximumCount: policy.maximumGuidesPerOrientation
+            )
+            : []
+        let horizontal = policy.correctionMode.includesHorizontal
+            ? representativeCandidates(
+                supporterIndexes: horizontalSupporterIndexes,
+                orientation: .horizontal,
+                lines: lines,
+                imageSize: imageSize,
+                maximumCount: policy.maximumGuidesPerOrientation
+            )
+            : []
+        return vertical + horizontal
     }
 
     static func representativeCandidates(

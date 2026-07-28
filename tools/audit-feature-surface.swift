@@ -158,7 +158,7 @@ struct AuditFeatureSurface {
         try require(effects, "withName: \"Direction\"", "Upright exposes direction-based correction selection")
         try require(effects, "menuEntries: [\"Vertical\", \"Horizontal\", \"Full\"]", "Upright exposes vertical, horizontal, and full correction directions")
         try require(effects, "withName: \"Mode\"", "Upright exposes workflow mode selection")
-        try require(effects, "menuEntries: [\"Manual\", \"Semi Auto\", \"Full Auto\"]", "Upright exposes manual, semi-auto, and full-auto modes")
+        try require(effects, "menuEntries: [\"Manual\", \"Semi Auto\", \"Auto\"]", "Upright exposes manual, semi-auto, and auto modes")
         try require(effects, "withName: \"Analyze\"", "Upright exposes one analysis/apply action for the selected mode")
         try require(effects, "guard controlMode != .manual else", "Upright Analyze applies manual guides without running detection")
         try require(effects, "UprightAnalysisRequest(correctionMode: correctionMode, controlMode: controlMode)", "Upright Analyze starts semi-auto and full-auto candidate detection")

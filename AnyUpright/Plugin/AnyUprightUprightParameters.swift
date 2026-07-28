@@ -259,7 +259,7 @@ func addUprightWorkflowParameters(_ paramAPI: FxParameterCreationAPI_v5, default
         withName: "Mode",
         parameterID: UprightParam.controlMode.rawValue,
         defaultValue: UInt32(UprightControlMode.manual.rawValue),
-        menuEntries: ["Manual", "Semi Auto", "Full Auto"],
+        menuEntries: ["Manual", "Semi Auto", "Auto"],
         parameterFlags: defaultFlags
     )
     paramAPI.addToggleButton(

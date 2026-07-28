@@ -37,9 +37,9 @@ struct AnyUprightUprightV2GuideSelectorTests {
         )
         try require(
             automatic?.maximumGuidesPerOrientation == AnyUprightUprightCandidates.automaticLimitPerOrientation,
-            "Full Auto should retain its two-guide limit"
+            "Auto should retain its two-guide limit"
         )
-        try require(automatic?.applyRiskGate == true, "Full Auto should retain the risk gate")
+        try require(automatic?.applyRiskGate == true, "Auto should retain the risk gate")
 
         let vertical = AnyUprightUprightV2GuideSelector.selectionPolicy(
             for: UprightAnalysisRequest(correctionMode: .vertical, controlMode: .semiAutomatic)
@@ -53,7 +53,7 @@ struct AnyUprightUprightV2GuideSelectorTests {
         )
         try require(
             horizontal?.correctionMode == .horizontal,
-            "Horizontal Full Auto should rank a Full hypothesis and export only its horizontal family"
+            "Horizontal Auto should rank a Full hypothesis and export only its horizontal family"
         )
         try require(
             AnyUprightUprightV2GuideSelector.selectionPolicy(

@@ -320,7 +320,10 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 renderTime: time,
                 signature: AUOuterStretchOSCPreviewSignature(state: state)
             ),
-            deviceRegistryID: destinationImage.deviceRegistryID
+            deviceRegistryID: destinationImage.deviceRegistryID,
+            allowsStaleFallback: AUOuterStretchOSCPreviewRenderPolicy.allowsStaleFallback(
+                objectCorners: objectPoints
+            )
         )
         let textureOverlay = previewEntry.map {
             AUOSCTextureOverlay(

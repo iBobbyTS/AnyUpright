@@ -13,6 +13,37 @@ private func require(_ condition: @autoclosure () -> Bool, _ message: String) th
 @main
 struct AnyUprightOuterStretchOSCPreviewGeometryTests {
     static func main() throws {
+        let fullFrameObjectCorners = AUStretchCorners(
+            topLeft: AUPoint(x: 0.0, y: 1.0),
+            topRight: AUPoint(x: 1.0, y: 1.0),
+            bottomRight: AUPoint(x: 1.0, y: 0.0),
+            bottomLeft: AUPoint(x: 0.0, y: 0.0)
+        )
+        try require(
+            !AUOuterStretchOSCPreviewRenderPolicy.allowsStaleFallback(
+                objectCorners: fullFrameObjectCorners
+            ),
+            "an in-canvas undo state must not reuse an exterior preview"
+        )
+        for outsideCorner in [
+            AUPoint(x: -0.1, y: 1.0),
+            AUPoint(x: 1.1, y: 1.0),
+            AUPoint(x: 0.0, y: 1.1),
+            AUPoint(x: 0.0, y: -0.1)
+        ] {
+            try require(
+                AUOuterStretchOSCPreviewRenderPolicy.allowsStaleFallback(
+                    objectCorners: AUStretchCorners(
+                        topLeft: outsideCorner,
+                        topRight: fullFrameObjectCorners.topRight,
+                        bottomRight: fullFrameObjectCorners.bottomRight,
+                        bottomLeft: fullFrameObjectCorners.bottomLeft
+                    )
+                ),
+                "an exterior current state must allow a transition preview"
+            )
+        }
+
         try require(
             AUOuterStretchOSCPreviewRenderPolicy.shouldEncode(
                 outputSize: AUSize(width: 112.0, height: 84.0)

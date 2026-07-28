@@ -108,6 +108,21 @@ struct AUOuterStretchOSCPreviewLayout {
 }
 
 enum AUOuterStretchOSCPreviewRenderPolicy {
+    static func allowsStaleFallback(objectCorners: AUStretchCorners) -> Bool {
+        let points: [AUPoint] = [
+            objectCorners.topLeft,
+            objectCorners.topRight,
+            objectCorners.bottomRight,
+            objectCorners.bottomLeft
+        ]
+        for point in points {
+            if point.x < 0.0 || point.x > 1.0 || point.y < 0.0 || point.y > 1.0 {
+                return true
+            }
+        }
+        return false
+    }
+
     static func shouldEncode(outputSize: AUSize) -> Bool {
         let width = max(0.0, outputSize.width)
         let height = max(0.0, outputSize.height)

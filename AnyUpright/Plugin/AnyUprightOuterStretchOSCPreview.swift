@@ -94,8 +94,16 @@ final class AUOuterStretchOSCPreviewCache {
     }
 
     private let lock = NSLock()
-    private var records: [ObjectIdentifier: Record] = [:]
-    private let maximumRecordCount = 8
+    private var records: [ObjectIdentifier: [Record]] = [:]
+    private let maximumRecordsPerSource = 8
+
+    private func outputArea(_ size: AUSize) -> Double {
+        max(0.0, size.width) * max(0.0, size.height)
+    }
+
+    private func recordCount() -> Int {
+        records.values.reduce(0) { $0 + $1.count }
+    }
 
     func store(
         sourceID: ObjectIdentifier,
@@ -104,32 +112,47 @@ final class AUOuterStretchOSCPreviewCache {
         now: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
         lock.lock()
-        if let existing = records[sourceID],
-           CMTimeCompare(existing.query.renderTime, query.renderTime) == 0,
-           existing.entry.texture.device.registryID == entry.texture.device.registryID,
-           !AUOuterStretchOSCPreviewRenderPolicy.shouldReplace(
-               candidateOutputSize: entry.renderOutputSize,
-               existingOutputSize: existing.entry.renderOutputSize,
-               hasMatchingSignature: existing.query.signature == query.signature
-           ) {
-            let count = records.count
+        var sourceRecords = records[sourceID] ?? []
+        let sameTimeDeviceRecords = sourceRecords.filter {
+            CMTimeCompare($0.query.renderTime, query.renderTime) == 0
+                && $0.entry.texture.device.registryID == entry.texture.device.registryID
+        }
+        if let highestQuality = sameTimeDeviceRecords.max(by: {
+            outputArea($0.entry.renderOutputSize) < outputArea($1.entry.renderOutputSize)
+        }),
+        outputArea(entry.renderOutputSize) < outputArea(highestQuality.entry.renderOutputSize) {
+            let count = recordCount()
             lock.unlock()
             AUOuterStretchOSCPreviewDebugLog.record(
                 "cache_store_skipped_lower_quality source=\(AUOuterStretchOSCPreviewDebugLog.describe(sourceID)) " +
                 "\(AUOuterStretchOSCPreviewDebugLog.describe(query)) " +
                 "candidate_output=\(Int(entry.renderOutputSize.width))x\(Int(entry.renderOutputSize.height)) " +
                 "candidate_texture=\(entry.texture.width)x\(entry.texture.height) " +
-                "existing_output=\(Int(existing.entry.renderOutputSize.width))x\(Int(existing.entry.renderOutputSize.height)) " +
-                "existing_texture=\(existing.entry.texture.width)x\(existing.entry.texture.height) records=\(count)"
+                "existing_output=\(Int(highestQuality.entry.renderOutputSize.width))x\(Int(highestQuality.entry.renderOutputSize.height)) " +
+                "existing_texture=\(highestQuality.entry.texture.width)x\(highestQuality.entry.texture.height) records=\(count)"
             )
             return
         }
-        records[sourceID] = Record(query: query, entry: entry, storedAt: now)
-        if records.count > maximumRecordCount,
-           let oldest = records.min(by: { $0.value.storedAt < $1.value.storedAt })?.key {
-            records.removeValue(forKey: oldest)
+
+        let replacementIndex = sourceRecords.firstIndex {
+            $0.query.renderTime == query.renderTime
+                && $0.query.signature == query.signature
+                && $0.entry.texture.device.registryID == entry.texture.device.registryID
         }
-        let count = records.count
+        let record = Record(query: query, entry: entry, storedAt: now)
+        if let replacementIndex {
+            sourceRecords[replacementIndex] = record
+        } else {
+            sourceRecords.append(record)
+        }
+        if sourceRecords.count > maximumRecordsPerSource,
+           let oldestIndex = sourceRecords.indices.min(by: {
+               sourceRecords[$0].storedAt < sourceRecords[$1].storedAt
+           }) {
+            sourceRecords.remove(at: oldestIndex)
+        }
+        records[sourceID] = sourceRecords
+        let count = recordCount()
         lock.unlock()
         AUOuterStretchOSCPreviewDebugLog.record(
             "cache_store source=\(AUOuterStretchOSCPreviewDebugLog.describe(sourceID)) " +
@@ -141,38 +164,56 @@ final class AUOuterStretchOSCPreviewCache {
 
     func entry(
         matching query: AUOuterStretchOSCPreviewQuery,
-        deviceRegistryID: UInt64
+        deviceRegistryID: UInt64,
+        allowsStaleFallback: Bool
     ) -> AUOuterStretchOSCPreviewEntry? {
         lock.lock()
-        let exactMatches = records.values.filter {
+        let exactMatches = records.values.flatMap { $0 }.filter {
             CMTimeCompare($0.query.renderTime, query.renderTime) == 0
                 && $0.query.signature == query.signature
                 && $0.entry.texture.device.registryID == deviceRegistryID
         }
         let result: AUOuterStretchOSCPreviewEntry?
         let resultKind: String
-        if exactMatches.count == 1 {
-            result = exactMatches[0].entry
+        if let exactMatch = exactMatches.max(by: { $0.storedAt < $1.storedAt }) {
+            result = exactMatch.entry
             resultKind = "hit"
-        } else if records.count == 1,
-                  let stale = records.values.first,
-                  CMTimeCompare(stale.query.renderTime, query.renderTime) == 0,
-                  stale.entry.texture.device.registryID == deviceRegistryID {
-            // Motion can request OSC before the current low-resolution Warp
-            // render has completed. Keep the last completed preview visible
-            // rather than clearing the texture for one host callback.
-            result = stale.entry
-            resultKind = "stale"
+        } else if allowsStaleFallback {
+            let matchingSources = records.compactMap { sourceID, sourceRecords -> (ObjectIdentifier, [Record])? in
+                let candidates = sourceRecords.filter {
+                    CMTimeCompare($0.query.renderTime, query.renderTime) == 0
+                        && $0.entry.texture.device.registryID == deviceRegistryID
+                }
+                return candidates.isEmpty ? nil : (sourceID, candidates)
+            }
+            if matchingSources.count == 1,
+               let staleMatch = matchingSources[0].1.max(by: {
+                   let firstArea = outputArea($0.entry.renderOutputSize)
+                   let secondArea = outputArea($1.entry.renderOutputSize)
+                   return firstArea == secondArea
+                       ? $0.storedAt < $1.storedAt
+                       : firstArea < secondArea
+               }) {
+                // Motion can draw the OSC before Warp finishes the new parameter
+                // signature. Reuse only a same-time preview from the sole matching
+                // effect source, and only when current geometry remains outside.
+                result = staleMatch.entry
+                resultKind = "stale"
+            } else {
+                result = nil
+                resultKind = "miss"
+            }
         } else {
             result = nil
             resultKind = "miss"
         }
-        let count = records.count
+        let count = recordCount()
         let resultSize = result.map { "\($0.texture.width)x\($0.texture.height)" } ?? "none"
         lock.unlock()
         AUOuterStretchOSCPreviewDebugLog.record(
             "cache_lookup \(AUOuterStretchOSCPreviewDebugLog.describe(query)) " +
-            "result=\(resultKind) texture=\(resultSize) records=\(count)"
+            "result=\(resultKind) texture=\(resultSize) records=\(count) " +
+            "stale_allowed=\(allowsStaleFallback ? 1 : 0)"
         )
         return result
     }

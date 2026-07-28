@@ -87,8 +87,8 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
             defaultValue: 0.0,
             parameterMin: -10000.0,
             parameterMax: 10000.0,
-            sliderMin: -500.0,
-            sliderMax: 500.0,
+            sliderMin: -2000.0,
+            sliderMax: 2000.0,
             delta: 1.0,
             parameterFlags: defaultFlags()
         )

@@ -34,6 +34,8 @@ struct AnyUprightGeometryTests {
         try testInnerStretchMappedSurfaceDragWritesObjectYDirectly()
         try testInnerStretchRawCanvasDragWritesObjectYDirectly()
         try testInnerStretchHostCanvasLayerPreservesNamedCorners()
+        try testPixelStretchFlipMapsOutputHandlesToOSCRenderTargetCoordinates()
+        try testOuterStretchRenderMaskUsesPhysicalOutputCoordinates()
         try testDistanceToStretchEdgeUsesOutputPixelSegments()
         try testInnerStretchAdjusterPreviewAndApplyUseSameSelection()
         try testInnerStretchOutputHandlesStayInImageSpace()
@@ -425,6 +427,28 @@ struct AnyUprightGeometryTests {
         try assertEqual(innerStretch.topLeft, AUPoint(x: 20.0, y: 10.0), "source top-left")
         try assertEqual(oscStretch.topLeft, AUPoint(x: 20.0, y: 90.0), "osc top-left")
         try assertEqual(oscStretch.bottomLeft, AUPoint(x: 20.0, y: 10.0), "osc bottom-left")
+    }
+
+    static func testOuterStretchRenderMaskUsesPhysicalOutputCoordinates() throws {
+        let correctionSize = AUSize(width: 200.0, height: 100.0)
+        let outputSize = AUSize(width: 100.0, height: 50.0)
+        let offsets = AUCornerOffsets(
+            topLeftPixels: AUPoint(x: 40.0, y: -20.0),
+            topRightPixels: AUPoint(x: -20.0, y: -10.0),
+            bottomRightPixels: AUPoint(x: -20.0, y: 10.0),
+            bottomLeftPixels: AUPoint(x: 20.0, y: 10.0)
+        )
+
+        let mask = AnyUprightGeometry.outerStretchRenderMaskCorners(
+            from: offsets,
+            outputSize: outputSize,
+            correctionOutputSize: correctionSize
+        )
+
+        try assertEqual(mask.topLeft, AUPoint(x: 20.0, y: 40.0), "outer mask top-left scales from the correction frame and crosses the render Y boundary once")
+        try assertEqual(mask.topRight, AUPoint(x: 90.0, y: 45.0), "outer mask top-right scales from the correction frame and crosses the render Y boundary once")
+        try assertEqual(mask.bottomRight, AUPoint(x: 90.0, y: 5.0), "outer mask bottom-right scales from the correction frame and crosses the render Y boundary once")
+        try assertEqual(mask.bottomLeft, AUPoint(x: 10.0, y: 5.0), "outer mask bottom-left scales from the correction frame and crosses the render Y boundary once")
     }
 
     static func testDistanceToStretchEdgeUsesOutputPixelSegments() throws {

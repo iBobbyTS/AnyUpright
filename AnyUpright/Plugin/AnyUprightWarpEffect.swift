@@ -474,7 +474,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             selectionOutputToRect,
             outputSize: destinationSize
         )
-        let sourceHandles = innerStretchOutputHandles(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
+        let stretchCorners = renderStretchCorners(from: parameterState, outputSize: destinationSize, sourceSize: sourceSize)
         let renderMode = renderMode(from: parameterState)
 
         return AnyUprightWarpState(
@@ -486,10 +486,10 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             imageCoordinateMax: vector_float2(Float(max(0.0, destinationSize.width)), Float(max(0.0, destinationSize.height))),
             inputImageOriginInTexture: vector_float2(Float(inputTextureMapping.imageOriginInTexture.x), Float(inputTextureMapping.imageOriginInTexture.y)),
             inputTextureSize: vector_float2(Float(max(1.0, inputTextureMapping.textureSize.width)), Float(max(1.0, inputTextureMapping.textureSize.height))),
-            innerStretchTopLeft: vector_float2(Float(sourceHandles.topLeft.x), Float(sourceHandles.topLeft.y)),
-            innerStretchTopRight: vector_float2(Float(sourceHandles.topRight.x), Float(sourceHandles.topRight.y)),
-            innerStretchBottomRight: vector_float2(Float(sourceHandles.bottomRight.x), Float(sourceHandles.bottomRight.y)),
-            innerStretchBottomLeft: vector_float2(Float(sourceHandles.bottomLeft.x), Float(sourceHandles.bottomLeft.y)),
+            stretchTopLeft: vector_float2(Float(stretchCorners.topLeft.x), Float(stretchCorners.topLeft.y)),
+            stretchTopRight: vector_float2(Float(stretchCorners.topRight.x), Float(stretchCorners.topRight.y)),
+            stretchBottomRight: vector_float2(Float(stretchCorners.bottomRight.x), Float(stretchCorners.bottomRight.y)),
+            stretchBottomLeft: vector_float2(Float(stretchCorners.bottomLeft.x), Float(stretchCorners.bottomLeft.y)),
             renderMode: renderMode,
             usesNearestSampling: usesNearestSampling(outputToSource: outputToSource, outputSize: destinationSize, sourceSize: sourceSize),
             reserved1: 0,
@@ -703,27 +703,42 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         return AUStretchRatioMode(rawValue: state.stretchRatioMode) ?? .none
     }
 
-    private func innerStretchOutputHandles(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> AUStretchCorners {
+    private func renderStretchCorners(from state: AnyUprightParameterState, outputSize: AUSize, sourceSize: AUSize) -> AUStretchCorners {
         guard AnyUprightEffectKind(rawValue: state.effectKind) == .stretch,
-              AUStretchTransformMode(rawValue: state.stretchMode) == .innerStretch else {
+              let stretchMode = AUStretchTransformMode(rawValue: state.stretchMode) else {
             return AUStretchCorners.fullFrame(outputSize)
         }
 
-        return AnyUprightGeometry.innerStretchOutputHandles(
-            from: cornerOffsets(from: state),
-            outputSize: outputSize,
-            sourceSize: sourceSize
-        )
+        switch stretchMode {
+        case .outputCorners:
+            return AnyUprightGeometry.outerStretchRenderMaskCorners(
+                from: cornerOffsets(from: state),
+                outputSize: outputSize,
+                correctionOutputSize: stableOutputSize(from: state, fallback: outputSize)
+            )
+        case .innerStretch:
+            return AnyUprightGeometry.innerStretchOutputHandles(
+                from: cornerOffsets(from: state),
+                outputSize: outputSize,
+                sourceSize: sourceSize
+            )
+        }
     }
 
     private func renderMode(from state: AnyUprightParameterState) -> Int32 {
-        if AnyUprightEffectKind(rawValue: state.effectKind) == .stretch,
-           AUStretchTransformMode(rawValue: state.stretchMode) == .innerStretch,
-           state.showCornerAdjuster != 0 {
-            return Int32(AURM_InnerStretchAdjusterPreview)
+        guard AnyUprightEffectKind(rawValue: state.effectKind) == .stretch,
+              let stretchMode = AUStretchTransformMode(rawValue: state.stretchMode) else {
+            return Int32(AURM_WarpFullFrame)
         }
 
-        return Int32(AURM_WarpFullFrame)
+        switch stretchMode {
+        case .outputCorners:
+            return Int32(AURM_OuterStretch)
+        case .innerStretch where state.showCornerAdjuster != 0:
+            return Int32(AURM_InnerStretchAdjusterPreview)
+        case .innerStretch:
+            return Int32(AURM_WarpFullFrame)
+        }
     }
 
     private func usesIdentitySourcePreview(from state: AnyUprightParameterState) -> Bool {
@@ -916,7 +931,17 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             outputSize: stableOutputSize,
             sourceSize: stableInputSize
         )
-        let sourceHandles = innerStretchOutputHandles(from: parameterState, outputSize: outputSize, sourceSize: sourceSize)
+        let sourceHandles: AUStretchCorners
+        switch mode {
+        case .outputCorners:
+            sourceHandles = AnyUprightGeometry.stretch(from: offsets, size: outputSize)
+        case .innerStretch:
+            sourceHandles = AnyUprightGeometry.innerStretchOutputHandles(
+                from: offsets,
+                outputSize: outputSize,
+                sourceSize: sourceSize
+            )
+        }
         let samplePoints = [
             ("tileTL", AUPoint(x: outputBounds.left, y: outputBounds.top)),
             ("tileTR", AUPoint(x: outputBounds.right, y: outputBounds.top)),

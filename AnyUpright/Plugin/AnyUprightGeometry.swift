@@ -563,6 +563,21 @@ enum AnyUprightGeometry {
         stretch(from: offsets, base: AUStretchCorners.fullFrame(size), size: size)
     }
 
+    static func outerStretchRenderMaskCorners(
+        from offsets: AUCornerOffsets,
+        outputSize: AUSize,
+        correctionOutputSize: AUSize
+    ) -> AUStretchCorners {
+        let correctionCorners = stretch(from: offsets, size: correctionOutputSize)
+        let outputCorners = AUStretchCorners(
+            topLeft: scalePoint(correctionCorners.topLeft, from: correctionOutputSize, to: outputSize),
+            topRight: scalePoint(correctionCorners.topRight, from: correctionOutputSize, to: outputSize),
+            bottomRight: scalePoint(correctionCorners.bottomRight, from: correctionOutputSize, to: outputSize),
+            bottomLeft: scalePoint(correctionCorners.bottomLeft, from: correctionOutputSize, to: outputSize)
+        )
+        return verticallyFlippedPixelSelection(outputCorners, size: outputSize)
+    }
+
     static func innerStretchDefault(_ size: AUSize) -> AUStretchCorners {
         AUStretchCorners(
             topLeft: AUPoint(x: size.width * innerStretchInset, y: size.height * innerStretchInset),

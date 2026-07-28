@@ -52,6 +52,39 @@ static float sourceImageCoverage(float2 texturePixel, constant AnyUprightWarpSta
     return 1.0 - smoothstep(-antialiasWidth, antialiasWidth, outsideDistance);
 }
 
+static float cross2D(float2 lhs, float2 rhs)
+{
+    return lhs.x * rhs.y - lhs.y * rhs.x;
+}
+
+static float signedDistanceOutsideOrientedEdge(float2 point, float2 start, float2 end, float orientation)
+{
+    float2 edge = end - start;
+    float edgeLength = max(length(edge), 0.0001);
+    return -orientation * cross2D(edge, point - start) / edgeLength;
+}
+
+static float outerStretchCoverage(float2 outputCoordinate, constant AnyUprightWarpState *warpState)
+{
+    float2 topLeft = warpState->stretchTopLeft;
+    float2 topRight = warpState->stretchTopRight;
+    float2 bottomRight = warpState->stretchBottomRight;
+    float2 bottomLeft = warpState->stretchBottomLeft;
+    float signedArea = cross2D(topRight - topLeft, bottomRight - topLeft)
+        + cross2D(bottomRight - topLeft, bottomLeft - topLeft);
+    if (fabs(signedArea) < 0.0001) {
+        return 0.0;
+    }
+
+    float orientation = signedArea > 0.0 ? 1.0 : -1.0;
+    float outsideDistance = signedDistanceOutsideOrientedEdge(outputCoordinate, topLeft, topRight, orientation);
+    outsideDistance = max(outsideDistance, signedDistanceOutsideOrientedEdge(outputCoordinate, topRight, bottomRight, orientation));
+    outsideDistance = max(outsideDistance, signedDistanceOutsideOrientedEdge(outputCoordinate, bottomRight, bottomLeft, orientation));
+    outsideDistance = max(outsideDistance, signedDistanceOutsideOrientedEdge(outputCoordinate, bottomLeft, topLeft, orientation));
+    float antialiasWidth = max(fwidth(outsideDistance), 0.75);
+    return 1.0 - smoothstep(-antialiasWidth, antialiasWidth, outsideDistance);
+}
+
 static float4 sampleInputImage(texture2d<half> colorTexture,
                                sampler textureSampler,
                                float2 texturePixel,
@@ -123,15 +156,25 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
     }
 
     float2 outputCoordinate = clampedImageCoordinate(in.outputCoordinate, warpState);
+    float outputCoverage = 1.0;
+    if (warpState->renderMode == AURM_OuterStretch) {
+        outputCoverage = outerStretchCoverage(outputCoordinate, warpState);
+        if (outputCoverage <= 0.0) {
+            return float4(0.0, 0.0, 0.0, 1.0);
+        }
+    }
+
     float3 sourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
     if (fabs(sourceHomogeneous.z) < 0.000001) {
         return float4(0.0, 0.0, 0.0, 1.0);
     }
 
     float2 texturePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
-    return warpState->usesNearestSampling != 0
+    float4 color = warpState->usesNearestSampling != 0
         ? sampleInputImage(colorTexture, nearestTextureSampler, texturePixel, warpState)
         : sampleInputImage(colorTexture, linearTextureSampler, texturePixel, warpState);
+    color.rgb *= outputCoverage;
+    return color;
 }
 
 vertex OverlayRasterizerData anyUprightOverlayVertex(uint vertexID [[vertex_id]],

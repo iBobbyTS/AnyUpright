@@ -49,7 +49,12 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         updateLastSurfaceSize(from: destinationImage, fallback: AUSize(width: Double(width), height: Double(height)))
         let outputSize = AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
         if mode == .outputCorners {
-            renderOutputCornersOSC(from: state, outputSize: outputSize, destinationImage: destinationImage)
+            renderOutputCornersOSC(
+                from: state,
+                hostActivePart: activePart,
+                outputSize: outputSize,
+                destinationImage: destinationImage
+            )
             return
         }
 
@@ -60,12 +65,6 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let displayPart = currentDisplayPart(hostActivePart: activePart)
         let debugSequence = nextDebugDrawSequence()
         debugCanvasMetrics(label: "draw-source-entry seq=\(debugSequence) part=\(displayPart.rawValue) host=\(activePart)", width: width, height: height, destinationImage: destinationImage, stretch: stretch, canvasFrame: canvasFrame)
-        let handles = [
-            AUOSCHandle(point: stretch[0], part: StretchOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: stretch[1], part: StretchOSCPart.topRight.rawValue),
-            AUOSCHandle(point: stretch[2], part: StretchOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: stretch[3], part: StretchOSCPart.bottomLeft.rawValue)
-        ]
         debugInnerStretchDrawMapping(
             sequence: debugSequence,
             width: width,
@@ -78,15 +77,12 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             canvasFrame: canvasFrame
         )
 
-        overlayRenderer.renderStyledSegments(
-            innerStretchOverlaySegments(for: displayPart, stretch: stretch),
-            handles: handles,
-            activePart: displayPart.rawValue,
+        renderStretchOSC(
+            points: stretch,
+            displayPart: displayPart,
             destinationImage: destinationImage,
-            destinationSize: outputSize,
+            outputSize: outputSize,
             canvasFrame: canvasFrame,
-            coordinateSpace: .canvasFramePixels,
-            handleStyle: innerStretchOverlayStyle(),
             debugLog: { [weak self] message in
                 self?.debugLog("draw-source seq=\(debugSequence) \(message)")
             }
@@ -307,24 +303,55 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     }
 
 
-    private func renderOutputCornersOSC(from state: AnyUprightParameterState, outputSize: AUSize, destinationImage: FxImageTile) {
+    private func renderOutputCornersOSC(
+        from state: AnyUprightParameterState,
+        hostActivePart: Int,
+        outputSize: AUSize,
+        destinationImage: FxImageTile
+    ) {
         let objectPoints = stretchObjectPoints(from: state, size: objectPixelSizeForOSC(defaultSize: outputSize), mode: .outputCorners)
         let canvasPoints = stretchCanvasPoints(from: objectPoints)
+        let points = [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]
+        let displayPart = currentDisplayPart(hostActivePart: hostActivePart)
+
+        renderStretchOSC(
+            points: points,
+            displayPart: displayPart,
+            destinationImage: destinationImage,
+            outputSize: outputSize,
+            canvasFrame: objectCanvasFrame()
+        )
+    }
+
+    private func renderStretchOSC(
+        points: [AUPoint],
+        displayPart: StretchOSCPart,
+        destinationImage: FxImageTile,
+        outputSize: AUSize,
+        canvasFrame: [AUPoint],
+        debugLog: ((String) -> Void)? = nil
+    ) {
+        guard points.count == 4 else {
+            return
+        }
+
         let handles = [
-            AUOSCHandle(point: canvasPoints.topLeft, part: StretchOSCPart.topLeft.rawValue),
-            AUOSCHandle(point: canvasPoints.topRight, part: StretchOSCPart.topRight.rawValue),
-            AUOSCHandle(point: canvasPoints.bottomRight, part: StretchOSCPart.bottomRight.rawValue),
-            AUOSCHandle(point: canvasPoints.bottomLeft, part: StretchOSCPart.bottomLeft.rawValue)
+            AUOSCHandle(point: points[0], part: StretchOSCPart.topLeft.rawValue),
+            AUOSCHandle(point: points[1], part: StretchOSCPart.topRight.rawValue),
+            AUOSCHandle(point: points[2], part: StretchOSCPart.bottomRight.rawValue),
+            AUOSCHandle(point: points[3], part: StretchOSCPart.bottomLeft.rawValue)
         ]
-        let displayPart = currentDisplayPart()
-        overlayRenderer.renderStretch(
-            points: [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft],
+
+        overlayRenderer.renderStyledSegments(
+            innerStretchOverlaySegments(for: displayPart, stretch: points),
             handles: handles,
             activePart: displayPart.rawValue,
             destinationImage: destinationImage,
             destinationSize: outputSize,
-            canvasFrame: objectCanvasFrame(),
-            coordinateSpace: .canvasFramePixels
+            canvasFrame: canvasFrame,
+            coordinateSpace: .canvasFramePixels,
+            handleStyle: innerStretchOverlayStyle(),
+            debugLog: debugLog
         )
     }
 

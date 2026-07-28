@@ -134,8 +134,23 @@ struct AuditFeatureSurface {
         try require(effects, "renderOutputCornersOSC", "Outer Stretch draws host onscreen output-corner controls")
         try require(
             effects,
-            "canvasFrame: objectCanvasFrame(),\n            coordinateSpace: .canvasFramePixels",
+            "hostActivePart: activePart,\n                outputSize: outputSize",
+            "Outer Stretch forwards the host active part into the shared Stretch highlight renderer"
+        )
+        try require(
+            effects,
+            "renderStretchOSC(\n            points: points,\n            displayPart: displayPart",
+            "Outer Stretch uses the shared Inner Stretch segment and handle renderer"
+        )
+        try require(
+            effects,
+            "canvasFrame: canvasFrame,\n            coordinateSpace: .canvasFramePixels",
             "Outer Stretch renders converted host-canvas corners without renormalizing them against the viewer frame"
+        )
+        try require(
+            effects,
+            "handleStyle: innerStretchOverlayStyle()",
+            "Outer Stretch uses the same circular handles and active colors as Inner Stretch"
         )
         try require(effects, "hiddenCollapsedFlags", "Inner Stretch hides the offset controls while keeping them as persistent state")
         try require(effects, "sourceCornerPercentOffset", "Inner Stretch OSC writes hidden source-corner percent offsets")
@@ -156,6 +171,9 @@ struct AuditFeatureSurface {
         try require(overlay, "MTLCreateSystemDefaultDevice", "OSC renderer can fall back when the destination registry ID is unavailable")
         try require(metal, "AURM_InnerStretchAdjusterPreview", "Inner Stretch edit overlay is rendered into the effect output")
         try require(metal, "color.rgb *= 0.70", "Inner Stretch edit preview dims pixels outside the selected stretch")
+        try require(metal, "warpState->renderMode == AURM_OuterStretch", "Outer Stretch has a dedicated render path")
+        try require(metal, "outerStretchCoverage(outputCoordinate, warpState)", "Outer Stretch masks fragments to its destination quadrilateral")
+        try require(metal, "if (outputCoverage <= 0.0)", "Outer Stretch rejects invalid output pixels before projective sampling")
         try require(metal, "warpState->outputToSource * float3(outputCoordinate, 1.0)", "Stretch warps use the primary output-to-source matrix")
     }
 

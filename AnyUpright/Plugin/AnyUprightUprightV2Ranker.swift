@@ -80,7 +80,8 @@ enum AnyUprightUprightV2Ranker {
         lines: [AUScaleLSDLineSegment],
         imageSize: AUSize,
         preparedLineCount: Int,
-        vpClusterCount: Int
+        vpClusterCount: Int,
+        applyRiskGate: Bool = true
     ) throws -> AUUprightV2RankedSelection? {
         let pairs = uniqueFullCandidates(candidates)
         guard let bestEnergy = pairs.first.map(energy) else {
@@ -108,7 +109,10 @@ enum AnyUprightUprightV2Ranker {
                 )
             }
         }
-        guard let best, best.riskProbability <= AUUprightV2Models.riskThreshold else {
+        guard let best else {
+            return nil
+        }
+        guard !applyRiskGate || best.riskProbability <= AUUprightV2Models.riskThreshold else {
             return nil
         }
         return best

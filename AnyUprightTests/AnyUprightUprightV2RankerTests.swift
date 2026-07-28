@@ -232,6 +232,30 @@ private enum AnyUprightUprightV2RankerTests {
                     "\(sample.stem): selected horizontal supporters"
                 )
             }
+
+            let ungated = try AnyUprightUprightV2Ranker.select(
+                candidates: sample.allCandidates.map(\.candidate),
+                lines: lines,
+                imageSize: size,
+                preparedLineCount: sample.preparedLineCount,
+                vpClusterCount: sample.vpClusterCount,
+                applyRiskGate: false
+            )
+            require(ungated != nil, "\(sample.stem): ungated selection")
+            if let ungated {
+                requireClose(
+                    ungated.riskProbability,
+                    sample.expectedRiskProbability,
+                    tolerance: 1e-12,
+                    "\(sample.stem): ungated risk probability"
+                )
+                if !sample.expectedAccepted {
+                    require(
+                        ungated.riskProbability > AUUprightV2Models.riskThreshold,
+                        "\(sample.stem): ungated rejected sample should remain above the risk threshold"
+                    )
+                }
+            }
         }
 
         print("AnyUprightUprightV2RankerTests passed (\(fixture.samples.count) samples)")

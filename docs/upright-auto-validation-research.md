@@ -236,13 +236,15 @@ Python selection P50. It improved pair selection substantially but did not pass
 all original production-entry criteria because harmful correction exceeded
 `5%` and axis-residual P95 remained high.
 
-Production now uses that frozen V2 selector only for Full-direction Full Auto.
-Semi Auto and single-direction Full Auto retain score-only selection. The Swift
+Production now uses that frozen V2 selector for Full-direction Semi Auto and
+Full Auto. Single-direction modes retain score-only selection. The Swift
 port has deterministic parity fixtures for preprocessing/VP/discrete candidate
 generation, all 51 ranker features, both tree-model outputs, and the risk gate.
-V2 changes only the selected line families: each selected supporter family is
-reduced to two representative lines and then passed to the existing common
-guided matrix solver. Consequently, the experiment's direct-homography
+V2 changes only the selected line families. Full Auto applies the frozen risk
+gate and reduces each selected supporter family to at most two representative
+lines. Semi Auto bypasses the risk gate for user review and exposes at most ten
+quality-and-coverage representatives per orientation. Both then use the existing
+common guided matrix solver. Consequently, the experiment's direct-homography
 `79.3%` result is not a production-equivalent plug-in quality measurement; a
 new full validation must evaluate the representative-line reduction and common
 solver together before quoting a final production quality number.

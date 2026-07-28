@@ -64,12 +64,13 @@ enum AnyUprightScaleLSDDetector {
         let decodeMS = AUMonotonicClock.elapsedMilliseconds(since: decodeStart)
 
         let candidatesStart = AUMonotonicClock.nowNanos()
-        if request.controlMode == .automatic, request.correctionMode == .full {
+        if let v2Policy = AnyUprightUprightV2GuideSelector.selectionPolicy(for: request) {
             do {
-                let ranked = try v2FullAutoCandidates(
+                let ranked = try v2Candidates(
                     lines: lines,
                     frame: frame,
-                    imageSize: AUSize(width: Double(inputSize), height: Double(inputSize))
+                    imageSize: AUSize(width: Double(inputSize), height: Double(inputSize)),
+                    policy: v2Policy
                 )
                 let candidatesMS = AUMonotonicClock.elapsedMilliseconds(since: candidatesStart)
                 debugLog(
@@ -117,10 +118,11 @@ enum AnyUprightScaleLSDDetector {
         return ranked
     }
 
-    private static func v2FullAutoCandidates(
+    private static func v2Candidates(
         lines: [AUScaleLSDLineSegment],
         frame: FxImageTile,
-        imageSize: AUSize
+        imageSize: AUSize,
+        policy: AUUprightV2GuideSelectionPolicy
     ) throws -> [UprightDetectedCandidate] {
         let priorStart = AUMonotonicClock.nowNanos()
         let prior: AUUprightV2CameraPrior?
@@ -137,13 +139,16 @@ enum AnyUprightScaleLSDDetector {
         let selection = try AnyUprightUprightV2GuideSelector.select(
             lines: lines,
             imageSize: imageSize,
-            cameraPrior: prior
+            cameraPrior: prior,
+            policy: policy
         )
         let selectorMS = AUMonotonicClock.elapsedMilliseconds(since: selectorStart)
         guard selection.selected else {
             debugLog(String(
-                format: "upright_v2_identity prior=%@ prior_ms=%.3f selector_ms=%.3f prepared=%d clusters=%d candidates=%d",
+                format: "upright_v2_identity prior=%@ risk_gate=%@ guide_limit=%d prior_ms=%.3f selector_ms=%.3f prepared=%d clusters=%d candidates=%d",
                 prior == nil ? "false" : "true",
+                policy.applyRiskGate ? "true" : "false",
+                policy.maximumGuidesPerOrientation,
                 AUMonotonicClock.elapsedMilliseconds(since: priorStart, nowNanos: selectorStart),
                 selectorMS,
                 selection.preparedLineCount,
@@ -155,8 +160,10 @@ enum AnyUprightScaleLSDDetector {
         let verticalGuideCount = selection.guides.filter { $0.orientation == .vertical }.count
         let horizontalGuideCount = selection.guides.filter { $0.orientation == .horizontal }.count
         debugLog(String(
-            format: "upright_v2_selected prior=%@ prior_ms=%.3f selector_ms=%.3f prepared=%d clusters=%d candidates=%d pairs=%d pair_score=%.6f risk=%.6f vertical_support=%d horizontal_support=%d vertical_guides=%d horizontal_guides=%d",
+            format: "upright_v2_selected prior=%@ risk_gate=%@ guide_limit=%d prior_ms=%.3f selector_ms=%.3f prepared=%d clusters=%d candidates=%d pairs=%d pair_score=%.6f risk=%.6f vertical_support=%d horizontal_support=%d vertical_guides=%d horizontal_guides=%d",
             prior == nil ? "false" : "true",
+            policy.applyRiskGate ? "true" : "false",
+            policy.maximumGuidesPerOrientation,
             AUMonotonicClock.elapsedMilliseconds(since: priorStart, nowNanos: selectorStart),
             selectorMS,
             selection.preparedLineCount,

@@ -5,6 +5,11 @@
 
 import Foundation
 
+struct AUUprightV2GuideSelectionPolicy {
+    var maximumGuidesPerOrientation: Int
+    var applyRiskGate: Bool
+}
+
 struct AUUprightV2GuideSelection {
     var guides: [UprightDetectedCandidate]
     var selected: Bool
@@ -19,10 +24,33 @@ struct AUUprightV2GuideSelection {
 }
 
 enum AnyUprightUprightV2GuideSelector {
+    static func selectionPolicy(
+        for request: UprightAnalysisRequest
+    ) -> AUUprightV2GuideSelectionPolicy? {
+        guard request.correctionMode == .full else {
+            return nil
+        }
+        switch request.controlMode {
+        case .manual:
+            return nil
+        case .semiAutomatic:
+            return AUUprightV2GuideSelectionPolicy(
+                maximumGuidesPerOrientation: AnyUprightUprightCandidates.semiAutomaticLimitPerOrientation,
+                applyRiskGate: false
+            )
+        case .automatic:
+            return AUUprightV2GuideSelectionPolicy(
+                maximumGuidesPerOrientation: AnyUprightUprightCandidates.automaticLimitPerOrientation,
+                applyRiskGate: true
+            )
+        }
+    }
+
     static func select(
         lines: [AUScaleLSDLineSegment],
         imageSize: AUSize,
-        cameraPrior: AUUprightV2CameraPrior?
+        cameraPrior: AUUprightV2CameraPrior?,
+        policy: AUUprightV2GuideSelectionPolicy
     ) throws -> AUUprightV2GuideSelection {
         let pool = AnyUprightUprightV2CandidateGenerator.candidatePool(
             lines: lines,
@@ -34,7 +62,8 @@ enum AnyUprightUprightV2GuideSelector {
             lines: lines,
             imageSize: imageSize,
             preparedLineCount: pool.preparedLineCount,
-            vpClusterCount: pool.vpClusterCount
+            vpClusterCount: pool.vpClusterCount,
+            applyRiskGate: policy.applyRiskGate
         ) else {
             return AUUprightV2GuideSelection(
                 guides: [],
@@ -53,13 +82,15 @@ enum AnyUprightUprightV2GuideSelector {
             supporterIndexes: selection.candidate.verticalSupporters,
             orientation: .vertical,
             lines: lines,
-            imageSize: imageSize
+            imageSize: imageSize,
+            maximumCount: policy.maximumGuidesPerOrientation
         )
         let horizontal = representativeCandidates(
             supporterIndexes: selection.candidate.horizontalSupporters,
             orientation: .horizontal,
             lines: lines,
-            imageSize: imageSize
+            imageSize: imageSize,
+            maximumCount: policy.maximumGuidesPerOrientation
         )
         return AUUprightV2GuideSelection(
             guides: vertical + horizontal,
@@ -79,10 +110,11 @@ enum AnyUprightUprightV2GuideSelector {
         supporterIndexes: [Int],
         orientation: UprightGuideOrientation,
         lines: [AUScaleLSDLineSegment],
-        imageSize: AUSize
+        imageSize: AUSize,
+        maximumCount: Int = AnyUprightUprightCandidates.automaticLimitPerOrientation
     ) -> [UprightDetectedCandidate] {
         let valid = Array(Set(supporterIndexes)).sorted().filter(lines.indices.contains)
-        guard !valid.isEmpty else {
+        guard !valid.isEmpty, maximumCount > 0 else {
             return []
         }
         let diagonal = max(1.0, hypot(imageSize.width, imageSize.height))
@@ -101,32 +133,35 @@ enum AnyUprightUprightV2GuideSelector {
             let rhs = quality($1)
             return lhs == rhs ? $0 > $1 : lhs < rhs
         }!]
-        if valid.count > 1 {
-            let first = selected[0]
-            let firstLine = lines[first]
-            let firstMidpoint = AUPoint(
-                x: (firstLine.start.x + firstLine.end.x) * 0.5,
-                y: (firstLine.start.y + firstLine.end.y) * 0.5
-            )
-            if let second = valid.filter({ $0 != first }).max(by: { lhs, rhs in
+        while selected.count < min(maximumCount, valid.count) {
+            let remaining = valid.filter { !selected.contains($0) }
+            guard let next = remaining.max(by: { lhs, rhs in
                 func utility(_ index: Int) -> Double {
                     let line = lines[index]
                     let midpoint = AUPoint(
                         x: (line.start.x + line.end.x) * 0.5,
                         y: (line.start.y + line.end.y) * 0.5
                     )
-                    let separation = min(
-                        1.0,
-                        hypot(midpoint.x - firstMidpoint.x, midpoint.y - firstMidpoint.y) / diagonal
-                    )
-                    return quality(index) * (0.5 + 0.5 * separation)
+                    let separation = selected.map { selectedIndex -> Double in
+                        let selectedLine = lines[selectedIndex]
+                        let selectedMidpoint = AUPoint(
+                            x: (selectedLine.start.x + selectedLine.end.x) * 0.5,
+                            y: (selectedLine.start.y + selectedLine.end.y) * 0.5
+                        )
+                        return hypot(
+                            midpoint.x - selectedMidpoint.x,
+                            midpoint.y - selectedMidpoint.y
+                        ) / diagonal
+                    }.min() ?? 0.0
+                    return quality(index) * (0.5 + 0.5 * min(1.0, separation))
                 }
                 let left = utility(lhs)
                 let right = utility(rhs)
                 return left == right ? lhs > rhs : left < right
-            }) {
-                selected.append(second)
+            }) else {
+                break
             }
+            selected.append(next)
         }
         return selected.enumerated().map { rank, index in
             let line = lines[index]

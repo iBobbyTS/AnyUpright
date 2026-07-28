@@ -7,6 +7,41 @@ import CoreMedia
 import Foundation
 import Metal
 
+enum AUOuterStretchOSCPreviewDebugLog {
+    private static let lock = NSLock()
+    private static let markerURL = URL(fileURLWithPath: "/tmp/AnyUprightOuterStretchOSCPreview.debug")
+    private static let logURL = URL(fileURLWithPath: "/tmp/AnyUprightOuterStretchOSCPreview.log")
+
+    static func record(_ message: String) {
+        guard FileManager.default.fileExists(atPath: markerURL.path) else {
+            return
+        }
+
+        let line = "\(DispatchTime.now().uptimeNanoseconds) \(message)\n"
+        lock.lock()
+        defer { lock.unlock() }
+        if !FileManager.default.fileExists(atPath: logURL.path) {
+            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        }
+        guard let handle = try? FileHandle(forWritingTo: logURL) else {
+            return
+        }
+        defer { try? handle.close() }
+        try? handle.seekToEnd()
+        try? handle.write(contentsOf: Data(line.utf8))
+    }
+
+    static func describe(_ query: AUOuterStretchOSCPreviewQuery) -> String {
+        var hash: UInt64 = 1469598103934665603
+        for value in query.signature.values {
+            hash ^= UInt64(value)
+            hash &*= 1099511628211
+        }
+        let seconds = CMTimeGetSeconds(query.renderTime)
+        return "time=\(String(format: "%.6f", seconds)) sig=\(String(hash, radix: 16))"
+    }
+}
+
 struct AUOuterStretchOSCPreviewSignature: Equatable {
     let values: [UInt32]
 
@@ -64,12 +99,16 @@ final class AUOuterStretchOSCPreviewCache {
         now: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
         lock.lock()
-        defer { lock.unlock() }
         records[sourceID] = Record(query: query, entry: entry, storedAt: now)
         if records.count > maximumRecordCount,
            let oldest = records.min(by: { $0.value.storedAt < $1.value.storedAt })?.key {
             records.removeValue(forKey: oldest)
         }
+        let count = records.count
+        lock.unlock()
+        AUOuterStretchOSCPreviewDebugLog.record(
+            "cache_store \(AUOuterStretchOSCPreviewDebugLog.describe(query)) records=\(count)"
+        )
     }
 
     func entry(
@@ -77,16 +116,36 @@ final class AUOuterStretchOSCPreviewCache {
         deviceRegistryID: UInt64
     ) -> AUOuterStretchOSCPreviewEntry? {
         lock.lock()
-        defer { lock.unlock() }
-        let matches = records.values.filter {
+        let exactMatches = records.values.filter {
             CMTimeCompare($0.query.renderTime, query.renderTime) == 0
                 && $0.query.signature == query.signature
                 && $0.entry.texture.device.registryID == deviceRegistryID
         }
-        guard matches.count == 1 else {
-            return nil
+        let result: AUOuterStretchOSCPreviewEntry?
+        let resultKind: String
+        if exactMatches.count == 1 {
+            result = exactMatches[0].entry
+            resultKind = "hit"
+        } else if records.count == 1,
+                  let stale = records.values.first,
+                  CMTimeCompare(stale.query.renderTime, query.renderTime) == 0,
+                  stale.entry.texture.device.registryID == deviceRegistryID {
+            // Motion can request OSC before the current low-resolution Warp
+            // render has completed. Keep the last completed preview visible
+            // rather than clearing the texture for one host callback.
+            result = stale.entry
+            resultKind = "stale"
+        } else {
+            result = nil
+            resultKind = "miss"
         }
-        return matches[0].entry
+        let count = records.count
+        lock.unlock()
+        AUOuterStretchOSCPreviewDebugLog.record(
+            "cache_lookup \(AUOuterStretchOSCPreviewDebugLog.describe(query)) " +
+            "result=\(resultKind) records=\(count)"
+        )
+        return result
     }
 
     func remove(sourceID: ObjectIdentifier) {

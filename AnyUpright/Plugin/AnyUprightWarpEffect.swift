@@ -294,28 +294,44 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         if AnyUprightEffectKind(rawValue: parameterState.effectKind) == .stretch,
            AUStretchTransformMode(rawValue: parameterState.stretchMode) == .outputCorners {
             let outputSize = size(from: destinationImage.imagePixelBounds)
-            let corners = renderStretchCorners(
-                from: parameterState,
-                outputSize: outputSize,
-                sourceSize: size(from: sourceImage.imagePixelBounds)
-            )
-            if let layout = AUOuterStretchOSCPreviewLayout.make(corners: corners, outputSize: outputSize),
-               let texture = AUOuterStretchOSCPreviewRenderer.encode(
-                   commandBuffer: commandBuffer,
-                   device: inputDevice,
-                   inputTexture: inputTexture,
-                   warpState: &warpState,
-                   layout: layout
-               ) {
-                outerStretchPreview = (
-                    AUOuterStretchOSCPreviewQuery(
-                        renderTime: renderTime,
-                        signature: AUOuterStretchOSCPreviewSignature(state: parameterState)
-                    ),
-                    AUOuterStretchOSCPreviewEntry(texture: texture, objectFrame: layout.objectFrame)
+            if AUOuterStretchOSCPreviewRenderPolicy.shouldEncode(outputSize: outputSize) {
+                let corners = renderStretchCorners(
+                    from: parameterState,
+                    outputSize: outputSize,
+                    sourceSize: size(from: sourceImage.imagePixelBounds)
                 )
+                let previewQuery = AUOuterStretchOSCPreviewQuery(
+                    renderTime: renderTime,
+                    signature: AUOuterStretchOSCPreviewSignature(state: parameterState)
+                )
+                AUOuterStretchOSCPreviewDebugLog.record(
+                    "render_begin \(AUOuterStretchOSCPreviewDebugLog.describe(previewQuery)) " +
+                    "output=\(outputSize.width)x\(outputSize.height)"
+                )
+                if let layout = AUOuterStretchOSCPreviewLayout.make(corners: corners, outputSize: outputSize),
+                   let texture = AUOuterStretchOSCPreviewRenderer.encode(
+                       commandBuffer: commandBuffer,
+                       device: inputDevice,
+                       inputTexture: inputTexture,
+                       warpState: &warpState,
+                       layout: layout
+                   ) {
+                    outerStretchPreview = (
+                        previewQuery,
+                        AUOuterStretchOSCPreviewEntry(texture: texture, objectFrame: layout.objectFrame)
+                    )
+                    AUOuterStretchOSCPreviewDebugLog.record("render_encoded \(AUOuterStretchOSCPreviewDebugLog.describe(previewQuery))")
+                } else {
+                    outerStretchPreview = nil
+                    AUOuterStretchOSCPreviewDebugLog.record(
+                        "render_no_preview \(AUOuterStretchOSCPreviewDebugLog.describe(previewQuery))"
+                    )
+                }
             } else {
                 outerStretchPreview = nil
+                AUOuterStretchOSCPreviewDebugLog.record(
+                    "render_skipped_high_resolution output=\(outputSize.width)x\(outputSize.height)"
+                )
             }
         } else {
             outerStretchPreview = nil
@@ -327,6 +343,11 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
                 sourceID: outerStretchPreviewSourceID,
                 query: outerStretchPreview.0,
                 entry: outerStretchPreview.1
+            )
+        } else if let outerStretchPreview {
+            AUOuterStretchOSCPreviewDebugLog.record(
+                "cache_store_skipped status=\(commandBuffer.status.rawValue) " +
+                "\(AUOuterStretchOSCPreviewDebugLog.describe(outerStretchPreview.0))"
             )
         }
         debugCaptureUprightOutputTextureIfNeeded(

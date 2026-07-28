@@ -110,3 +110,15 @@ struct AUOuterStretchOSCPreviewLayout {
         )
     }
 }
+
+enum AUOuterStretchOSCPreviewRenderPolicy {
+    // Keep the OSC preview on Motion's small interaction render path. The final
+    // Warp output continues to use the host-provided render size.
+    static let maximumSourceDimension = 512.0
+
+    static func shouldEncode(outputSize: AUSize) -> Bool {
+        let width = max(0.0, outputSize.width)
+        let height = max(0.0, outputSize.height)
+        return max(width, height) <= maximumSourceDimension
+    }
+}

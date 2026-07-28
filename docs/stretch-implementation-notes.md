@@ -40,6 +40,7 @@ This file records AnyUpright-specific Stretch implementation choices. Reusable d
 - Outer Stretch subclasses it through `AnyUprightOuterStretchOSCPlugIn` and fixes `fixedStretchMode` to `.outputCorners`.
 - `drawingCoordinates()` returns `kFxDrawingCoordinates_CANVAS`.
 - Object/canvas conversion goes through `FxOnScreenControlAPI_v4.convertPoint(...)`.
+- Outer Stretch converts its four output corners into host CANVAS points before drawing. Those points use the same `.canvasFramePixels` overlay path as Inner Stretch so the zero-offset handles stay on the source object's visible image corners instead of being normalized against the surrounding viewer canvas.
 - Inner Stretch visible OSC drawing, hit testing, hover, and drag routing all use the same unflipped FxPlug Y-up object/canvas geometry. The custom overlay renderer and Motion's IOSurface composition own the display-space crossing.
 - `StretchOSCEventCoordinateMode` selects the accepted host-event interpretation for hit testing and dragging. After `convertPoint(...)` returns the FxPlug Y-up object coordinate, writeback stores it directly for both `.rawCanvas` and `.mappedSurface`.
 - Corner identity remains unchanged across this boundary. A visible `topLeft` is drawn and hit as `topLeft`, then writes only the `topLeft` parameter group.

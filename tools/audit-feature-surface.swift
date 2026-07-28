@@ -132,6 +132,11 @@ struct AuditFeatureSurface {
         try require(effects, "Edit Mode", "Stretch exposes edit mode for inner-stretch handles without applying the warp")
         try require(effects, "class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Inner Stretch exposes onscreen controls as a separate FxPlug class")
         try require(effects, "renderOutputCornersOSC", "Outer Stretch draws host onscreen output-corner controls")
+        try require(
+            effects,
+            "canvasFrame: objectCanvasFrame(),\n            coordinateSpace: .canvasFramePixels",
+            "Outer Stretch renders converted host-canvas corners without renormalizing them against the viewer frame"
+        )
         try require(effects, "hiddenCollapsedFlags", "Inner Stretch hides the offset controls while keeping them as persistent state")
         try require(effects, "sourceCornerPercentOffset", "Inner Stretch OSC writes hidden source-corner percent offsets")
         try require(effects, "overlayRenderer.clear", "Stretch OSC clears its host overlay surface while the effect render output owns the visible Inner Stretch adjuster")

@@ -324,7 +324,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             destinationImage: destinationImage,
             destinationSize: outputSize,
             canvasFrame: objectCanvasFrame(),
-            coordinateSpace: .pixels
+            coordinateSpace: .canvasFramePixels
         )
     }
 

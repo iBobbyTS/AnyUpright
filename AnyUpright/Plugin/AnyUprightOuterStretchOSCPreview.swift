@@ -40,6 +40,10 @@ enum AUOuterStretchOSCPreviewDebugLog {
         let seconds = CMTimeGetSeconds(query.renderTime)
         return "time=\(String(format: "%.6f", seconds)) sig=\(String(hash, radix: 16))"
     }
+
+    static func describe(_ sourceID: ObjectIdentifier) -> String {
+        String(sourceID.hashValue, radix: 16)
+    }
 }
 
 struct AUOuterStretchOSCPreviewSignature: Equatable {
@@ -77,6 +81,7 @@ struct AUOuterStretchOSCPreviewQuery {
 struct AUOuterStretchOSCPreviewEntry {
     let texture: MTLTexture
     let objectFrame: [AUPoint]
+    let renderOutputSize: AUSize
 }
 
 final class AUOuterStretchOSCPreviewCache {
@@ -99,6 +104,26 @@ final class AUOuterStretchOSCPreviewCache {
         now: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
         lock.lock()
+        if let existing = records[sourceID],
+           CMTimeCompare(existing.query.renderTime, query.renderTime) == 0,
+           existing.entry.texture.device.registryID == entry.texture.device.registryID,
+           !AUOuterStretchOSCPreviewRenderPolicy.shouldReplace(
+               candidateOutputSize: entry.renderOutputSize,
+               existingOutputSize: existing.entry.renderOutputSize,
+               hasMatchingSignature: existing.query.signature == query.signature
+           ) {
+            let count = records.count
+            lock.unlock()
+            AUOuterStretchOSCPreviewDebugLog.record(
+                "cache_store_skipped_lower_quality source=\(AUOuterStretchOSCPreviewDebugLog.describe(sourceID)) " +
+                "\(AUOuterStretchOSCPreviewDebugLog.describe(query)) " +
+                "candidate_output=\(Int(entry.renderOutputSize.width))x\(Int(entry.renderOutputSize.height)) " +
+                "candidate_texture=\(entry.texture.width)x\(entry.texture.height) " +
+                "existing_output=\(Int(existing.entry.renderOutputSize.width))x\(Int(existing.entry.renderOutputSize.height)) " +
+                "existing_texture=\(existing.entry.texture.width)x\(existing.entry.texture.height) records=\(count)"
+            )
+            return
+        }
         records[sourceID] = Record(query: query, entry: entry, storedAt: now)
         if records.count > maximumRecordCount,
            let oldest = records.min(by: { $0.value.storedAt < $1.value.storedAt })?.key {
@@ -107,7 +132,10 @@ final class AUOuterStretchOSCPreviewCache {
         let count = records.count
         lock.unlock()
         AUOuterStretchOSCPreviewDebugLog.record(
-            "cache_store \(AUOuterStretchOSCPreviewDebugLog.describe(query)) records=\(count)"
+            "cache_store source=\(AUOuterStretchOSCPreviewDebugLog.describe(sourceID)) " +
+            "\(AUOuterStretchOSCPreviewDebugLog.describe(query)) " +
+            "output=\(Int(entry.renderOutputSize.width))x\(Int(entry.renderOutputSize.height)) " +
+            "texture=\(entry.texture.width)x\(entry.texture.height) records=\(count)"
         )
     }
 
@@ -140,18 +168,23 @@ final class AUOuterStretchOSCPreviewCache {
             resultKind = "miss"
         }
         let count = records.count
+        let resultSize = result.map { "\($0.texture.width)x\($0.texture.height)" } ?? "none"
         lock.unlock()
         AUOuterStretchOSCPreviewDebugLog.record(
             "cache_lookup \(AUOuterStretchOSCPreviewDebugLog.describe(query)) " +
-            "result=\(resultKind) records=\(count)"
+            "result=\(resultKind) texture=\(resultSize) records=\(count)"
         )
         return result
     }
 
     func remove(sourceID: ObjectIdentifier) {
         lock.lock()
-        records.removeValue(forKey: sourceID)
+        let removed = records.removeValue(forKey: sourceID) != nil
         lock.unlock()
+        AUOuterStretchOSCPreviewDebugLog.record(
+            "cache_remove source=\(AUOuterStretchOSCPreviewDebugLog.describe(sourceID)) " +
+            "removed=\(removed ? 1 : 0)"
+        )
     }
 }
 

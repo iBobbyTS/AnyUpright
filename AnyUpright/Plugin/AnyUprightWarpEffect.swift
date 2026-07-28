@@ -318,13 +318,23 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
                    ) {
                     outerStretchPreview = (
                         previewQuery,
-                        AUOuterStretchOSCPreviewEntry(texture: texture, objectFrame: layout.objectFrame)
+                        AUOuterStretchOSCPreviewEntry(
+                            texture: texture,
+                            objectFrame: layout.objectFrame,
+                            renderOutputSize: outputSize
+                        )
                     )
                     AUOuterStretchOSCPreviewDebugLog.record("render_encoded \(AUOuterStretchOSCPreviewDebugLog.describe(previewQuery))")
                 } else {
                     outerStretchPreview = nil
+                    let layoutDescription: String
+                    if let layout = AUOuterStretchOSCPreviewLayout.make(corners: corners, outputSize: outputSize) {
+                        layoutDescription = "layout=\(layout.textureWidth)x\(layout.textureHeight) encode_failed=1"
+                    } else {
+                        layoutDescription = "layout=none encode_failed=0"
+                    }
                     AUOuterStretchOSCPreviewDebugLog.record(
-                        "render_no_preview \(AUOuterStretchOSCPreviewDebugLog.describe(previewQuery))"
+                        "render_no_preview \(AUOuterStretchOSCPreviewDebugLog.describe(previewQuery)) \(layoutDescription)"
                     )
                 }
             } else {

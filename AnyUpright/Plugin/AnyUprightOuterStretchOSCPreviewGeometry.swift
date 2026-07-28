@@ -16,8 +16,6 @@ struct AUOSCTextureOverlayVertexGeometry {
 }
 
 struct AUOuterStretchOSCPreviewLayout {
-    static let maximumTextureDimension = 1600
-
     let physicalBounds: AUOutputCoordinateBounds
     let textureWidth: Int
     let textureHeight: Int
@@ -93,14 +91,12 @@ struct AUOuterStretchOSCPreviewLayout {
         let maxY = min(height * 2.0, unclampedMaxY)
         let previewWidth = max(1.0, maxX - minX)
         let previewHeight = max(1.0, maxY - minY)
-        let scale = min(1.0, Double(maximumTextureDimension) / max(previewWidth, previewHeight))
-
         // Motion composes the returned OSC surface into FxPlug's Y-up object space.
         // These bounds are physical output pixels, so physical maxY is the visual top.
         return AUOuterStretchOSCPreviewLayout(
             physicalBounds: AUOutputCoordinateBounds(left: minX, right: maxX, top: minY, bottom: maxY),
-            textureWidth: max(1, Int(ceil(previewWidth * scale))),
-            textureHeight: max(1, Int(ceil(previewHeight * scale))),
+            textureWidth: max(1, Int(ceil(previewWidth))),
+            textureHeight: max(1, Int(ceil(previewHeight))),
             objectFrame: [
                 AUPoint(x: minX / width, y: maxY / height),
                 AUPoint(x: maxX / width, y: maxY / height),
@@ -112,13 +108,22 @@ struct AUOuterStretchOSCPreviewLayout {
 }
 
 enum AUOuterStretchOSCPreviewRenderPolicy {
-    // Keep the OSC preview on Motion's small interaction render path. The final
-    // Warp output continues to use the host-provided render size.
-    static let maximumSourceDimension = 512.0
-
     static func shouldEncode(outputSize: AUSize) -> Bool {
         let width = max(0.0, outputSize.width)
         let height = max(0.0, outputSize.height)
-        return max(width, height) <= maximumSourceDimension
+        return width > 0.0 && height > 0.0
+    }
+
+    static func shouldReplace(
+        candidateOutputSize: AUSize,
+        existingOutputSize: AUSize,
+        hasMatchingSignature: Bool
+    ) -> Bool {
+        let candidateArea = max(0.0, candidateOutputSize.width) * max(0.0, candidateOutputSize.height)
+        let existingArea = max(0.0, existingOutputSize.width) * max(0.0, existingOutputSize.height)
+        if candidateArea != existingArea {
+            return candidateArea > existingArea
+        }
+        return !hasMatchingSignature
     }
 }

@@ -86,6 +86,8 @@
 				Plugin/AnyUprightImageResampler.swift,
 				Plugin/AnyUprightLineDetection.swift,
 				Plugin/AnyUprightOSCOverlayRenderer.swift,
+				Plugin/AnyUprightOuterStretchOSCPreview.swift,
+				Plugin/AnyUprightOuterStretchOSCPreviewGeometry.swift,
 				Plugin/AnyUprightScaleLSDCoreML.swift,
 				Plugin/AnyUprightScaleLSDDetector.swift,
 				Plugin/AnyUprightScaleLSDPostprocessor.swift,

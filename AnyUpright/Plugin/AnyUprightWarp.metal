@@ -27,6 +27,12 @@ typedef struct
     float primitiveKind;
 } OverlayRasterizerData;
 
+typedef struct
+{
+    float4 clipSpacePosition [[position]];
+    float2 textureCoordinate;
+} TextureOverlayRasterizerData;
+
 static float2 clampedImageCoordinate(float2 outputCoordinate, constant AnyUprightWarpState *warpState)
 {
     return clamp(outputCoordinate, warpState->imageCoordinateMin, warpState->imageCoordinateMax);
@@ -175,6 +181,65 @@ fragment float4 anyUprightWarpFragment(RasterizerData in [[stage_in]],
         : sampleInputImage(colorTexture, linearTextureSampler, texturePixel, warpState);
     color.rgb *= outputCoverage;
     return color;
+}
+
+fragment float4 anyUprightOuterStretchOSCPreviewFragment(
+    RasterizerData in [[stage_in]],
+    texture2d<half> colorTexture [[texture(AUTI_InputImage)]],
+    constant AnyUprightWarpState *warpState [[buffer(AUFII_WarpState)]])
+{
+    float2 outputCoordinate = in.outputCoordinate;
+    bool isInsideCanvas = outputCoordinate.x >= warpState->imageCoordinateMin.x
+        && outputCoordinate.x <= warpState->imageCoordinateMax.x
+        && outputCoordinate.y >= warpState->imageCoordinateMin.y
+        && outputCoordinate.y <= warpState->imageCoordinateMax.y;
+    if (isInsideCanvas) {
+        return float4(0.0);
+    }
+
+    float outputCoverage = outerStretchCoverage(outputCoordinate, warpState);
+    if (outputCoverage <= 0.0) {
+        return float4(0.0);
+    }
+
+    float3 sourceHomogeneous = warpState->outputToSource * float3(outputCoordinate, 1.0);
+    if (fabs(sourceHomogeneous.z) < 0.000001) {
+        return float4(0.0);
+    }
+
+    constexpr sampler linearTextureSampler(mag_filter::linear,
+                                            min_filter::linear,
+                                            address::clamp_to_edge);
+    float2 texturePixel = sourceHomogeneous.xy / sourceHomogeneous.z;
+    float sourceCoverage = sourceImageCoverage(texturePixel, warpState);
+    float2 sourceUV = clamp(inputTextureUV(texturePixel, warpState), float2(0.0), float2(1.0));
+    float4 color = float4(colorTexture.sample(linearTextureSampler, sourceUV));
+    float coverage = sourceCoverage * outputCoverage;
+    color.rgb *= 0.40 * coverage;
+    color.a *= coverage;
+    return color;
+}
+
+vertex TextureOverlayRasterizerData anyUprightTextureOverlayVertex(
+    uint vertexID [[vertex_id]],
+    constant AnyUprightTextureOverlayVertex2D *vertexArray [[buffer(AUVII_Vertices)]],
+    constant vector_uint2 *viewportSizePointer [[buffer(AUVII_ViewportSize)]])
+{
+    TextureOverlayRasterizerData out;
+    float2 viewportSize = float2(*viewportSizePointer);
+    out.clipSpacePosition = float4(vertexArray[vertexID].position / (viewportSize / 2.0), 0.0, 1.0);
+    out.textureCoordinate = vertexArray[vertexID].textureCoordinate;
+    return out;
+}
+
+fragment float4 anyUprightTextureOverlayFragment(
+    TextureOverlayRasterizerData in [[stage_in]],
+    texture2d<half> previewTexture [[texture(AUTI_InputImage)]])
+{
+    constexpr sampler textureSampler(mag_filter::linear,
+                                     min_filter::linear,
+                                     address::clamp_to_edge);
+    return float4(previewTexture.sample(textureSampler, in.textureCoordinate));
 }
 
 vertex OverlayRasterizerData anyUprightOverlayVertex(uint vertexID [[vertex_id]],

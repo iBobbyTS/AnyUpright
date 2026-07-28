@@ -35,6 +35,11 @@ struct AUOSCStyledSegment {
     var style: AUOSCOverlayStyle
 }
 
+struct AUOSCTextureOverlay {
+    let texture: MTLTexture
+    let corners: [AUPoint]
+}
+
 private struct AUOSCOverlayPixelFrame {
     var minX: Double
     var minY: Double
@@ -91,6 +96,7 @@ final class AnyUprightOSCOverlayRenderer {
     }
 
     private static var pipelineCache: [PipelineKey: MTLRenderPipelineState] = [:]
+    private static var texturePipelineCache: [PipelineKey: MTLRenderPipelineState] = [:]
     private static let pipelineLock = NSLock()
 
     func clear(destinationImage: FxImageTile) {
@@ -226,9 +232,10 @@ final class AnyUprightOSCOverlayRenderer {
         coordinateSpace: AUOSCOverlayCoordinateSpace = .normalized,
         handleStyle: AUOSCOverlayStyle = AUOSCOverlayStyle(),
         dimmingRegions: [[AUPoint]] = [],
+        textureOverlay: AUOSCTextureOverlay? = nil,
         debugLog: ((String) -> Void)? = nil
     ) {
-        guard !segments.isEmpty || !handles.isEmpty else {
+        guard !segments.isEmpty || !handles.isEmpty || textureOverlay != nil else {
             return
         }
 
@@ -330,10 +337,6 @@ final class AnyUprightOSCOverlayRenderer {
 
         debugOverlayVertexSummary(vertices: vertices, width: width, height: height, log: debugLog)
 
-        guard !vertices.isEmpty else {
-            return
-        }
-
         let colorAttachment = MTLRenderPassColorAttachmentDescriptor()
         colorAttachment.texture = outputTexture
         colorAttachment.clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0)
@@ -349,15 +352,43 @@ final class AnyUprightOSCOverlayRenderer {
 
         var viewportSize = simd_uint2(UInt32(width), UInt32(height))
         let vertexBufferLength = MemoryLayout<AnyUprightOverlayVertex2D>.stride * vertices.count
-        guard let vertexBuffer = device.makeBuffer(bytes: vertices, length: vertexBufferLength, options: .storageModeShared) else {
+        let vertexBuffer = vertices.isEmpty
+            ? nil
+            : device.makeBuffer(bytes: vertices, length: vertexBufferLength, options: .storageModeShared)
+        guard vertices.isEmpty || vertexBuffer != nil else {
+            encoder.endEncoding()
             return
         }
         let viewport = MTLViewport(originX: 0.0, originY: 0.0, width: width, height: height, znear: -1.0, zfar: 1.0)
         encoder.setViewport(viewport)
-        encoder.setRenderPipelineState(pipelineState)
-        encoder.setVertexBuffer(vertexBuffer, offset: 0, index: Int(AUVII_Vertices.rawValue))
-        encoder.setVertexBytes(&viewportSize, length: MemoryLayout.size(ofValue: viewportSize), index: Int(AUVII_ViewportSize.rawValue))
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: vertices.count)
+        if let textureOverlay,
+           textureOverlay.texture.device.registryID == device.registryID,
+           textureOverlay.corners.count == 4,
+           let texturePipeline = texturePipelineState(device: device, pixelFormat: outputTexture.pixelFormat) {
+            var textureVertices = textureOverlayVertices(
+                overlay: textureOverlay,
+                coordinateSpace: coordinateSpace,
+                coordinateSize: coordinateSize,
+                pixelFrame: coordinateFrame,
+                width: width,
+                height: height
+            )
+            encoder.setRenderPipelineState(texturePipeline)
+            encoder.setVertexBytes(
+                &textureVertices,
+                length: MemoryLayout<AnyUprightTextureOverlayVertex2D>.stride * textureVertices.count,
+                index: Int(AUVII_Vertices.rawValue)
+            )
+            encoder.setVertexBytes(&viewportSize, length: MemoryLayout.size(ofValue: viewportSize), index: Int(AUVII_ViewportSize.rawValue))
+            encoder.setFragmentTexture(textureOverlay.texture, index: Int(AUTI_InputImage.rawValue))
+            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: textureVertices.count)
+        }
+        if !vertices.isEmpty {
+            encoder.setRenderPipelineState(pipelineState)
+            encoder.setVertexBuffer(vertexBuffer!, offset: 0, index: Int(AUVII_Vertices.rawValue))
+            encoder.setVertexBytes(&viewportSize, length: MemoryLayout.size(ofValue: viewportSize), index: Int(AUVII_ViewportSize.rawValue))
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: vertices.count)
+        }
         encoder.endEncoding()
 
         commandBuffer.commit()
@@ -428,6 +459,79 @@ final class AnyUprightOSCOverlayRenderer {
             NSLog("Unable to create AnyUpright OSC overlay pipeline: %@", String(describing: error))
             return nil
         }
+    }
+
+    private func texturePipelineState(device: MTLDevice, pixelFormat: MTLPixelFormat) -> MTLRenderPipelineState? {
+        let key = PipelineKey(registryID: device.registryID, pixelFormat: pixelFormat)
+
+        Self.pipelineLock.lock()
+        if let cached = Self.texturePipelineCache[key] {
+            Self.pipelineLock.unlock()
+            return cached
+        }
+        Self.pipelineLock.unlock()
+
+        guard let library = device.makeDefaultLibrary(),
+              let vertexFunction = library.makeFunction(name: "anyUprightTextureOverlayVertex"),
+              let fragmentFunction = library.makeFunction(name: "anyUprightTextureOverlayFragment") else {
+            return nil
+        }
+
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.label = "AnyUprightOSCTextureOverlay"
+        descriptor.vertexFunction = vertexFunction
+        descriptor.fragmentFunction = fragmentFunction
+        descriptor.colorAttachments[0].pixelFormat = pixelFormat
+        descriptor.colorAttachments[0].isBlendingEnabled = true
+        descriptor.colorAttachments[0].rgbBlendOperation = .add
+        descriptor.colorAttachments[0].alphaBlendOperation = .add
+        descriptor.colorAttachments[0].sourceRGBBlendFactor = .one
+        descriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        descriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
+        descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
+
+        do {
+            let pipelineState = try device.makeRenderPipelineState(descriptor: descriptor)
+            Self.pipelineLock.lock()
+            Self.texturePipelineCache[key] = pipelineState
+            Self.pipelineLock.unlock()
+            return pipelineState
+        } catch {
+            NSLog("Unable to create AnyUpright OSC texture overlay pipeline: %@", String(describing: error))
+            return nil
+        }
+    }
+
+    private func textureOverlayVertices(
+        overlay: AUOSCTextureOverlay,
+        coordinateSpace: AUOSCOverlayCoordinateSpace,
+        coordinateSize: AUSize,
+        pixelFrame: AUOSCOverlayPixelFrame,
+        width: Double,
+        height: Double
+    ) -> [AnyUprightTextureOverlayVertex2D] {
+        let pixels = overlay.corners.map {
+            localPixel(
+                from: $0,
+                coordinateSpace: coordinateSpace,
+                coordinateSize: coordinateSize,
+                pixelFrame: pixelFrame,
+                width: width,
+                height: height
+            )
+        }
+        func vertex(_ index: Int, _ uv: SIMD2<Float>) -> AnyUprightTextureOverlayVertex2D {
+            AnyUprightTextureOverlayVertex2D(
+                position: metalCenteredPixel(pixels[index], width: width, height: height),
+                textureCoordinate: uv
+            )
+        }
+        return [
+            vertex(2, SIMD2<Float>(1.0, 1.0)),
+            vertex(3, SIMD2<Float>(0.0, 1.0)),
+            vertex(1, SIMD2<Float>(1.0, 0.0)),
+            vertex(0, SIMD2<Float>(0.0, 0.0))
+        ]
     }
 
     private func appendLine(

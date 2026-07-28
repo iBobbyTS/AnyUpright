@@ -41,6 +41,11 @@ typedef struct AnyUprightOverlayVertex2D {
     float reserved0;
 } AnyUprightOverlayVertex2D;
 
+typedef struct AnyUprightTextureOverlayVertex2D {
+    vector_float2 position;
+    vector_float2 textureCoordinate;
+} AnyUprightTextureOverlayVertex2D;
+
 typedef struct AnyUprightWarpState {
     matrix_float3x3 outputToSource;
     matrix_float3x3 selectionOutputToRect;

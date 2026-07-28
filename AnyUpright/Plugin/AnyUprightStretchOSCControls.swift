@@ -53,7 +53,8 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 from: state,
                 hostActivePart: activePart,
                 outputSize: outputSize,
-                destinationImage: destinationImage
+                destinationImage: destinationImage,
+                time: time
             )
             return
         }
@@ -307,19 +308,34 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         from state: AnyUprightParameterState,
         hostActivePart: Int,
         outputSize: AUSize,
-        destinationImage: FxImageTile
+        destinationImage: FxImageTile,
+        time: CMTime
     ) {
         let objectPoints = stretchObjectPoints(from: state, size: objectPixelSizeForOSC(defaultSize: outputSize), mode: .outputCorners)
         let canvasPoints = stretchCanvasPoints(from: objectPoints)
         let points = [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]
         let displayPart = currentDisplayPart(hostActivePart: hostActivePart)
+        let previewEntry = AUOuterStretchOSCPreviewCache.shared.entry(
+            matching: AUOuterStretchOSCPreviewQuery(
+                renderTime: time,
+                signature: AUOuterStretchOSCPreviewSignature(state: state)
+            ),
+            deviceRegistryID: destinationImage.deviceRegistryID
+        )
+        let textureOverlay = previewEntry.map {
+            AUOSCTextureOverlay(
+                texture: $0.texture,
+                corners: $0.objectFrame.map(canvasPoint(fromObjectPoint:))
+            )
+        }
 
         renderStretchOSC(
             points: points,
             displayPart: displayPart,
             destinationImage: destinationImage,
             outputSize: outputSize,
-            canvasFrame: objectCanvasFrame()
+            canvasFrame: objectCanvasFrame(),
+            textureOverlay: textureOverlay
         )
     }
 
@@ -329,6 +345,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         destinationImage: FxImageTile,
         outputSize: AUSize,
         canvasFrame: [AUPoint],
+        textureOverlay: AUOSCTextureOverlay? = nil,
         debugLog: ((String) -> Void)? = nil
     ) {
         guard points.count == 4 else {
@@ -351,6 +368,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             canvasFrame: canvasFrame,
             coordinateSpace: .canvasFramePixels,
             handleStyle: innerStretchOverlayStyle(),
+            textureOverlay: textureOverlay,
             debugLog: debugLog
         )
     }

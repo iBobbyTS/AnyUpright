@@ -71,6 +71,8 @@ struct AnyUprightGeometryTests {
         try testInnerStretchApplyMatrixIsStableAcrossMotionPreviewSizes()
         try testStretchEditPreviewKeepsCurrentRequestIdentity()
         try testStretchOutputCornersApplyMatrixIsStableAcrossMotionPreviewSizes()
+        try testOuterStretchOSCPreviewSkipsCanvasContainedGeometry()
+        try testOuterStretchOSCPreviewBoundsAreClampedAndAspectPreserving()
         try testHorizonFillScaleOnlyZoomsWhenNeeded()
         try testAutoCropScalesWarpedOutputIntoSourceFrame()
         try testAutoCropDoesNotForceMaximumScaleWhenNoCropCanFill()
@@ -115,6 +117,39 @@ struct AnyUprightGeometryTests {
         try testUprightAppliedCorrectionIsStableAcrossPreviewOutputSizes()
         try testZeroRotationMatrixIsIdentity()
         print("AnyUprightGeometryTests passed")
+    }
+
+    static func testOuterStretchOSCPreviewSkipsCanvasContainedGeometry() throws {
+        let size = AUSize(width: 1920.0, height: 1080.0)
+        let layout = AUOuterStretchOSCPreviewLayout.make(
+            corners: AUStretchCorners.fullFrame(size),
+            outputSize: size
+        )
+        try assertNil(layout, "Outer Stretch OSC preview should not allocate when all corners remain inside the canvas")
+    }
+
+    static func testOuterStretchOSCPreviewBoundsAreClampedAndAspectPreserving() throws {
+        let size = AUSize(width: 1920.0, height: 1080.0)
+        let corners = AUStretchCorners(
+            topLeft: AUPoint(x: -4000.0, y: -300.0),
+            topRight: AUPoint(x: 2300.0, y: -200.0),
+            bottomRight: AUPoint(x: 2500.0, y: 1300.0),
+            bottomLeft: AUPoint(x: -500.0, y: 1250.0)
+        )
+        let layout = try unwrap(
+            AUOuterStretchOSCPreviewLayout.make(corners: corners, outputSize: size),
+            "Outer Stretch OSC preview should cover corners outside the canvas"
+        )
+        try assertApprox(layout.physicalBounds.left, -1920.0, "preview left clamp", accuracy: 0.000001)
+        try assertApprox(layout.physicalBounds.right, 2500.0, "preview right bound", accuracy: 0.000001)
+        try assertApprox(layout.physicalBounds.top, -300.0, "preview top bound", accuracy: 0.000001)
+        try assertApprox(layout.physicalBounds.bottom, 1300.0, "preview bottom bound", accuracy: 0.000001)
+        try assertEqual(layout.textureWidth, 1600, "preview maximum texture dimension")
+        try assertEqual(layout.textureHeight, 580, "preview aspect-preserving texture height")
+        try assertApprox(layout.objectFrame[0].x, -1.0, "preview object left", accuracy: 0.000001)
+        try assertApprox(layout.objectFrame[0].y, 1.0 + 300.0 / 1080.0, "preview object top", accuracy: 0.000001)
+        try assertApprox(layout.objectFrame[2].x, 2500.0 / 1920.0, "preview object right", accuracy: 0.000001)
+        try assertApprox(layout.objectFrame[2].y, 1.0 - 1300.0 / 1080.0, "preview object bottom", accuracy: 0.000001)
     }
 
     static func testIdentityHomographyMapsPointsToThemselves() throws {

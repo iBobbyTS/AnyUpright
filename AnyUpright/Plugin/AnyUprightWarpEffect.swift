@@ -118,9 +118,14 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
     let _apiManager: PROAPIAccessing!
     private let stableRenderSizeLock = NSLock()
     private var cachedStableRenderSize: AUSize?
+    private lazy var outerStretchPreviewSourceID = ObjectIdentifier(self)
 
     required init?(apiManager: PROAPIAccessing) {
         _apiManager = apiManager
+    }
+
+    deinit {
+        AUOuterStretchOSCPreviewCache.shared.remove(sourceID: outerStretchPreviewSourceID)
     }
 
     func addParameters() throws {
@@ -285,8 +290,45 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
         commandEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: vertices.count)
 
         commandEncoder.endEncoding()
+        let outerStretchPreview: (AUOuterStretchOSCPreviewQuery, AUOuterStretchOSCPreviewEntry)?
+        if AnyUprightEffectKind(rawValue: parameterState.effectKind) == .stretch,
+           AUStretchTransformMode(rawValue: parameterState.stretchMode) == .outputCorners {
+            let outputSize = size(from: destinationImage.imagePixelBounds)
+            let corners = renderStretchCorners(
+                from: parameterState,
+                outputSize: outputSize,
+                sourceSize: size(from: sourceImage.imagePixelBounds)
+            )
+            if let layout = AUOuterStretchOSCPreviewLayout.make(corners: corners, outputSize: outputSize),
+               let texture = AUOuterStretchOSCPreviewRenderer.encode(
+                   commandBuffer: commandBuffer,
+                   device: inputDevice,
+                   inputTexture: inputTexture,
+                   warpState: &warpState,
+                   layout: layout
+               ) {
+                outerStretchPreview = (
+                    AUOuterStretchOSCPreviewQuery(
+                        renderTime: renderTime,
+                        signature: AUOuterStretchOSCPreviewSignature(state: parameterState)
+                    ),
+                    AUOuterStretchOSCPreviewEntry(texture: texture, objectFrame: layout.objectFrame)
+                )
+            } else {
+                outerStretchPreview = nil
+            }
+        } else {
+            outerStretchPreview = nil
+        }
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
+        if commandBuffer.status == .completed, let outerStretchPreview {
+            AUOuterStretchOSCPreviewCache.shared.store(
+                sourceID: outerStretchPreviewSourceID,
+                query: outerStretchPreview.0,
+                entry: outerStretchPreview.1
+            )
+        }
         debugCaptureUprightOutputTextureIfNeeded(
             parameterState: parameterState,
             texture: outputTexture,

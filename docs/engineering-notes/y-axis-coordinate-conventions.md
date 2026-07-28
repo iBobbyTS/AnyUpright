@@ -72,6 +72,8 @@ metalY = surfaceHeight / 2 - surfaceY
 ```
 
 - Apply the same conversion to overlay primitive origins and axes so fragment distance fields align with drawn vertices. Motion's composition of the returned IOSurface is part of the observed final orientation, so do not infer that the renderer input must be top-down from IOSurface memory layout alone.
+- Outer Stretch's cached OSC preview is a separate two-pass boundary. Its preview bounds come from physical output-IOSurface coordinates, where larger Y corresponds to higher FxPlug object Y after Motion composes the OSC surface. Convert the bounds to normalized object space directly: the visual top uses `physicalMaxY / outputHeight`, and the visual bottom uses `physicalMinY / outputHeight`. Applying `1.0 - physicalY / outputHeight` here mirrors the exterior preview to the opposite side of the Canvas.
+- The preceding rule does not change the offscreen warp texture or its UVs. Keep physical sampling in the preview pass, then cross into Y-up object space only when constructing the OSC texture overlay's `objectFrame`. Flipping the cached texture or its alpha mask instead changes the wrong layer and can cover valid Canvas pixels.
 - Observed for Inner Stretch Warp in Motion 6.3: the Metal interpolant carries physical output-IOSurface coordinates, while projective geometry is defined in logical image coordinates and the input texture uses physical texture coordinates. The complete sampling chain is:
 
 ```text

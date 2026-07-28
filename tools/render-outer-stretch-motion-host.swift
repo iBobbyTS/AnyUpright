@@ -118,12 +118,22 @@ struct RenderOuterStretchMotionHost {
             canvasSize: canvasSize,
             canvasOrigin: canvasOrigin
         )
+        guard result.exteriorAbove > 100,
+              result.exteriorBelow == 0,
+              result.interiorOverlay == 0 else {
+            throw MotionHostSimulationFailure.failed(
+                "Outer Stretch preview is not confined to the expected exterior above the canvas: " +
+                "exteriorAbove=\(result.exteriorAbove) exteriorBelow=\(result.exteriorBelow) " +
+                "interiorOverlay=\(result.interiorOverlay)"
+            )
+        }
         try savePNG(result.pixels, width: Int(surfaceSize.width), height: Int(surfaceSize.height), url: outputURL)
         print(
             "Motion host simulation: layoutPhysical=(\(layout.physicalBounds.left),\(layout.physicalBounds.top))-" +
             "(\(layout.physicalBounds.right),\(layout.physicalBounds.bottom)) " +
             "objectFrame=\(layout.objectFrame) exteriorAbove=\(result.exteriorAbove) " +
-            "exteriorBelow=\(result.exteriorBelow) output=\(outputURL.path)"
+            "exteriorBelow=\(result.exteriorBelow) interiorOverlay=\(result.interiorOverlay) " +
+            "output=\(outputURL.path)"
         )
     }
 
@@ -349,7 +359,7 @@ struct RenderOuterStretchMotionHost {
         surfaceSize: AUSize,
         canvasSize: AUSize,
         canvasOrigin: AUPoint
-    ) throws -> (pixels: [UInt8], exteriorAbove: Int, exteriorBelow: Int) {
+    ) throws -> (pixels: [UInt8], exteriorAbove: Int, exteriorBelow: Int, interiorOverlay: Int) {
         let width = Int(surfaceSize.width)
         let height = Int(surfaceSize.height)
         var raw = Array(repeating: UInt16(0), count: width * height * 4)
@@ -369,6 +379,7 @@ struct RenderOuterStretchMotionHost {
         var output = Array(repeating: UInt8(0), count: width * height * 4)
         var exteriorAbove = 0
         var exteriorBelow = 0
+        var interiorOverlay = 0
 
         for y in 0..<height {
             let rawY = height - 1 - y
@@ -397,11 +408,13 @@ struct RenderOuterStretchMotionHost {
                         exteriorAbove += 1
                     } else if y >= displayedCanvasBottom {
                         exteriorBelow += 1
+                    } else if x >= displayedCanvasLeft, x < displayedCanvasRight {
+                        interiorOverlay += 1
                     }
                 }
             }
         }
-        return (output, exteriorAbove, exteriorBelow)
+        return (output, exteriorAbove, exteriorBelow, interiorOverlay)
     }
 
     private static func savePNG(_ pixels: [UInt8], width: Int, height: Int, url: URL) throws {

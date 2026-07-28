@@ -95,15 +95,17 @@ struct AUOuterStretchOSCPreviewLayout {
         let previewHeight = max(1.0, maxY - minY)
         let scale = min(1.0, Double(maximumTextureDimension) / max(previewWidth, previewHeight))
 
+        // Motion composes the returned OSC surface into FxPlug's Y-up object space.
+        // These bounds are physical output pixels, so physical maxY is the visual top.
         return AUOuterStretchOSCPreviewLayout(
             physicalBounds: AUOutputCoordinateBounds(left: minX, right: maxX, top: minY, bottom: maxY),
             textureWidth: max(1, Int(ceil(previewWidth * scale))),
             textureHeight: max(1, Int(ceil(previewHeight * scale))),
             objectFrame: [
-                AUPoint(x: minX / width, y: 1.0 - minY / height),
-                AUPoint(x: maxX / width, y: 1.0 - minY / height),
-                AUPoint(x: maxX / width, y: 1.0 - maxY / height),
-                AUPoint(x: minX / width, y: 1.0 - maxY / height)
+                AUPoint(x: minX / width, y: maxY / height),
+                AUPoint(x: maxX / width, y: maxY / height),
+                AUPoint(x: maxX / width, y: minY / height),
+                AUPoint(x: minX / width, y: minY / height)
             ]
         )
     }

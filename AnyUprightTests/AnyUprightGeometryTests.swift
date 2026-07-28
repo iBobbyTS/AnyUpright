@@ -147,9 +147,9 @@ struct AnyUprightGeometryTests {
         try assertEqual(layout.textureWidth, 1600, "preview maximum texture dimension")
         try assertEqual(layout.textureHeight, 580, "preview aspect-preserving texture height")
         try assertApprox(layout.objectFrame[0].x, -1.0, "preview object left", accuracy: 0.000001)
-        try assertApprox(layout.objectFrame[0].y, 1.0 + 300.0 / 1080.0, "preview object top", accuracy: 0.000001)
+        try assertApprox(layout.objectFrame[0].y, 1300.0 / 1080.0, "preview object top", accuracy: 0.000001)
         try assertApprox(layout.objectFrame[2].x, 2500.0 / 1920.0, "preview object right", accuracy: 0.000001)
-        try assertApprox(layout.objectFrame[2].y, 1.0 - 1300.0 / 1080.0, "preview object bottom", accuracy: 0.000001)
+        try assertApprox(layout.objectFrame[2].y, -300.0 / 1080.0, "preview object bottom", accuracy: 0.000001)
     }
 
     static func testIdentityHomographyMapsPointsToThemselves() throws {

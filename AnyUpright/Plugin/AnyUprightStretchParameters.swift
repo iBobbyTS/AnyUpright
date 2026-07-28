@@ -8,23 +8,15 @@ import Foundation
 enum StretchParam: UInt32 {
     case mode = 198
     case showCornerAdjuster = 199
-    case topLeftPercentX = 200
-    case topLeftPercentY = 201
     case topLeftPixelX = 202
     case topLeftPixelY = 203
-    case topRightPercentX = 204
-    case topRightPercentY = 205
     case topRightPixelX = 206
     case topRightPixelY = 207
-    case bottomRightPercentX = 208
-    case bottomRightPercentY = 209
     case bottomRightPixelX = 210
     case bottomRightPixelY = 211
-    case bottomLeftPercentX = 212
-    case bottomLeftPercentY = 213
     case bottomLeftPixelX = 214
     case bottomLeftPixelY = 215
-    // Parameter IDs 216...218 are retired and must not be reused.
+    // Parameter IDs 200, 201, 204, 205, 208, 209, 212, 213, and 216...218 are retired.
     case ratio = 219
 }
 
@@ -67,23 +59,15 @@ func stretchParameterState(
     result.showCornerAdjuster = showCornerAdjuster.boolValue ? 1 : 0
     result.stretchRatioMode = ratio
 
-    result.topLeftPercentX = stretchFloatParam(paramAPI, .topLeftPercentX, time)
-    result.topLeftPercentY = stretchFloatParam(paramAPI, .topLeftPercentY, time)
     result.topLeftPixelX = stretchFloatParam(paramAPI, .topLeftPixelX, time)
     result.topLeftPixelY = stretchFloatParam(paramAPI, .topLeftPixelY, time)
 
-    result.topRightPercentX = stretchFloatParam(paramAPI, .topRightPercentX, time)
-    result.topRightPercentY = stretchFloatParam(paramAPI, .topRightPercentY, time)
     result.topRightPixelX = stretchFloatParam(paramAPI, .topRightPixelX, time)
     result.topRightPixelY = stretchFloatParam(paramAPI, .topRightPixelY, time)
 
-    result.bottomRightPercentX = stretchFloatParam(paramAPI, .bottomRightPercentX, time)
-    result.bottomRightPercentY = stretchFloatParam(paramAPI, .bottomRightPercentY, time)
     result.bottomRightPixelX = stretchFloatParam(paramAPI, .bottomRightPixelX, time)
     result.bottomRightPixelY = stretchFloatParam(paramAPI, .bottomRightPixelY, time)
 
-    result.bottomLeftPercentX = stretchFloatParam(paramAPI, .bottomLeftPercentX, time)
-    result.bottomLeftPercentY = stretchFloatParam(paramAPI, .bottomLeftPercentY, time)
     result.bottomLeftPixelX = stretchFloatParam(paramAPI, .bottomLeftPixelX, time)
     result.bottomLeftPixelY = stretchFloatParam(paramAPI, .bottomLeftPixelY, time)
 
@@ -109,10 +93,6 @@ func shouldEnableStretchOSCControls(from state: AnyUprightParameterState, mode: 
 
 func stretchCornerOffsets(from state: AnyUprightParameterState) -> AUCornerOffsets {
     AUCornerOffsets(
-        topLeftPercent: AUPoint(x: Double(state.topLeftPercentX), y: Double(state.topLeftPercentY)),
-        topRightPercent: AUPoint(x: Double(state.topRightPercentX), y: Double(state.topRightPercentY)),
-        bottomRightPercent: AUPoint(x: Double(state.bottomRightPercentX), y: Double(state.bottomRightPercentY)),
-        bottomLeftPercent: AUPoint(x: Double(state.bottomLeftPercentX), y: Double(state.bottomLeftPercentY)),
         topLeftPixels: AUPoint(x: Double(state.topLeftPixelX), y: Double(state.topLeftPixelY)),
         topRightPixels: AUPoint(x: Double(state.topRightPixelX), y: Double(state.topRightPixelY)),
         bottomRightPixels: AUPoint(x: Double(state.bottomRightPixelX), y: Double(state.bottomRightPixelY)),

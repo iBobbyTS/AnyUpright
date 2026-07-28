@@ -75,20 +75,15 @@ extension AnyUprightInnerStretchOSCPlugIn {
         current: StretchOSCEventResolution,
         previousObject: AUPoint,
         currentObject: AUPoint,
-        pixelDelta: AUPoint,
-        size: AUSize
+        pixelDelta: AUPoint
     ) {
         guard FileManager.default.fileExists(atPath: "/tmp/AnyUprightStretchOSC.debug") else {
             return
         }
 
-        let percentDelta = AUPoint(
-            x: pixelDelta.x / max(size.width, 1.0),
-            y: pixelDelta.y / max(size.height, 1.0)
-        )
         debugLog(
             String(
-                format: "%@ prev=(%.2f,%.2f %@) curr=(%.2f,%.2f %@) prevObj=(%.5f,%.5f) currObj=(%.5f,%.5f) pixelDelta=(%.2f,%.2f) percentDelta=(%.5f,%.5f)",
+                format: "%@ prev=(%.2f,%.2f %@) curr=(%.2f,%.2f %@) prevObj=(%.5f,%.5f) currObj=(%.5f,%.5f) pixelDelta=(%.2f,%.2f)",
                 label,
                 previous.canvasPoint.x,
                 previous.canvasPoint.y,
@@ -101,9 +96,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
                 currentObject.x,
                 currentObject.y,
                 pixelDelta.x,
-                pixelDelta.y,
-                percentDelta.x,
-                percentDelta.y
+                pixelDelta.y
             )
         )
     }

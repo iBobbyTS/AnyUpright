@@ -21,9 +21,9 @@ enum TestFailure: Error, CustomStringConvertible {
 struct AnyUprightGeometryTests {
     static func main() throws {
         try testIdentityHomographyMapsPointsToThemselves()
-        try testCornerOffsetsCombinePercentAndPixels()
+        try testCornerOffsetsUsePixelsOnly()
         try testStretchObjectPointsKeepCanvasCornerDefinitions()
-        try testStretchObjectDragPreservesPercentAndWritesPixelOffsets()
+        try testStretchObjectDragWritesAbsolutePixelOffsets()
         try testStretchOutputCornersKeepTheirNamedPositions()
         try testInnerStretchDefaultsToCentralEightyPercent()
         try testInnerStretchObjectDragPreservesCentralBase()
@@ -161,17 +161,13 @@ struct AnyUprightGeometryTests {
         try assertMaps(matrix, AUPoint(x: 960.0, y: 540.0), to: AUPoint(x: 960.0, y: 540.0))
     }
 
-    static func testCornerOffsetsCombinePercentAndPixels() throws {
+    static func testCornerOffsetsUsePixelsOnly() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         let offsets = AUCornerOffsets(
-            topLeftPercent: AUPoint(x: 0.10, y: 0.20),
-            topRightPercent: AUPoint(x: -0.10, y: 0.10),
-            bottomRightPercent: AUPoint(x: 0.05, y: -0.10),
-            bottomLeftPercent: AUPoint(x: -0.05, y: -0.20),
-            topLeftPixels: AUPoint(x: 5.0, y: 10.0),
-            topRightPixels: AUPoint(x: -5.0, y: 0.0),
-            bottomRightPixels: AUPoint(x: 10.0, y: -5.0),
-            bottomLeftPixels: AUPoint(x: -10.0, y: 5.0)
+            topLeftPixels: AUPoint(x: 25.0, y: 30.0),
+            topRightPixels: AUPoint(x: -25.0, y: 10.0),
+            bottomRightPixels: AUPoint(x: 20.0, y: -15.0),
+            bottomLeftPixels: AUPoint(x: -20.0, y: -15.0)
         )
 
         let stretch = AnyUprightGeometry.stretch(from: offsets, size: size)
@@ -200,15 +196,13 @@ struct AnyUprightGeometryTests {
         try assertTrue(objectPoints.topLeft.x < objectPoints.topRight.x, "top-left handle should stay left of top-right")
     }
 
-    static func testStretchObjectDragPreservesPercentAndWritesPixelOffsets() throws {
+    static func testStretchObjectDragWritesAbsolutePixelOffsets() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
-        offsets.topLeftPercent = AUPoint(x: 0.10, y: -0.20)
 
         let pixels = AnyUprightGeometry.cornerPixelOffset(
             forObjectPoint: AUPoint(x: 0.35, y: 1.10),
             corner: .topLeft,
-            offsets: offsets,
             size: size
         )
         offsets.topLeftPixels = pixels
@@ -216,7 +210,7 @@ struct AnyUprightGeometryTests {
         let objectPoints = AnyUprightGeometry.stretchObjectPoints(from: offsets, size: size)
         let outputStretch = AnyUprightGeometry.stretch(from: offsets, size: size)
 
-        try assertEqual(pixels, AUPoint(x: 50.0, y: 30.0), "dragged top-left pixel offset")
+        try assertEqual(pixels, AUPoint(x: 70.0, y: 10.0), "dragged top-left pixel offset")
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.35, y: 1.10), "dragged top-left object point")
         try assertEqual(outputStretch.topLeft, AUPoint(x: 70.0, y: -10.0), "dragged top-left output point")
     }
@@ -276,16 +270,17 @@ struct AnyUprightGeometryTests {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
 
-        let percent = AnyUprightGeometry.sourceCornerPercentOffset(
+        let pixels = AnyUprightGeometry.sourceCornerPixelOffset(
             forObjectPoint: AUPoint(x: 0.20, y: 0.80),
-            corner: .topLeft
+            corner: .topLeft,
+            size: size
         )
-        offsets.topLeftPercent = percent
+        offsets.topLeftPixels = pixels
 
         let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
-        try assertEqual(percent, AUPoint(x: 0.10, y: -0.10), "source dragged top-left percent offset")
+        try assertEqual(pixels, AUPoint(x: 20.0, y: -10.0), "source dragged top-left pixel offset")
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "source dragged top-left object point")
         try assertEqual(innerStretch.topLeft, AUPoint(x: 40.0, y: 20.0), "source dragged top-left source point")
     }
@@ -322,7 +317,7 @@ struct AnyUprightGeometryTests {
 
     static func testInnerStretchFullFrameSelectionHasNoDYDrift() throws {
         let size = AUSize(width: 200.0, height: 100.0)
-        let offsets = fullFrameSourceOffsets()
+        let offsets = fullFrameSourceOffsets(size: size)
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
         let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
         let outputHandles = AnyUprightGeometry.innerStretchOutputHandles(
@@ -368,18 +363,19 @@ struct AnyUprightGeometryTests {
 
         let draggedPixel = AUPoint(x: 45.0, y: 75.0)
         let draggedNormalized = AnyUprightGeometry.normalizedObjectPoint(fromObjectPixelPoint: draggedPixel, size: size)
-        let percent = AnyUprightGeometry.sourceCornerPercentOffset(
+        let pixels = AnyUprightGeometry.sourceCornerPixelOffset(
             forObjectPoint: draggedNormalized,
-            corner: .topLeft
+            corner: .topLeft,
+            size: size
         )
 
-        offsets.topLeftPercent = percent
+        offsets.topLeftPixels = pixels
         let updatedObjectPixels = AnyUprightGeometry.objectPixelSelection(
             fromNormalizedObjectSelection: AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size),
             size: size
         )
         let updatedInnerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
-        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "source object-space drag percent offset")
+        try assertEqual(pixels, AUPoint(x: 25.0, y: -15.0), "source object-space drag pixel offset")
         try assertEqual(updatedObjectPixels.topLeft, draggedPixel, "source object-space drag target")
         try assertEqual(updatedInnerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "inner stretch should sample the Y-flipped image point matching the visible handle")
     }
@@ -392,16 +388,17 @@ struct AnyUprightGeometryTests {
             fromOSCPixelPoint: visualTopLeftOSCPixel,
             outputSize: size
         )
-        let percent = AnyUprightGeometry.sourceCornerPercentOffset(
+        let pixels = AnyUprightGeometry.sourceCornerPixelOffset(
             forObjectPoint: objectPoint,
-            corner: .topLeft
+            corner: .topLeft,
+            size: size
         )
 
-        offsets.topLeftPercent = percent
+        offsets.topLeftPixels = pixels
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
         try assertEqual(objectPoint, AUPoint(x: 0.225, y: 0.75), "mapped-surface object point")
-        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "mapped-surface drag percent")
+        try assertEqual(pixels, AUPoint(x: 25.0, y: -15.0), "mapped-surface drag pixels")
         try assertEqual(innerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "mapped-surface object Y should map to the same visual corner")
     }
 
@@ -409,26 +406,27 @@ struct AnyUprightGeometryTests {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
         let rawCanvasTopLeftObjectPoint = AUPoint(x: 0.225, y: 0.75)
-        let percent = AnyUprightGeometry.sourceCornerPercentOffset(
+        let pixels = AnyUprightGeometry.sourceCornerPixelOffset(
             forObjectPoint: rawCanvasTopLeftObjectPoint,
-            corner: .topLeft
+            corner: .topLeft,
+            size: size
         )
 
-        offsets.topLeftPercent = percent
+        offsets.topLeftPixels = pixels
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
         try assertEqual(rawCanvasTopLeftObjectPoint, AUPoint(x: 0.225, y: 0.75), "raw-canvas object point")
-        try assertEqual(percent, AUPoint(x: 0.125, y: -0.15), "raw-canvas source percent")
+        try assertEqual(pixels, AUPoint(x: 25.0, y: -15.0), "raw-canvas source pixels")
         try assertEqual(innerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "raw-canvas object Y should map to the same visual corner")
     }
 
     static func testInnerStretchHostCanvasLayerPreservesNamedCorners() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
-        offsets.topLeftPercent = AUPoint(x: 0.125, y: -0.15)
-        offsets.topRightPercent = AUPoint(x: -0.075, y: 0.08)
-        offsets.bottomRightPercent = AUPoint(x: -0.10, y: -0.12)
-        offsets.bottomLeftPercent = AUPoint(x: 0.05, y: 0.06)
+        offsets.topLeftPixels = AUPoint(x: 25.0, y: -15.0)
+        offsets.topRightPixels = AUPoint(x: -15.0, y: 8.0)
+        offsets.bottomRightPixels = AUPoint(x: -20.0, y: -12.0)
+        offsets.bottomLeftPixels = AUPoint(x: 10.0, y: 6.0)
 
         let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
         let canvasPixels = AnyUprightGeometry.objectPixelSelection(fromNormalizedObjectSelection: objectPoints, size: size)
@@ -503,10 +501,10 @@ struct AnyUprightGeometryTests {
         let outputSize = AUSize(width: 300.0, height: 150.0)
         let sourceSize = AUSize(width: 600.0, height: 300.0)
         var offsets = AUCornerOffsets()
-        offsets.topLeftPercent = AUPoint(x: 0.10, y: -0.05)
-        offsets.topRightPercent = AUPoint(x: -0.08, y: -0.02)
-        offsets.bottomRightPercent = AUPoint(x: -0.12, y: 0.07)
-        offsets.bottomLeftPercent = AUPoint(x: 0.04, y: 0.08)
+        offsets.topLeftPixels = AUPoint(x: 60.0, y: -15.0)
+        offsets.topRightPixels = AUPoint(x: -48.0, y: -6.0)
+        offsets.bottomRightPixels = AUPoint(x: -72.0, y: 21.0)
+        offsets.bottomLeftPixels = AUPoint(x: 24.0, y: 24.0)
 
         let selectedInnerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: sourceSize)
         let previewSelectionToRect = AnyUprightGeometry.stretchSelectionToOutputRectMatrix(
@@ -571,10 +569,10 @@ struct AnyUprightGeometryTests {
         let outputSize = AUSize(width: 300.0, height: 150.0)
         let sourceSize = AUSize(width: 600.0, height: 300.0)
         var offsets = AUCornerOffsets()
-        offsets.topLeftPercent = AUPoint(x: -0.25, y: 0.20)
-        offsets.topRightPercent = AUPoint(x: 0.30, y: 0.10)
-        offsets.bottomRightPercent = AUPoint(x: 0.20, y: -0.25)
-        offsets.bottomLeftPercent = AUPoint(x: -0.15, y: -0.30)
+        offsets.topLeftPixels = AUPoint(x: -150.0, y: 60.0)
+        offsets.topRightPixels = AUPoint(x: 180.0, y: 30.0)
+        offsets.bottomRightPixels = AUPoint(x: 120.0, y: -75.0)
+        offsets.bottomLeftPixels = AUPoint(x: -90.0, y: -90.0)
 
         let handles = AnyUprightGeometry.innerStretchOutputHandles(
             from: offsets,
@@ -1076,10 +1074,10 @@ struct AnyUprightGeometryTests {
             textureSize: AUSize(width: 602.0, height: 302.0)
         )
         var offsets = AUCornerOffsets()
-        offsets.topLeftPercent = AUPoint(x: 0.12, y: -0.06)
-        offsets.topRightPercent = AUPoint(x: -0.03, y: 0.04)
-        offsets.bottomRightPercent = AUPoint(x: -0.09, y: -0.08)
-        offsets.bottomLeftPercent = AUPoint(x: 0.05, y: 0.02)
+        offsets.topLeftPixels = AUPoint(x: 72.0, y: -18.0)
+        offsets.topRightPixels = AUPoint(x: -18.0, y: 12.0)
+        offsets.bottomRightPixels = AUPoint(x: -54.0, y: -24.0)
+        offsets.bottomLeftPixels = AUPoint(x: 30.0, y: 6.0)
 
         let selectedSource = AnyUprightGeometry.innerStretch(from: offsets, size: sourceSize)
         let outputToSource = AnyUprightGeometry.stretchOutputToSourceMatrix(
@@ -1407,12 +1405,10 @@ struct AnyUprightGeometryTests {
     static func testInnerStretchApplyMatrixIsStableAcrossMotionPreviewSizes() throws {
         let stableSize = AUSize(width: 5712.0, height: 4284.0)
         var offsets = AUCornerOffsets()
-        offsets.topLeftPercent = AUPoint(x: -0.018, y: 0.012)
-        offsets.topRightPercent = AUPoint(x: 0.024, y: -0.006)
-        offsets.bottomRightPercent = AUPoint(x: -0.015, y: 0.021)
-        offsets.bottomLeftPercent = AUPoint(x: 0.013, y: -0.017)
-        offsets.topLeftPixels = AUPoint(x: 42.0, y: -21.0)
-        offsets.bottomRightPixels = AUPoint(x: -37.0, y: 18.0)
+        offsets.topLeftPixels = AUPoint(x: -60.816, y: 30.408)
+        offsets.topRightPixels = AUPoint(x: 137.088, y: -25.704)
+        offsets.bottomRightPixels = AUPoint(x: -122.68, y: 107.964)
+        offsets.bottomLeftPixels = AUPoint(x: 74.256, y: -72.828)
 
         let stableMatrix = AnyUprightGeometry.stretchOutputToSourceMatrix(
             from: offsets,
@@ -1463,12 +1459,10 @@ struct AnyUprightGeometryTests {
     static func testStretchOutputCornersApplyMatrixIsStableAcrossMotionPreviewSizes() throws {
         let stableSize = AUSize(width: 5712.0, height: 4284.0)
         var offsets = AUCornerOffsets()
-        offsets.topLeftPercent = AUPoint(x: 0.020, y: 0.010)
-        offsets.topRightPercent = AUPoint(x: -0.018, y: 0.014)
-        offsets.bottomRightPercent = AUPoint(x: -0.026, y: -0.011)
-        offsets.bottomLeftPercent = AUPoint(x: 0.031, y: -0.019)
-        offsets.topRightPixels = AUPoint(x: 25.0, y: 12.0)
-        offsets.bottomLeftPixels = AUPoint(x: -18.0, y: 30.0)
+        offsets.topLeftPixels = AUPoint(x: 114.24, y: 42.84)
+        offsets.topRightPixels = AUPoint(x: -77.816, y: 71.976)
+        offsets.bottomRightPixels = AUPoint(x: -148.512, y: -47.124)
+        offsets.bottomLeftPixels = AUPoint(x: 159.072, y: -51.396)
 
         let stableMatrix = AnyUprightGeometry.stretchOutputToSourceMatrix(
             from: offsets,
@@ -3349,12 +3343,12 @@ struct AnyUprightGeometryTests {
         }
     }
 
-    static func fullFrameSourceOffsets() -> AUCornerOffsets {
+    static func fullFrameSourceOffsets(size: AUSize) -> AUCornerOffsets {
         AUCornerOffsets(
-            topLeftPercent: AUPoint(x: -0.10, y: 0.10),
-            topRightPercent: AUPoint(x: 0.10, y: 0.10),
-            bottomRightPercent: AUPoint(x: 0.10, y: -0.10),
-            bottomLeftPercent: AUPoint(x: -0.10, y: -0.10)
+            topLeftPixels: AUPoint(x: -0.10 * size.width, y: 0.10 * size.height),
+            topRightPixels: AUPoint(x: 0.10 * size.width, y: 0.10 * size.height),
+            bottomRightPixels: AUPoint(x: 0.10 * size.width, y: -0.10 * size.height),
+            bottomLeftPixels: AUPoint(x: -0.10 * size.width, y: -0.10 * size.height)
         )
     }
 

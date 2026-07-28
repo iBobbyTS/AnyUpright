@@ -23,16 +23,16 @@ This file records AnyUpright-specific Stretch implementation choices. Reusable d
 - The filter-output dimming follows the clip/image and can render even when the host does not instantiate or dispatch the FxPlug OSC.
 - The interactive white outline, blue handles, yellow hover/drag highlights, hit testing, and drag writeback are owned by the FxPlug OSC layer.
 - Inner Stretch corner coordinate groups are hidden from the inspector; users position the input selection through onscreen handles.
-- Dragging Inner Stretch handles writes hidden source-corner percentage offsets and clears matching pixel offsets so render-time source geometry is independent of OSC surface size.
+- Dragging Inner Stretch handles writes hidden source-corner pixel offsets in the source image's stable correction dimensions.
 - A previous point-parameter writeback experiment was backed out: Motion Studio 6.2 accepted `setXValue(_:yValue:)` during OSC drags, but later reads returned default points. The current path uses float-parameter writeback.
 
 ## Outer Stretch
 
 - `AnyUpright Outer Stretch` fixes the shared Stretch path to output-corner warp semantics.
-- Its visible output corners expose `X %`, `Y %`, `X px`, and `Y px` offsets in the inspector.
-- Final offset is `percentage * current frame dimension + pixels`.
+- Its visible output corners expose only `X px` and `Y px` offsets in the inspector.
+- Corner positions are persisted exclusively as pixel offsets; percentage corner parameters are retired and are not registered or read.
 - Positive `X` moves right. Positive `Y` moves up.
-- Outer Stretch writes output-corner pixel offsets while preserving existing percentage offsets.
+- Outer Stretch writes output-corner pixel offsets.
 
 ## OSC Classes And Geometry Helpers
 
@@ -45,7 +45,7 @@ This file records AnyUpright-specific Stretch implementation choices. Reusable d
 - Inner Stretch visible OSC drawing, hit testing, hover, and drag routing all use the same unflipped FxPlug Y-up object/canvas geometry. The custom overlay renderer and Motion's IOSurface composition own the display-space crossing.
 - `StretchOSCEventCoordinateMode` selects the accepted host-event interpretation for hit testing and dragging. After `convertPoint(...)` returns the FxPlug Y-up object coordinate, writeback stores it directly for both `.rawCanvas` and `.mappedSurface`.
 - Corner identity remains unchanged across this boundary. A visible `topLeft` is drawn and hit as `topLeft`, then writes only the `topLeft` parameter group.
-- `AnyUprightGeometry.stretchObjectPoints`, `innerStretchObjectPoints`, `sourceCornerPercentOffset`, and `cornerPixelOffset` own the testable corner naming and parameter/object conversion semantics.
+- `AnyUprightGeometry.stretchObjectPoints`, `innerStretchObjectPoints`, `sourceCornerPixelOffset`, and `cornerPixelOffset` own the testable corner naming and parameter/object conversion semantics.
 
 ## Render And Overlay Choices
 

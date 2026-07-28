@@ -12,10 +12,10 @@ import Vision
 extension AnyUprightInnerStretchOSCPlugIn {
     func setInnerStretch(_ stretch: AUStretchCorners, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         let offsets = AnyUprightGeometry.innerStretchOffsets(forInnerStretch: stretch, size: size)
-        writeSourceCorner(.topLeft, percent: offsets.topLeftPercent, settingAPI: settingAPI, time: time)
-        writeSourceCorner(.topRight, percent: offsets.topRightPercent, settingAPI: settingAPI, time: time)
-        writeSourceCorner(.bottomRight, percent: offsets.bottomRightPercent, settingAPI: settingAPI, time: time)
-        writeSourceCorner(.bottomLeft, percent: offsets.bottomLeftPercent, settingAPI: settingAPI, time: time)
+        writeCorner(.topLeft, pixels: offsets.topLeftPixels, settingAPI: settingAPI, time: time)
+        writeCorner(.topRight, pixels: offsets.topRightPixels, settingAPI: settingAPI, time: time)
+        writeCorner(.bottomRight, pixels: offsets.bottomRightPixels, settingAPI: settingAPI, time: time)
+        writeCorner(.bottomLeft, pixels: offsets.bottomLeftPixels, settingAPI: settingAPI, time: time)
         debugLog(
             String(
                 format: "set-inner-stretch tl=(%.2f,%.2f) tr=(%.2f,%.2f) br=(%.2f,%.2f) bl=(%.2f,%.2f)",
@@ -31,7 +31,7 @@ extension AnyUprightInnerStretchOSCPlugIn {
         )
     }
 
-    func setCorner(_ point: AUPoint, part: StretchOSCPart, mode: AUStretchTransformMode, offsets: AUCornerOffsets, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    func setCorner(_ point: AUPoint, part: StretchOSCPart, mode: AUStretchTransformMode, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         guard let ids = parameterIDs(forCornerPart: part) else {
             return
         }
@@ -41,7 +41,6 @@ extension AnyUprightInnerStretchOSCPlugIn {
             let pixels = AnyUprightGeometry.cornerPixelOffset(
                 forObjectPoint: point,
                 corner: ids.corner,
-                offsets: offsets,
                 size: size
             )
             debugLog(
@@ -58,59 +57,32 @@ extension AnyUprightInnerStretchOSCPlugIn {
             settingAPI.setFloatValue(pixels.y, toParameter: ids.pixelY.rawValue, at: time)
 
         case .innerStretch:
-            let percent = AnyUprightGeometry.sourceCornerPercentOffset(forObjectPoint: point, corner: ids.corner)
+            let pixels = AnyUprightGeometry.sourceCornerPixelOffset(forObjectPoint: point, corner: ids.corner, size: size)
             debugLog(
                 String(
-                    format: "set-corner part=%d mode=source object=(%.5f,%.5f) writePercent=(%.5f,%.5f)",
+                    format: "set-corner part=%d mode=source object=(%.5f,%.5f) writePixels=(%.2f,%.2f)",
                     part.rawValue,
                     point.x,
                     point.y,
-                    percent.x,
-                    percent.y
+                    pixels.x,
+                    pixels.y
                 )
             )
-            settingAPI.setFloatValue(percent.x, toParameter: ids.percentX.rawValue, at: time)
-            settingAPI.setFloatValue(percent.y, toParameter: ids.percentY.rawValue, at: time)
-            settingAPI.setFloatValue(0.0, toParameter: ids.pixelX.rawValue, at: time)
-            settingAPI.setFloatValue(0.0, toParameter: ids.pixelY.rawValue, at: time)
+            settingAPI.setFloatValue(pixels.x, toParameter: ids.pixelX.rawValue, at: time)
+            settingAPI.setFloatValue(pixels.y, toParameter: ids.pixelY.rawValue, at: time)
         }
     }
 
-    func translateCorners(from state: AnyUprightParameterState, pixelDelta: AUPoint, corners: [AUStretchCorner], mode: AUStretchTransformMode, size: AUSize, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    func translateCorners(from state: AnyUprightParameterState, pixelDelta: AUPoint, corners: [AUStretchCorner], mode: AUStretchTransformMode, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         let offsets = stretchCornerOffsets(from: state)
-
-        if mode == .innerStretch {
-            let percentDelta = AUPoint(
-                x: pixelDelta.x / max(size.width, 1.0),
-                y: pixelDelta.y / max(size.height, 1.0)
-            )
-            debugLog(
-                String(
-                    format: "translate-corners mode=source corners=%@ pixelDelta=(%.2f,%.2f) percentDelta=(%.5f,%.5f)",
-                    corners.map { "\($0)" }.joined(separator: ","),
-                    pixelDelta.x,
-                    pixelDelta.y,
-                    percentDelta.x,
-                    percentDelta.y
-                )
-            )
-            for corner in corners {
-                let ids = parameterIDs(for: corner)
-                let percent = percentOffset(for: corner, in: offsets)
-                settingAPI.setFloatValue(percent.x + percentDelta.x, toParameter: ids.percentX.rawValue, at: time)
-                settingAPI.setFloatValue(percent.y + percentDelta.y, toParameter: ids.percentY.rawValue, at: time)
-                settingAPI.setFloatValue(0.0, toParameter: ids.pixelX.rawValue, at: time)
-                settingAPI.setFloatValue(0.0, toParameter: ids.pixelY.rawValue, at: time)
-            }
-            return
-        }
 
         for corner in corners {
             let ids = parameterIDs(for: corner)
             let pixels = pixelOffset(for: corner, in: offsets)
             debugLog(
                 String(
-                    format: "translate-corner mode=output corner=%@ pixelBase=(%.2f,%.2f) pixelDelta=(%.2f,%.2f)",
+                    format: "translate-corner mode=%@ corner=%@ pixelBase=(%.2f,%.2f) pixelDelta=(%.2f,%.2f)",
+                    mode == .innerStretch ? "source" : "output",
                     "\(corner)",
                     pixels.x,
                     pixels.y,
@@ -123,53 +95,38 @@ extension AnyUprightInnerStretchOSCPlugIn {
         }
     }
 
-    func parameterIDs(forCornerPart part: StretchOSCPart) -> (corner: AUStretchCorner, percentX: StretchParam, percentY: StretchParam, pixelX: StretchParam, pixelY: StretchParam)? {
+    func parameterIDs(forCornerPart part: StretchOSCPart) -> (corner: AUStretchCorner, pixelX: StretchParam, pixelY: StretchParam)? {
         switch part {
         case .topLeft:
-            return (.topLeft, .topLeftPercentX, .topLeftPercentY, .topLeftPixelX, .topLeftPixelY)
+            return (.topLeft, .topLeftPixelX, .topLeftPixelY)
         case .topRight:
-            return (.topRight, .topRightPercentX, .topRightPercentY, .topRightPixelX, .topRightPixelY)
+            return (.topRight, .topRightPixelX, .topRightPixelY)
         case .bottomRight:
-            return (.bottomRight, .bottomRightPercentX, .bottomRightPercentY, .bottomRightPixelX, .bottomRightPixelY)
+            return (.bottomRight, .bottomRightPixelX, .bottomRightPixelY)
         case .bottomLeft:
-            return (.bottomLeft, .bottomLeftPercentX, .bottomLeftPercentY, .bottomLeftPixelX, .bottomLeftPixelY)
+            return (.bottomLeft, .bottomLeftPixelX, .bottomLeftPixelY)
         default:
             return nil
         }
     }
 
-    func parameterIDs(for corner: AUStretchCorner) -> (percentX: StretchParam, percentY: StretchParam, pixelX: StretchParam, pixelY: StretchParam) {
+    func parameterIDs(for corner: AUStretchCorner) -> (pixelX: StretchParam, pixelY: StretchParam) {
         switch corner {
         case .topLeft:
-            return (.topLeftPercentX, .topLeftPercentY, .topLeftPixelX, .topLeftPixelY)
+            return (.topLeftPixelX, .topLeftPixelY)
         case .topRight:
-            return (.topRightPercentX, .topRightPercentY, .topRightPixelX, .topRightPixelY)
+            return (.topRightPixelX, .topRightPixelY)
         case .bottomRight:
-            return (.bottomRightPercentX, .bottomRightPercentY, .bottomRightPixelX, .bottomRightPixelY)
+            return (.bottomRightPixelX, .bottomRightPixelY)
         case .bottomLeft:
-            return (.bottomLeftPercentX, .bottomLeftPercentY, .bottomLeftPixelX, .bottomLeftPixelY)
+            return (.bottomLeftPixelX, .bottomLeftPixelY)
         }
     }
 
-    private func writeSourceCorner(_ corner: AUStretchCorner, percent: AUPoint, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
+    private func writeCorner(_ corner: AUStretchCorner, pixels: AUPoint, settingAPI: FxParameterSettingAPI_v5, time: CMTime) {
         let ids = parameterIDs(for: corner)
-        settingAPI.setFloatValue(percent.x, toParameter: ids.percentX.rawValue, at: time)
-        settingAPI.setFloatValue(percent.y, toParameter: ids.percentY.rawValue, at: time)
-        settingAPI.setFloatValue(0.0, toParameter: ids.pixelX.rawValue, at: time)
-        settingAPI.setFloatValue(0.0, toParameter: ids.pixelY.rawValue, at: time)
-    }
-
-    func percentOffset(for corner: AUStretchCorner, in offsets: AUCornerOffsets) -> AUPoint {
-        switch corner {
-        case .topLeft:
-            return offsets.topLeftPercent
-        case .topRight:
-            return offsets.topRightPercent
-        case .bottomRight:
-            return offsets.bottomRightPercent
-        case .bottomLeft:
-            return offsets.bottomLeftPercent
-        }
+        settingAPI.setFloatValue(pixels.x, toParameter: ids.pixelX.rawValue, at: time)
+        settingAPI.setFloatValue(pixels.y, toParameter: ids.pixelY.rawValue, at: time)
     }
 
     func pixelOffset(for corner: AUStretchCorner, in offsets: AUCornerOffsets) -> AUPoint {

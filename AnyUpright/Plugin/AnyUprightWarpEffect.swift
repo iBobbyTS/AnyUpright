@@ -60,23 +60,15 @@ struct AnyUprightParameterState {
     var stableOutputWidth: Float = 0.0
     var stableOutputHeight: Float = 0.0
 
-    var topLeftPercentX: Float = 0.0
-    var topLeftPercentY: Float = 0.0
     var topLeftPixelX: Float = 0.0
     var topLeftPixelY: Float = 0.0
 
-    var topRightPercentX: Float = 0.0
-    var topRightPercentY: Float = 0.0
     var topRightPixelX: Float = 0.0
     var topRightPixelY: Float = 0.0
 
-    var bottomRightPercentX: Float = 0.0
-    var bottomRightPercentY: Float = 0.0
     var bottomRightPixelX: Float = 0.0
     var bottomRightPixelY: Float = 0.0
 
-    var bottomLeftPercentX: Float = 0.0
-    var bottomLeftPercentY: Float = 0.0
     var bottomLeftPixelX: Float = 0.0
     var bottomLeftPixelY: Float = 0.0
 }
@@ -825,10 +817,6 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
     func cornerOffsets(from state: AnyUprightParameterState) -> AUCornerOffsets {
         AUCornerOffsets(
-            topLeftPercent: AUPoint(x: Double(state.topLeftPercentX), y: Double(state.topLeftPercentY)),
-            topRightPercent: AUPoint(x: Double(state.topRightPercentX), y: Double(state.topRightPercentY)),
-            bottomRightPercent: AUPoint(x: Double(state.bottomRightPercentX), y: Double(state.bottomRightPercentY)),
-            bottomLeftPercent: AUPoint(x: Double(state.bottomLeftPercentX), y: Double(state.bottomLeftPercentY)),
             topLeftPixels: AUPoint(x: Double(state.topLeftPixelX), y: Double(state.topLeftPixelY)),
             topRightPixels: AUPoint(x: Double(state.topRightPixelX), y: Double(state.topRightPixelY)),
             bottomRightPixels: AUPoint(x: Double(state.bottomRightPixelX), y: Double(state.bottomRightPixelY)),

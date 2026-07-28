@@ -50,10 +50,10 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         }
 
         let cornerGroupFlags = showsCornerParameters ? collapsedFlags() : hiddenCollapsedFlags()
-        addCornerParameters(paramAPI, title: "Top Left", groupID: StretchGroup.topLeft.rawValue, percentX: .topLeftPercentX, percentY: .topLeftPercentY, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY, groupFlags: cornerGroupFlags)
-        addCornerParameters(paramAPI, title: "Top Right", groupID: StretchGroup.topRight.rawValue, percentX: .topRightPercentX, percentY: .topRightPercentY, pixelX: .topRightPixelX, pixelY: .topRightPixelY, groupFlags: cornerGroupFlags)
-        addCornerParameters(paramAPI, title: "Bottom Right", groupID: StretchGroup.bottomRight.rawValue, percentX: .bottomRightPercentX, percentY: .bottomRightPercentY, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
-        addCornerParameters(paramAPI, title: "Bottom Left", groupID: StretchGroup.bottomLeft.rawValue, percentX: .bottomLeftPercentX, percentY: .bottomLeftPercentY, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Top Left", groupID: StretchGroup.topLeft.rawValue, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Top Right", groupID: StretchGroup.topRight.rawValue, pixelX: .topRightPixelX, pixelY: .topRightPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Bottom Right", groupID: StretchGroup.bottomRight.rawValue, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: "Bottom Left", groupID: StretchGroup.bottomLeft.rawValue, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
 
     }
 
@@ -73,27 +73,11 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         )
     }
 
-    private func addCornerParameters(_ paramAPI: FxParameterCreationAPI_v5, title: String, groupID: UInt32, percentX: StretchParam, percentY: StretchParam, pixelX: StretchParam, pixelY: StretchParam, groupFlags: FxParameterFlags) {
+    private func addCornerParameters(_ paramAPI: FxParameterCreationAPI_v5, title: String, groupID: UInt32, pixelX: StretchParam, pixelY: StretchParam, groupFlags: FxParameterFlags) {
         paramAPI.startParameterSubGroup(title, parameterID: groupID, parameterFlags: groupFlags)
-        addPercentSlider(paramAPI, name: "\(title) X %", id: percentX.rawValue)
-        addPercentSlider(paramAPI, name: "\(title) Y %", id: percentY.rawValue)
         addPixelSlider(paramAPI, name: "\(title) X px", id: pixelX.rawValue)
         addPixelSlider(paramAPI, name: "\(title) Y px", id: pixelY.rawValue)
         paramAPI.endParameterSubGroup()
-    }
-
-    private func addPercentSlider(_ paramAPI: FxParameterCreationAPI_v5, name: String, id: UInt32) {
-        paramAPI.addPercentSlider(
-            withName: name,
-            parameterID: id,
-            defaultValue: 0.0,
-            parameterMin: -1.0,
-            parameterMax: 1.0,
-            sliderMin: -0.5,
-            sliderMax: 0.5,
-            delta: 0.01,
-            parameterFlags: defaultFlags()
-        )
     }
 
     private func addPixelSlider(_ paramAPI: FxParameterCreationAPI_v5, name: String, id: UInt32) {

@@ -130,11 +130,6 @@ struct AULineCandidate: Equatable {
 }
 
 struct AUCornerOffsets {
-    var topLeftPercent: AUPoint = AUPoint(x: 0.0, y: 0.0)
-    var topRightPercent: AUPoint = AUPoint(x: 0.0, y: 0.0)
-    var bottomRightPercent: AUPoint = AUPoint(x: 0.0, y: 0.0)
-    var bottomLeftPercent: AUPoint = AUPoint(x: 0.0, y: 0.0)
-
     var topLeftPixels: AUPoint = AUPoint(x: 0.0, y: 0.0)
     var topRightPixels: AUPoint = AUPoint(x: 0.0, y: 0.0)
     var bottomRightPixels: AUPoint = AUPoint(x: 0.0, y: 0.0)
@@ -628,26 +623,26 @@ enum AnyUprightGeometry {
         }
 
         return AUCornerOffsets(
-            topLeftPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.topLeft), corner: .topLeft),
-            topRightPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.topRight), corner: .topRight),
-            bottomRightPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.bottomRight), corner: .bottomRight),
-            bottomLeftPercent: sourceCornerPercentOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.bottomLeft), corner: .bottomLeft)
+            topLeftPixels: sourceCornerPixelOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.topLeft), corner: .topLeft, size: size),
+            topRightPixels: sourceCornerPixelOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.topRight), corner: .topRight, size: size),
+            bottomRightPixels: sourceCornerPixelOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.bottomRight), corner: .bottomRight, size: size),
+            bottomLeftPixels: sourceCornerPixelOffset(forObjectPoint: objectPoint(fromImagePoint: stretch.bottomLeft), corner: .bottomLeft, size: size)
         )
     }
 
     private static func stretch(from offsets: AUCornerOffsets, base: AUStretchCorners, size: AUSize) -> AUStretchCorners {
-        func apply(_ base: AUPoint, percent: AUPoint, pixels: AUPoint) -> AUPoint {
+        func apply(_ base: AUPoint, pixels: AUPoint) -> AUPoint {
             AUPoint(
-                x: base.x + percent.x * size.width + pixels.x,
-                y: base.y - percent.y * size.height - pixels.y
+                x: base.x + pixels.x,
+                y: base.y - pixels.y
             )
         }
 
         return AUStretchCorners(
-            topLeft: apply(base.topLeft, percent: offsets.topLeftPercent, pixels: offsets.topLeftPixels),
-            topRight: apply(base.topRight, percent: offsets.topRightPercent, pixels: offsets.topRightPixels),
-            bottomRight: apply(base.bottomRight, percent: offsets.bottomRightPercent, pixels: offsets.bottomRightPixels),
-            bottomLeft: apply(base.bottomLeft, percent: offsets.bottomLeftPercent, pixels: offsets.bottomLeftPixels)
+            topLeft: apply(base.topLeft, pixels: offsets.topLeftPixels),
+            topRight: apply(base.topRight, pixels: offsets.topRightPixels),
+            bottomRight: apply(base.bottomRight, pixels: offsets.bottomRightPixels),
+            bottomLeft: apply(base.bottomLeft, pixels: offsets.bottomLeftPixels)
         )
     }
 
@@ -728,25 +723,19 @@ enum AnyUprightGeometry {
         )
     }
 
-    static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
-        cornerPixelOffset(forObjectPoint: point, corner: corner, offsets: offsets, base: fullFrameObjectBase(), size: size)
+    static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner, size: AUSize) -> AUPoint {
+        cornerPixelOffset(forObjectPoint: point, corner: corner, base: fullFrameObjectBase(), size: size)
     }
 
-    static func sourceCornerPixelOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner, offsets: AUCornerOffsets, size: AUSize) -> AUPoint {
-        cornerPixelOffset(forObjectPoint: point, corner: corner, offsets: offsets, base: innerStretchObjectBase(), size: size)
+    static func sourceCornerPixelOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner, size: AUSize) -> AUPoint {
+        cornerPixelOffset(forObjectPoint: point, corner: corner, base: innerStretchObjectBase(), size: size)
     }
 
-    static func sourceCornerPercentOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner) -> AUPoint {
-        let base = objectBasePoint(for: corner, in: innerStretchObjectBase())
-        return AUPoint(x: point.x - base.x, y: point.y - base.y)
-    }
-
-    private static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner, offsets: AUCornerOffsets, base: AUStretchCorners, size: AUSize) -> AUPoint {
+    private static func cornerPixelOffset(forObjectPoint point: AUPoint, corner: AUStretchCorner, base: AUStretchCorners, size: AUSize) -> AUPoint {
         let base = objectBasePoint(for: corner, in: base)
-        let percent = percentOffset(for: corner, in: offsets)
         return AUPoint(
-            x: (point.x - base.x - percent.x) * size.width,
-            y: (point.y - base.y - percent.y) * size.height
+            x: (point.x - base.x) * size.width,
+            y: (point.y - base.y) * size.height
         )
     }
 
@@ -1918,11 +1907,10 @@ enum AnyUprightGeometry {
 
     private static func objectPoint(for corner: AUStretchCorner, offsets: AUCornerOffsets, base: AUStretchCorners, size: AUSize) -> AUPoint {
         let base = objectBasePoint(for: corner, in: base)
-        let percent = percentOffset(for: corner, in: offsets)
         let pixels = pixelOffset(for: corner, in: offsets)
         return AUPoint(
-            x: base.x + percent.x + pixels.x / size.width,
-            y: base.y + percent.y + pixels.y / size.height
+            x: base.x + pixels.x / max(size.width, 1.0),
+            y: base.y + pixels.y / max(size.height, 1.0)
         )
     }
 
@@ -1954,19 +1942,6 @@ enum AnyUprightGeometry {
             return base.bottomRight
         case .bottomLeft:
             return base.bottomLeft
-        }
-    }
-
-    private static func percentOffset(for corner: AUStretchCorner, in offsets: AUCornerOffsets) -> AUPoint {
-        switch corner {
-        case .topLeft:
-            return offsets.topLeftPercent
-        case .topRight:
-            return offsets.topRightPercent
-        case .bottomRight:
-            return offsets.bottomRightPercent
-        case .bottomLeft:
-            return offsets.bottomLeftPercent
         }
     }
 

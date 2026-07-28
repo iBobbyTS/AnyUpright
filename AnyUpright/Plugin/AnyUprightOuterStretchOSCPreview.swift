@@ -53,20 +53,12 @@ struct AUOuterStretchOSCPreviewSignature: Equatable {
         values = [
             UInt32(bitPattern: state.stretchMode),
             UInt32(bitPattern: state.stretchRatioMode),
-            state.topLeftPercentX.bitPattern,
-            state.topLeftPercentY.bitPattern,
             state.topLeftPixelX.bitPattern,
             state.topLeftPixelY.bitPattern,
-            state.topRightPercentX.bitPattern,
-            state.topRightPercentY.bitPattern,
             state.topRightPixelX.bitPattern,
             state.topRightPixelY.bitPattern,
-            state.bottomRightPercentX.bitPattern,
-            state.bottomRightPercentY.bitPattern,
             state.bottomRightPixelX.bitPattern,
             state.bottomRightPixelY.bitPattern,
-            state.bottomLeftPercentX.bitPattern,
-            state.bottomLeftPercentY.bitPattern,
             state.bottomLeftPixelX.bitPattern,
             state.bottomLeftPixelY.bitPattern
         ]

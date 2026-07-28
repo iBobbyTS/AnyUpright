@@ -218,13 +218,12 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 x: (draggedObjectPoint.x - previousDragPoint.x) * size.width,
                 y: (draggedObjectPoint.y - previousDragPoint.y) * size.height
             )
-            debugOSCDragDelta(label: "mouse-drag-stretch", previous: previousResolution, current: resolved, previousObject: previousDragPoint, currentObject: draggedObjectPoint, pixelDelta: pixelDelta, size: size)
+            debugOSCDragDelta(label: "mouse-drag-stretch", previous: previousResolution, current: resolved, previousObject: previousDragPoint, currentObject: draggedObjectPoint, pixelDelta: pixelDelta)
             translateCorners(
                 from: state,
                 pixelDelta: pixelDelta,
                 corners: [.topLeft, .topRight, .bottomRight, .bottomLeft],
                 mode: mode,
-                size: size,
                 settingAPI: settingAPI,
                 time: time
             )
@@ -240,13 +239,12 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
                 x: (draggedObjectPoint.x - previousDragPoint.x) * size.width,
                 y: (draggedObjectPoint.y - previousDragPoint.y) * size.height
             )
-            debugOSCDragDelta(label: "mouse-drag-edge", previous: previousResolution, current: resolved, previousObject: previousDragPoint, currentObject: draggedObjectPoint, pixelDelta: pixelDelta, size: size)
+            debugOSCDragDelta(label: "mouse-drag-edge", previous: previousResolution, current: resolved, previousObject: previousDragPoint, currentObject: draggedObjectPoint, pixelDelta: pixelDelta)
             translateCorners(
                 from: state,
                 pixelDelta: pixelDelta,
                 corners: edgeCorners,
                 mode: mode,
-                size: size,
                 settingAPI: settingAPI,
                 time: time
             )
@@ -256,7 +254,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         }
 
         setDragState(StretchOSCDragState(part: part, lastCanvasPoint: canvasPoint, eventCoordinateMode: storedState?.eventCoordinateMode ?? resolved.coordinateMode))
-        setCorner(draggedObjectPoint, part: part, mode: mode, offsets: stretchCornerOffsets(from: state), size: size, settingAPI: settingAPI, time: time)
+        setCorner(draggedObjectPoint, part: part, mode: mode, size: size, settingAPI: settingAPI, time: time)
         forceUpdate?.pointee = true
     }
 

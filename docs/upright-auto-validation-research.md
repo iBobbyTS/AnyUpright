@@ -225,17 +225,27 @@ metric. Keep those numbers only as detector-run history; they are not directly
 comparable to the corrected same-VP metric. A full corrected rerun can reuse a
 persisted raw-line cache, but the original full run did not retain one.
 
-The neural migration and proposal-quality measurements above remain the
-research baseline. Production integration now uses ScaleLSD as the only
-Upright model detector for Semi Auto and Full Auto. A model or Metal input
-failure preserves existing candidates instead of substituting CPU Hough lines. The production
-path deliberately does not use the experimental VP/proposal rejector: it ranks
-decoded lines by monotonic normalized support score, keeps the top 10 per
-requested orientation for Semi Auto, and selects the top two per requested
-orientation for Full Auto. Full direction therefore uses 10V+10H display
-candidates or 2V+2H automatic references. This implements score-only behavior;
-it does not change the documented conclusion that Full selection quality is
-not proven by the current HoliCity proposal experiment.
+The neural migration and proposal-quality measurements above remain the V1
+research baseline. The later isolated experiment at
+`/Volumes/4T/temp/AnyUprightResearchWorkspace/experiments/homography-search-v1`
+trained a 51-feature LightGBM pair ranker and a separate risk model over the
+same fixed-512 ScaleLSD lines, VP candidate pool, and GeoCalib gravity/FOV
+prior. Its frozen independent comparison result was `79.3%` Full correctness,
+`5.2%` harmful correction, `39.94 deg` axis-residual P95, and `221.19 ms`
+Python selection P50. It improved pair selection substantially but did not pass
+all original production-entry criteria because harmful correction exceeded
+`5%` and axis-residual P95 remained high.
+
+Production now uses that frozen V2 selector only for Full-direction Full Auto.
+Semi Auto and single-direction Full Auto retain score-only selection. The Swift
+port has deterministic parity fixtures for preprocessing/VP/discrete candidate
+generation, all 51 ranker features, both tree-model outputs, and the risk gate.
+V2 changes only the selected line families: each selected supporter family is
+reduced to two representative lines and then passed to the existing common
+guided matrix solver. Consequently, the experiment's direct-homography
+`79.3%` result is not a production-equivalent plug-in quality measurement; a
+new full validation must evaluate the representative-line reduction and common
+solver together before quoting a final production quality number.
 
 Motion host timing on 2026-07-20 exposed two production integration costs. The
 shared 0.05-second FxAnalysis range produced three callbacks in a 60 fps

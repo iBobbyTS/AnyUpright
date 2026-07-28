@@ -64,6 +64,34 @@ enum AnyUprightScaleLSDDetector {
         let decodeMS = AUMonotonicClock.elapsedMilliseconds(since: decodeStart)
 
         let candidatesStart = AUMonotonicClock.nowNanos()
+        if request.controlMode == .automatic, request.correctionMode == .full {
+            do {
+                let ranked = try v2FullAutoCandidates(
+                    lines: lines,
+                    frame: frame,
+                    imageSize: AUSize(width: Double(inputSize), height: Double(inputSize))
+                )
+                let candidatesMS = AUMonotonicClock.elapsedMilliseconds(since: candidatesStart)
+                debugLog(
+                    String(
+                        format: "scalelsd_stages selector=v2 preprocess_ms=%.3f coreml_cache_hit=%@ coreml_load_ms=%.3f coreml_predict_ms=%.3f coreml_total_ms=%.3f decode_ms=%.3f candidates_ms=%.3f lines=%d candidates=%d total_ms=%.3f",
+                        preprocessMS,
+                        coreMLRun.cacheHit ? "true" : "false",
+                        coreMLRun.loadMilliseconds,
+                        coreMLRun.predictionMilliseconds,
+                        coreMLRun.totalMilliseconds,
+                        decodeMS,
+                        candidatesMS,
+                        lines.count,
+                        ranked.count,
+                        AUMonotonicClock.elapsedMilliseconds(since: totalStart)
+                    )
+                )
+                return ranked
+            } catch {
+                debugLog("upright_v2_fallback error=\(String(describing: error))")
+            }
+        }
         let candidates = AnyUprightScaleLSDPreprocessor.detectedCandidates(
             from: lines,
             imageSize: AUSize(width: Double(inputSize), height: Double(inputSize)),
@@ -87,6 +115,62 @@ enum AnyUprightScaleLSDDetector {
             )
         )
         return ranked
+    }
+
+    private static func v2FullAutoCandidates(
+        lines: [AUScaleLSDLineSegment],
+        frame: FxImageTile,
+        imageSize: AUSize
+    ) throws -> [UprightDetectedCandidate] {
+        let priorStart = AUMonotonicClock.nowNanos()
+        let prior: AUUprightV2CameraPrior?
+        do {
+            prior = try AnyUprightGeoCalibCameraPriorProvider.cameraPrior(
+                for: frame,
+                logger: debugLog
+            )
+        } catch {
+            prior = nil
+            debugLog("upright_v2_geocalib unavailable error=\(String(describing: error)); using_no_prior")
+        }
+        let selectorStart = AUMonotonicClock.nowNanos()
+        let selection = try AnyUprightUprightV2GuideSelector.select(
+            lines: lines,
+            imageSize: imageSize,
+            cameraPrior: prior
+        )
+        let selectorMS = AUMonotonicClock.elapsedMilliseconds(since: selectorStart)
+        guard selection.selected else {
+            debugLog(String(
+                format: "upright_v2_identity prior=%@ prior_ms=%.3f selector_ms=%.3f prepared=%d clusters=%d candidates=%d",
+                prior == nil ? "false" : "true",
+                AUMonotonicClock.elapsedMilliseconds(since: priorStart, nowNanos: selectorStart),
+                selectorMS,
+                selection.preparedLineCount,
+                selection.vpClusterCount,
+                selection.candidateCount
+            ))
+            return []
+        }
+        let verticalGuideCount = selection.guides.filter { $0.orientation == .vertical }.count
+        let horizontalGuideCount = selection.guides.filter { $0.orientation == .horizontal }.count
+        debugLog(String(
+            format: "upright_v2_selected prior=%@ prior_ms=%.3f selector_ms=%.3f prepared=%d clusters=%d candidates=%d pairs=%d pair_score=%.6f risk=%.6f vertical_support=%d horizontal_support=%d vertical_guides=%d horizontal_guides=%d",
+            prior == nil ? "false" : "true",
+            AUMonotonicClock.elapsedMilliseconds(since: priorStart, nowNanos: selectorStart),
+            selectorMS,
+            selection.preparedLineCount,
+            selection.vpClusterCount,
+            selection.candidateCount,
+            selection.pairCount,
+            selection.rankScore ?? .nan,
+            selection.riskProbability ?? .nan,
+            selection.verticalSupporterCount,
+            selection.horizontalSupporterCount,
+            verticalGuideCount,
+            horizontalGuideCount
+        ))
+        return selection.guides
     }
 
     private static func configuredCache() throws -> AUScaleLSDCoreMLSharedCache {

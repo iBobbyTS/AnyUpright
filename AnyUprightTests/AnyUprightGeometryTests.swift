@@ -38,6 +38,7 @@ struct AnyUprightGeometryTests {
         try testOuterStretchRenderMaskUsesPhysicalOutputCoordinates()
         try testDistanceToStretchEdgeUsesOutputPixelSegments()
         try testInnerStretchAdjusterPreviewAndApplyUseSameSelection()
+        try testInnerStretchEditMaskScalesStablePixelOffsetsIntoPreview()
         try testInnerStretchOutputHandlesStayInImageSpace()
         try testInnerStretchOutputHandlesMayLeaveVideoFrame()
         try testCanvasSurfaceMapperConvertsFxPlugOSCEvents()
@@ -536,6 +537,41 @@ struct AnyUprightGeometryTests {
         try assertMaps(appliedMatrix, AUPoint(x: outputSize.width, y: 0.0), to: selectedInnerStretch.topRight)
         try assertMaps(appliedMatrix, AUPoint(x: outputSize.width, y: outputSize.height), to: selectedInnerStretch.bottomRight)
         try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: outputSize.height), to: selectedInnerStretch.bottomLeft)
+    }
+
+    static func testInnerStretchEditMaskScalesStablePixelOffsetsIntoPreview() throws {
+        let stableSourceSize = AUSize(width: 3031.0, height: 2160.0)
+        let previewOutputSize = AUSize(width: 112.0, height: 80.0)
+        var offsets = AUCornerOffsets()
+        offsets.topLeftPixels = AUPoint(x: 82.16, y: -64.16)
+
+        let previewHandles = AnyUprightGeometry.innerStretchOutputHandles(
+            from: offsets,
+            outputSize: previewOutputSize,
+            sourceSize: stableSourceSize
+        )
+        let stableTopLeft = AnyUprightGeometry.innerStretch(
+            from: offsets,
+            size: stableSourceSize
+        ).topLeft
+        let expectedTopLeft = AUPoint(
+            x: stableTopLeft.x / stableSourceSize.width * previewOutputSize.width,
+            y: stableTopLeft.y / stableSourceSize.height * previewOutputSize.height
+        )
+
+        try assertEqual(previewHandles.topLeft, expectedTopLeft, "stable pixel offsets scale into Motion preview coordinates")
+        try assertTrue(previewHandles.topLeft.x < 20.0, "stable source offsets must not be applied directly to the 112px preview")
+        try assertTrue(previewHandles.topLeft.y < 20.0, "stable source offsets must not be applied directly to the 80px preview")
+
+        let selectionToRect = AnyUprightGeometry.stretchSelectionToOutputRectMatrix(
+            from: offsets,
+            outputSize: previewOutputSize,
+            sourceSize: stableSourceSize
+        )
+        try assertMaps(selectionToRect, previewHandles.topLeft, to: AUPoint(x: 0.0, y: 0.0))
+        try assertMaps(selectionToRect, previewHandles.topRight, to: AUPoint(x: previewOutputSize.width, y: 0.0))
+        try assertMaps(selectionToRect, previewHandles.bottomRight, to: AUPoint(x: previewOutputSize.width, y: previewOutputSize.height))
+        try assertMaps(selectionToRect, previewHandles.bottomLeft, to: AUPoint(x: 0.0, y: previewOutputSize.height))
     }
 
     static func testInnerStretchOutputHandlesStayInImageSpace() throws {

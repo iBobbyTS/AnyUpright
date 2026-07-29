@@ -752,10 +752,11 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             return AnyUprightGeometry.identityOutputToSourceMatrix(outputSize: outputSize, sourceSize: outputSize)
         }
 
+        let selectionReferenceSize = stableInputSize(from: state, fallback: sourceSize)
         return AnyUprightGeometry.stretchSelectionToOutputRectMatrix(
             from: cornerOffsets(from: state),
             outputSize: outputSize,
-            sourceSize: sourceSize
+            sourceSize: selectionReferenceSize
         )
     }
 
@@ -785,7 +786,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             return AnyUprightGeometry.innerStretchOutputHandles(
                 from: cornerOffsets(from: state),
                 outputSize: outputSize,
-                sourceSize: sourceSize
+                sourceSize: stableInputSize(from: state, fallback: sourceSize)
             )
         }
     }

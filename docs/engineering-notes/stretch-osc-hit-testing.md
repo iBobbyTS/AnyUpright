@@ -1,8 +1,8 @@
 # Stretch OSC Hit Testing And Dragging
 
-Last updated: 2026-06-10 15:47 MDT
+Last updated: 2026-07-29 10:45 MDT
 Reference commit: 11aa3148242f9743c8c48903739c604f84dd2e66
-Observed host versions: macOS 26.5, Motion Studio 6.2, Final Cut Pro 12.2
+Observed host versions: macOS 26.5, Motion Studio 6.2, Motion Creator Studio 6.3, Final Cut Pro 12.2
 
 This note records reusable OSC hit-test and drag lessons for four-corner FxPlug controls. It does not record product features or implementation choices. Project-specific choices live outside `engineering-notes`; in this repository they are recorded in `../stretch-implementation-notes.md`.
 
@@ -23,7 +23,7 @@ These observations are not Apple API guarantees. They were measured on macOS 26.
 
 - Final Cut Pro initial hover/hit points behaved as raw canvas coordinates in the tested states. Adding mapped-surface fallback for the same point created mirrored or offset hit targets.
 - Final Cut Pro handles and edges outside the visible video rectangle still needed raw-canvas hit testing if they were visibly drawn there.
-- Motion Studio retained the need for mapped-surface compatibility in tested paths, so Motion and unknown hosts may still need that fallback when the mapped point lands near the visible control layer.
+- Inner and Outer Stretch treat Motion callbacks as raw CANVAS points. The former Motion surface-local compatibility path was removed because it could remap an unrelated off-frame point into the visible control layer.
 - Host-provided `activePart` could be stale or zero in Final Cut paths; local hit testing still needed to start a drag when the pointer was over a visible handle/edge/body.
 
 ## Hit Geometry Contract
@@ -57,6 +57,7 @@ These observations are not Apple API guarantees. They were measured on macOS 26.
 - Raw Final Cut events inside the canvas frame do not add a mapped layer.
 - Visible source-selection controls outside the object/video frame keep raw-canvas hit testing in the observed Final Cut path.
 - Final Cut host paths can disable mapped-surface fallback.
+- Motion black-bar and off-frame points remain raw CANVAS points and cannot fold back into a hidden handle, edge, or body target.
 - Local hit can start a drag when host active part is none.
 - Drag display part stays highlighted even when hover stops.
 

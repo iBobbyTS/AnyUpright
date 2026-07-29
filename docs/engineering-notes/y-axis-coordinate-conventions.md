@@ -47,6 +47,7 @@ y = base.y - percent.y * height - pixels.y
 - OSC interaction should work in the coordinate space declared by `drawingCoordinates()` after any explicit `FxOnScreenControlAPI.convertPoint(...)` conversion.
 - Final Cut raw-canvas events and Motion-style surface-local events are host observations, not interchangeable coordinate facts.
 - Initial hover/hit tests should choose one event interpretation for a mouse point. Running raw and mapped interpretations for the same point can create ambiguous hit targets.
+- Inner and Outer Stretch now treat Motion and Final Cut callbacks as raw CANVAS points. The legacy Motion surface-local compatibility path was removed: remapping a raw point merely because it lies outside the canvas frame folds black-bar and off-frame positions back into the visible quadrilateral and creates an invisible second hit layer.
 - Drag writeback must use the object coordinate returned by the FxPlug canvas conversion directly. The overlay renderer and image Warp each own later coordinate boundaries; neither transform is part of parameter writeback.
 - Treat host canvas X and Y symmetrically unless callback logs prove they arrive in different spaces.
 

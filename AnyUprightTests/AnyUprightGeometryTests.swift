@@ -46,7 +46,7 @@ struct AnyUprightGeometryTests {
         try testCanvasSurfaceMapperShowsFinalCutRawEventsCanLeaveFrame()
         try testInitialOSCHitResolutionDoesNotAddMappedLayerForRawCanvasEvents()
         try testInitialOSCHitResolutionKeepsRawCanvasForVisibleControlsOutsideFrame()
-        try testFinalCutHostDisablesMappedSurfaceOSCHitFallback()
+        try testKnownAppleHostsDisableMappedSurfaceOSCHitFallback()
         try testInitialOSCHitResolutionRejectsMappedGhostAboveVisibleControls()
         try testHostCanvasPixelsStayAbsoluteForOSCOverlay()
         try testOSCSurfacePixelsFlipYOnlyAtMetalVertexBoundary()
@@ -851,7 +851,7 @@ struct AnyUprightGeometryTests {
         )
     }
 
-    static func testFinalCutHostDisablesMappedSurfaceOSCHitFallback() throws {
+    static func testKnownAppleHostsDisableMappedSurfaceOSCHitFallback() throws {
         let finalCutCanvasFrame = [
             AUPoint(x: 580.0, y: 876.0),
             AUPoint(x: 1604.0, y: 876.0),
@@ -872,7 +872,7 @@ struct AnyUprightGeometryTests {
         let mappedCanvasPoint = mapper.canvasPoint(fromEventPoint: motionStyleEvent)
 
         try assertTrue(
-            shouldUseMappedSurfaceOSCEvent(
+            !shouldUseMappedSurfaceOSCEvent(
                 forInitialEventPoint: motionStyleEvent,
                 mappedCanvasPoint: mappedCanvasPoint,
                 canvasFrame: finalCutCanvasFrame,
@@ -880,7 +880,18 @@ struct AnyUprightGeometryTests {
                 hitPadding: 24.0,
                 hostBundleIdentifier: "com.apple.Motion"
             ),
-            "Motion host should keep the mapped-surface compatibility path"
+            "Motion must not fold raw canvas events into a hidden mapped hit layer"
+        )
+        try assertTrue(
+            !shouldUseMappedSurfaceOSCEvent(
+                forInitialEventPoint: motionStyleEvent,
+                mappedCanvasPoint: mappedCanvasPoint,
+                canvasFrame: finalCutCanvasFrame,
+                visibleControlPoints: finalCutVisibleInnerStretch,
+                hitPadding: 24.0,
+                hostBundleIdentifier: "com.apple.MotionAppApp"
+            ),
+            "Motion Creator Studio must use raw canvas events"
         )
         try assertTrue(
             !shouldUseMappedSurfaceOSCEvent(

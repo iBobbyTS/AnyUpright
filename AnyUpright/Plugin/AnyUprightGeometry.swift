@@ -255,8 +255,21 @@ func isFinalCutProHost(_ bundleIdentifier: String?) -> Bool {
         || normalized == "com.apple.finalcutapp"
 }
 
+func isMotionHost(_ bundleIdentifier: String?) -> Bool {
+    guard let normalized = bundleIdentifier?.lowercased() else {
+        return false
+    }
+
+    return normalized == "com.apple.motion"
+        || normalized == "com.apple.motionapp"
+        || normalized == "com.apple.motionappapp"
+}
+
 func shouldAllowMappedSurfaceOSCEvents(hostBundleIdentifier: String?) -> Bool {
-    !isFinalCutProHost(hostBundleIdentifier)
+    guard let hostBundleIdentifier, !hostBundleIdentifier.isEmpty else {
+        return false
+    }
+    return !isFinalCutProHost(hostBundleIdentifier) && !isMotionHost(hostBundleIdentifier)
 }
 
 func shouldUseMappedSurfaceOSCEvent(

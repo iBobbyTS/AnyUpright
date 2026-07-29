@@ -313,15 +313,22 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let canvasPoints = stretchCanvasPoints(from: objectPoints)
         let points = [canvasPoints.topLeft, canvasPoints.topRight, canvasPoints.bottomRight, canvasPoints.bottomLeft]
         let displayPart = currentDisplayPart(hostActivePart: hostActivePart)
+        let shouldInvalidatePreviewCache = AUOuterStretchOSCPreviewRenderPolicy.shouldInvalidateCache(
+            objectCorners: objectPoints
+        )
+        if shouldInvalidatePreviewCache {
+            AUOuterStretchOSCPreviewCache.shared.removeMatching(
+                renderTime: time,
+                deviceRegistryID: destinationImage.deviceRegistryID
+            )
+        }
         let previewEntry = AUOuterStretchOSCPreviewCache.shared.entry(
             matching: AUOuterStretchOSCPreviewQuery(
                 renderTime: time,
                 signature: AUOuterStretchOSCPreviewSignature(state: state)
             ),
             deviceRegistryID: destinationImage.deviceRegistryID,
-            allowsStaleFallback: AUOuterStretchOSCPreviewRenderPolicy.allowsStaleFallback(
-                objectCorners: objectPoints
-            )
+            allowsStaleFallback: !shouldInvalidatePreviewCache
         )
         let textureOverlay = previewEntry.map {
             AUOSCTextureOverlay(

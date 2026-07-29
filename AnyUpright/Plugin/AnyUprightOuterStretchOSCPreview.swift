@@ -219,6 +219,36 @@ final class AUOuterStretchOSCPreviewCache {
             "removed=\(removed ? 1 : 0)"
         )
     }
+
+    func removeMatching(renderTime: CMTime, deviceRegistryID: UInt64) {
+        lock.lock()
+        var removedCount = 0
+        for sourceID in Array(records.keys) {
+            guard let sourceRecords = records[sourceID] else {
+                continue
+            }
+            let retainedRecords = sourceRecords.filter {
+                let matches = CMTimeCompare($0.query.renderTime, renderTime) == 0
+                    && $0.entry.texture.device.registryID == deviceRegistryID
+                if matches {
+                    removedCount += 1
+                }
+                return !matches
+            }
+            if retainedRecords.isEmpty {
+                records.removeValue(forKey: sourceID)
+            } else {
+                records[sourceID] = retainedRecords
+            }
+        }
+        let count = recordCount()
+        lock.unlock()
+        let renderSeconds = String(format: "%.6f", CMTimeGetSeconds(renderTime))
+        AUOuterStretchOSCPreviewDebugLog.record(
+            "cache_remove_matching time=\(renderSeconds) " +
+            "device=\(deviceRegistryID) removed=\(removedCount) records=\(count)"
+        )
+    }
 }
 
 enum AUOuterStretchOSCPreviewRenderer {

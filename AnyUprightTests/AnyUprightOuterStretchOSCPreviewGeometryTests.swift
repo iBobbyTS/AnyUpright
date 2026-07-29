@@ -25,22 +25,36 @@ struct AnyUprightOuterStretchOSCPreviewGeometryTests {
             ),
             "an in-canvas undo state must not reuse an exterior preview"
         )
+        try require(
+            AUOuterStretchOSCPreviewRenderPolicy.shouldInvalidateCache(
+                objectCorners: fullFrameObjectCorners
+            ),
+            "an in-canvas state must end the previous exterior preview lifecycle"
+        )
         for outsideCorner in [
             AUPoint(x: -0.1, y: 1.0),
             AUPoint(x: 1.1, y: 1.0),
             AUPoint(x: 0.0, y: 1.1),
-            AUPoint(x: 0.0, y: -0.1)
+            AUPoint(x: 0.0, y: -0.1),
+            AUPoint(x: -Double.ulpOfOne, y: 1.0)
         ] {
+            let corners = AUStretchCorners(
+                topLeft: outsideCorner,
+                topRight: fullFrameObjectCorners.topRight,
+                bottomRight: fullFrameObjectCorners.bottomRight,
+                bottomLeft: fullFrameObjectCorners.bottomLeft
+            )
             try require(
                 AUOuterStretchOSCPreviewRenderPolicy.allowsStaleFallback(
-                    objectCorners: AUStretchCorners(
-                        topLeft: outsideCorner,
-                        topRight: fullFrameObjectCorners.topRight,
-                        bottomRight: fullFrameObjectCorners.bottomRight,
-                        bottomLeft: fullFrameObjectCorners.bottomLeft
-                    )
+                    objectCorners: corners
                 ),
                 "an exterior current state must allow a transition preview"
+            )
+            try require(
+                !AUOuterStretchOSCPreviewRenderPolicy.shouldInvalidateCache(
+                    objectCorners: corners
+                ),
+                "an exterior current state must retain its transition preview"
             )
         }
 

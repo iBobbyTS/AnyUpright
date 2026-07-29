@@ -108,6 +108,10 @@ struct AUOuterStretchOSCPreviewLayout {
 }
 
 enum AUOuterStretchOSCPreviewRenderPolicy {
+    static func shouldInvalidateCache(objectCorners: AUStretchCorners) -> Bool {
+        !allowsStaleFallback(objectCorners: objectCorners)
+    }
+
     static func allowsStaleFallback(objectCorners: AUStretchCorners) -> Bool {
         let points: [AUPoint] = [
             objectCorners.topLeft,

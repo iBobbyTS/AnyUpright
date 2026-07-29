@@ -152,9 +152,10 @@ struct AuditFeatureSurface {
             "handleStyle: innerStretchOverlayStyle()",
             "Outer Stretch uses the same circular handles and active colors as Inner Stretch"
         )
-        try require(effects, "hiddenCollapsedFlags", "Inner Stretch hides the offset controls while keeping them as persistent state")
-        try require(effects, "addPixelSlider(paramAPI, name: \"\\(title) X px\"", "Outer Stretch exposes horizontal pixel offsets")
-        try require(effects, "addPixelSlider(paramAPI, name: \"\\(title) Y px\"", "Outer Stretch exposes vertical pixel offsets")
+        try require(effects, "let cornerGroupFlags = collapsedFlags()", "Both Stretch filters expose the four corner coordinate groups")
+        try reject(effects, "hiddenCollapsedFlags", "Stretch corner coordinate groups are not hidden")
+        try require(effects, "addPixelSlider(paramAPI, name: \"\\(title) X px\"", "Stretch exposes horizontal pixel offsets")
+        try require(effects, "addPixelSlider(paramAPI, name: \"\\(title) Y px\"", "Stretch exposes vertical pixel offsets")
         try reject(effects, "addPercentSlider", "Stretch does not register percentage corner offsets")
         try require(effects, "overlayRenderer.clear", "Stretch OSC clears its host overlay surface while the effect render output owns the visible Inner Stretch adjuster")
         try require(geometry, "stretchOutputToSourceMatrix", "Stretch render matrix is centralized in geometry")

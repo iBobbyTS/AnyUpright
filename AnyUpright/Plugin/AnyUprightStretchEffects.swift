@@ -18,10 +18,6 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         fixedStretchMode == .innerStretch
     }
 
-    var showsCornerParameters: Bool {
-        fixedStretchMode == .outputCorners
-    }
-
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         addFixedModeParameter(paramAPI)
 
@@ -49,7 +45,7 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
             )
         }
 
-        let cornerGroupFlags = showsCornerParameters ? collapsedFlags() : hiddenCollapsedFlags()
+        let cornerGroupFlags = collapsedFlags()
         addCornerParameters(paramAPI, title: "Top Left", groupID: StretchGroup.topLeft.rawValue, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY, groupFlags: cornerGroupFlags)
         addCornerParameters(paramAPI, title: "Top Right", groupID: StretchGroup.topRight.rawValue, pixelX: .topRightPixelX, pixelY: .topRightPixelY, groupFlags: cornerGroupFlags)
         addCornerParameters(paramAPI, title: "Bottom Right", groupID: StretchGroup.bottomRight.rawValue, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
@@ -98,9 +94,6 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         FxParameterFlags(kFxParameterFlag_HIDDEN)
     }
 
-    private func hiddenCollapsedFlags() -> FxParameterFlags {
-        FxParameterFlags(kFxParameterFlag_HIDDEN | kFxParameterFlag_COLLAPSED)
-    }
 }
 
 @objc(AnyUprightInnerStretchPlugIn)

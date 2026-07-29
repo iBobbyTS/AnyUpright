@@ -22,8 +22,8 @@ This file records AnyUpright-specific Stretch implementation choices. Reusable d
 - While `Edit Mode` is enabled, the filter output keeps the image unwarped and dims outside the selected input selection.
 - The filter-output dimming follows the clip/image and can render even when the host does not instantiate or dispatch the FxPlug OSC.
 - The interactive white outline, blue handles, yellow hover/drag highlights, hit testing, and drag writeback are owned by the FxPlug OSC layer.
-- Inner Stretch corner coordinate groups are hidden from the inspector; users position the input selection through onscreen handles.
-- Dragging Inner Stretch handles writes hidden source-corner pixel offsets in the source image's stable correction dimensions.
+- Inner Stretch exposes the same four collapsed corner coordinate groups as Outer Stretch, with `X px` and `Y px` controls for each corner.
+- Dragging Inner Stretch handles writes those source-corner pixel offsets in the source image's stable correction dimensions; inspector edits and OSC drags use the same persisted values.
 - A previous point-parameter writeback experiment was backed out: Motion Studio 6.2 accepted `setXValue(_:yValue:)` during OSC drags, but later reads returned default points. The current path uses float-parameter writeback.
 
 ## Outer Stretch

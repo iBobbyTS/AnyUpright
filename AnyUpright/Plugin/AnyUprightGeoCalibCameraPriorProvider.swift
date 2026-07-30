@@ -15,7 +15,8 @@ enum AnyUprightGeoCalibCameraPriorProvider {
 
     static func cameraPrior(
         for frame: FxImageTile,
-        logger: @escaping Logger
+        logger: @escaping Logger,
+        sessionReady: ((Bool) -> Void)? = nil
     ) throws -> AUUprightV2CameraPrior {
         let bounds = frame.imagePixelBounds
         let width = max(1, Int(bounds.right - bounds.left))
@@ -32,7 +33,8 @@ enum AnyUprightGeoCalibCameraPriorProvider {
         let run = try AUGeoCalibCoreMLSharedCache.shared.run(
             inputRGB: preprocessed.inputRGBNCHW,
             inputShape: preprocessed.inputShape,
-            logger: logger
+            logger: logger,
+            sessionReady: sessionReady
         )
         let optimizerStart = AUMonotonicClock.nowNanos()
         let detection = try AUGeoCalibHorizonDetector.detect(

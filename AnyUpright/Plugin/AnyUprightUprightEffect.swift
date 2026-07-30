@@ -23,6 +23,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
+        addAnalysisDisplayStatusParameter(paramAPI)
         addUprightWorkflowParameters(paramAPI, defaultFlags: defaultFlags())
         addLegacyCorrectionResultParameters(paramAPI)
         addUprightGuideParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
@@ -227,6 +228,9 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                     let state = analysisAPI.analysisStateForEffect()
                     return state == kFxAnalysisState_AnalysisRequested || state == kFxAnalysisState_AnalysisStarted
                 },
+                willStart: {
+                    self.setAnalysisDisplayStatus(.modelLoading, at: requestedTimelineTime)
+                },
                 startForwardAnalysis: { try analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU) }
             )
             switch disposition {
@@ -240,13 +244,16 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 analysisDebugLog("start_forward_invalid_timeline_time time=\(requestedTimelineTime)")
             }
         } catch {
+            setAnalysisDisplayStatus(.none, at: requestedTimelineTime)
             analysisDebugLog("start_forward_error error=\(String(describing: error))")
         }
     }
 
     func desiredAnalysisTimeRange(_ desiredRange: UnsafeMutablePointer<CMTimeRange>, forInputWith inputTimeRange: CMTimeRange) throws {
+        let requestedTimelineTime = analysisTransaction.requestedTimelineTime ?? currentParameterTime()
         guard let timingAPI = _apiManager.api(for: FxTimingAPI_v4.self) as? FxTimingAPI_v4 else {
             analysisTransaction.cancelCurrentRequest()
+            setAnalysisDisplayStatus(.none, at: requestedTimelineTime)
             throw uprightAnalysisError("FxTimingAPI_v4 is unavailable")
         }
         do {
@@ -271,6 +278,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 "desired_range timeline=\(details.requestedTimelineTime) input=\(details.inputTime) sample_duration=\(details.sampleDuration) start=\(details.range.start) duration=\(details.range.duration) input_start=\(inputTimeRange.start) input_duration=\(inputTimeRange.duration)"
             )
         } catch {
+            setAnalysisDisplayStatus(.none, at: requestedTimelineTime)
             throw uprightAnalysisError(String(describing: error))
         }
     }
@@ -303,7 +311,10 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             do {
                 let scaleLSDCandidates = try AnyUprightScaleLSDDetector.detectCandidates(
                     in: frame,
-                    request: request
+                    request: request,
+                    statusChanged: { [weak self] status in
+                        self?.setAnalysisDisplayStatus(status, at: claim.requestedTimelineTime)
+                    }
                 )
                 storeDetectedCandidates(
                     scaleLSDCandidates,
@@ -423,7 +434,14 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
     func cleanupAnalysis() throws {
         let cleanupStartNanos = AUMonotonicClock.nowNanos()
-        guard let snapshot = analysisTransaction.cleanup() else {
+        let snapshot = analysisTransaction.cleanup()
+        defer {
+            setAnalysisDisplayStatus(
+                .none,
+                at: snapshot?.requestedTimelineTime ?? currentParameterTime()
+            )
+        }
+        guard let snapshot else {
             analysisDebugLog("cleanup_skipped missing_request")
             return
         }

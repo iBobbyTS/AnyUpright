@@ -59,7 +59,6 @@ struct AnyUprightParameterState {
     var stableInputHeight: Float = 0.0
     var stableOutputWidth: Float = 0.0
     var stableOutputHeight: Float = 0.0
-
     var topLeftPixelX: Float = 0.0
     var topLeftPixelY: Float = 0.0
 
@@ -93,6 +92,14 @@ class AnyUprightOSCPlugIn: NSObject {
         _apiManager?.api(for: FxParameterSettingAPI_v5.self) as? FxParameterSettingAPI_v5
     }
 
+    func hasParameter(_ parameterID: UInt32, paramAPI: FxParameterRetrievalAPI_v6?) -> Bool {
+        guard let paramAPI else {
+            return false
+        }
+        var flags = FxParameterFlags(0)
+        return paramAPI.getParameterFlags(&flags, fromParameter: parameterID)
+    }
+
     func objectPixelSizeForOSC(defaultSize: AUSize = AUSize(width: 1920.0, height: 1080.0)) -> AUSize {
         guard let oscAPI = _apiManager.api(for: FxOnScreenControlAPI_v4.self) as? FxOnScreenControlAPI_v4 else {
             return defaultSize
@@ -103,6 +110,19 @@ class AnyUprightOSCPlugIn: NSObject {
         var pixelAspectRatio = 1.0
         oscAPI.objectWidth(&width, height: &height, pixelAspectRatio: &pixelAspectRatio)
         return AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
+    }
+
+    func analysisDisplayStatus(at time: CMTime) -> AUAnalysisDisplayStatus {
+        guard let paramAPI = parameterRetrievalAPI() else {
+            return .none
+        }
+        var rawValue = AUAnalysisDisplayStatus.none.rawValue
+        paramAPI.getIntValue(
+            &rawValue,
+            fromParameter: AUAnalysisDisplayStatusParameter.id,
+            at: time
+        )
+        return AUAnalysisDisplayStatus(rawValue: rawValue) ?? .none
     }
 }
 
@@ -127,6 +147,38 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
     func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         fatalError("Subclasses must add their parameters.")
+    }
+
+    func addAnalysisDisplayStatusParameter(_ paramAPI: FxParameterCreationAPI_v5) {
+        let flags = FxParameterFlags(
+            kFxParameterFlag_HIDDEN
+                | kFxParameterFlag_NOT_ANIMATABLE
+                | kFxParameterFlag_DONT_SAVE
+                | kFxParameterFlag_DONT_DISPLAY_IN_DASHBOARD
+        )
+        paramAPI.addIntSlider(
+            withName: "Analysis Status",
+            parameterID: AUAnalysisDisplayStatusParameter.id,
+            defaultValue: AUAnalysisDisplayStatus.none.rawValue,
+            parameterMin: AUAnalysisDisplayStatus.none.rawValue,
+            parameterMax: AUAnalysisDisplayStatus.analyzingFrame.rawValue,
+            sliderMin: AUAnalysisDisplayStatus.none.rawValue,
+            sliderMax: AUAnalysisDisplayStatus.analyzingFrame.rawValue,
+            delta: 1,
+            parameterFlags: flags
+        )
+    }
+
+    func setAnalysisDisplayStatus(_ status: AUAnalysisDisplayStatus, at time: CMTime) {
+        guard time.isValid, time.isNumeric,
+              let settingAPI = parameterSettingAPI() else {
+            return
+        }
+        _ = settingAPI.setIntValue(
+            status.rawValue,
+            toParameter: AUAnalysisDisplayStatusParameter.id,
+            at: time
+        )
     }
 
     func state(at renderTime: CMTime) -> AnyUprightParameterState {

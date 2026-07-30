@@ -115,11 +115,12 @@ final class AUGeoCalibCoreMLSharedCache {
     func run(
         inputRGB: [Float],
         inputShape: [Int],
-        logger: @escaping Logger
+        logger: @escaping Logger,
+        sessionReady: ((Bool) -> Void)? = nil
     ) throws -> AUGeoCalibCoreMLRunResult {
         let cache = try configuredCache(for: inputShape)
         cache.updateLogger(logger)
-        return try cache.withSessionForAnalysis(key: inputShape) { session in
+        return try cache.withSessionForAnalysis(key: inputShape, sessionReady: sessionReady) { session in
             try session.run(inputRGB: inputRGB, inputShape: inputShape)
         }
     }

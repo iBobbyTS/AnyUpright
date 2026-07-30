@@ -89,11 +89,16 @@ final class AUFxAnalysisTransaction<Request, Result> {
         lock.withLock { active != nil }
     }
 
+    var requestedTimelineTime: CMTime? {
+        lock.withLock { active?.requestedTimelineTime }
+    }
+
     func start(
         request: Request,
         requestedTimelineTime: CMTime,
         analysisStartNanos: UInt64 = AUMonotonicClock.nowNanos(),
         hostIsBusy: () -> Bool,
+        willStart: () -> Void = {},
         startForwardAnalysis: () throws -> Void
     ) rethrows -> AUFxAnalysisStartDisposition {
         let token: AUFxAnalysisTransactionToken
@@ -122,6 +127,7 @@ final class AUFxAnalysisTransaction<Request, Result> {
         lock.unlock()
 
         do {
+            willStart()
             try startForwardAnalysis()
             return .started(token)
         } catch {

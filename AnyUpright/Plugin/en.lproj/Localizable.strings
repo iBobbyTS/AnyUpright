@@ -7,3 +7,5 @@
 "AnyUpright::Outer Stretch OSC Description" = "Onscreen outer corner controls for AnyUpright Outer Stretch.";
 "AnyUpright::Upright Description" = "Lightroom-style manual, guided, automatic, and semi-automatic upright correction.";
 "AnyUpright::Upright OSC Description" = "Onscreen guide and candidate line controls for AnyUpright Upright.";
+"AnyUpright::Analysis Model Loading" = "模型加载中";
+"AnyUpright::Analysis Frame Analyzing" = "画面分析中";

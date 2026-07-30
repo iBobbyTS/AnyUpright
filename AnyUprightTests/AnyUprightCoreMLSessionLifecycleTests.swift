@@ -113,6 +113,7 @@ struct AnyUprightCoreMLSessionLifecycleTests {
         try testIndependentExpiryAndGenerationProtection()
         try testInferenceRetainsSessionPastCacheExpiry()
         try testLoadRetryAndPredictionFailureCacheBehavior()
+        try testSessionReadyCallbackOrderingAndCacheHit()
         try testConfigurationReplacementKeepsInFlightSessionAlive()
         print("AnyUprightCoreMLSessionLifecycleTests passed")
     }
@@ -356,6 +357,57 @@ struct AnyUprightCoreMLSessionLifecycleTests {
         try require(newResult.output == 2, "new configuration should use its own cache")
         release.signal()
         try require(completed.wait(timeout: .now() + 2) == .success, "old in-flight configuration did not finish")
+    }
+
+    private static func testSessionReadyCallbackOrderingAndCacheHit() throws {
+        let recorder = LogRecorder()
+        let cache = AUCoreMLSessionLifecycleCache<String, FakeSession>(
+            label: "test.ready",
+            retentionPolicy: longRetentionPolicy,
+            keyDescription: { $0 },
+            loadSession: { _ in FakeSession(id: 1) },
+            warmSession: { _ in },
+            logger: recorder.append
+        )
+        var events: [String] = []
+        let first = try cache.withSessionForAnalysis(
+            key: "fixed",
+            sessionReady: { events.append("ready-\($0)") }
+        ) { session in
+            events.append("run-\(session.id)")
+            return session.id
+        }
+        try require(first.output == 1 && !first.cacheHit, "first run must load")
+        try require(events == ["ready-false", "run-1"], "ready callback must precede cold prediction")
+
+        events.removeAll()
+        let second = try cache.withSessionForAnalysis(
+            key: "fixed",
+            sessionReady: { events.append("ready-\($0)") }
+        ) { session in
+            events.append("run-\(session.id)")
+            return session.id
+        }
+        try require(second.cacheHit, "second run must hit cache")
+        try require(events == ["ready-true", "run-1"], "ready callback must report cache hit before prediction")
+
+        let failing = AUCoreMLSessionLifecycleCache<String, FakeSession>(
+            label: "test.ready.failure",
+            retentionPolicy: longRetentionPolicy,
+            keyDescription: { $0 },
+            loadSession: { _ in throw CoreMLLifecycleFixtureError.load },
+            warmSession: { _ in },
+            logger: recorder.append
+        )
+        var callbackCount = 0
+        do {
+            _ = try failing.withSessionForAnalysis(
+                key: "fixed",
+                sessionReady: { _ in callbackCount += 1 }
+            ) { $0.id }
+            throw CoreMLLifecycleTestFailure.failed("load failure must throw")
+        } catch CoreMLLifecycleFixtureError.load {}
+        try require(callbackCount == 0, "failed load must not report a ready session")
     }
 
     private static let longRetentionPolicy = AUCoreMLSessionRetentionPolicy(

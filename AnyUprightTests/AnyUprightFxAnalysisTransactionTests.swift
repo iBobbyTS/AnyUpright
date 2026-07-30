@@ -18,6 +18,7 @@ struct AnyUprightFxAnalysisTransactionTests {
 
     static func main() throws {
         try testStartBusyAndRollback()
+        try testWillStartOrderingAndEligibility()
         try testConcurrentStart()
         try testDesiredRangeAndClaim()
         try testGenerationIsolationAndCleanupOutcomes()
@@ -75,6 +76,72 @@ struct AnyUprightFxAnalysisTransactionTests {
         }
         group.wait()
         try require(starts == 1 && accepted == 1, "concurrent cold start must start once")
+    }
+
+    private static func testWillStartOrderingAndEligibility() throws {
+        let transaction = AUFxAnalysisTransaction<Request, Int>()
+        var events: [String] = []
+        let started = transaction.start(
+            request: Request(value: 1),
+            requestedTimelineTime: .zero,
+            hostIsBusy: { false },
+            willStart: { events.append("willStart") },
+            startForwardAnalysis: { events.append("startForwardAnalysis") }
+        )
+        guard case .started = started else {
+            throw FxAnalysisTransactionTestFailure.failed("valid request must start")
+        }
+        try require(events == ["willStart", "startForwardAnalysis"], "willStart ordering")
+        try require(transaction.requestedTimelineTime == .zero, "active timeline time")
+
+        events.removeAll()
+        let localBusy = transaction.start(
+            request: Request(value: 2),
+            requestedTimelineTime: .zero,
+            hostIsBusy: { false },
+            willStart: { events.append("local") },
+            startForwardAnalysis: {}
+        )
+        if case .localBusy = localBusy {} else {
+            throw FxAnalysisTransactionTestFailure.failed("active request must reject local reentry")
+        }
+        try require(events.isEmpty, "local busy must not call willStart")
+        transaction.cancelCurrentRequest()
+
+        let hostBusy = transaction.start(
+            request: Request(value: 3),
+            requestedTimelineTime: .zero,
+            hostIsBusy: { true },
+            willStart: { events.append("host") },
+            startForwardAnalysis: {}
+        )
+        try require(isHostBusy(hostBusy), "host busy disposition")
+        try require(events.isEmpty, "host busy must not call willStart")
+
+        let invalid = transaction.start(
+            request: Request(value: 4),
+            requestedTimelineTime: .invalid,
+            hostIsBusy: { false },
+            willStart: { events.append("invalid") },
+            startForwardAnalysis: {}
+        )
+        if case .invalidTimelineTime = invalid {} else {
+            throw FxAnalysisTransactionTestFailure.failed("invalid time disposition")
+        }
+        try require(events.isEmpty, "invalid time must not call willStart")
+
+        do {
+            _ = try transaction.start(
+                request: Request(value: 5),
+                requestedTimelineTime: .zero,
+                hostIsBusy: { false },
+                willStart: { events.append("throwing-willStart") },
+                startForwardAnalysis: { throw StartError.failed }
+            )
+            throw FxAnalysisTransactionTestFailure.failed("throwing start must fail")
+        } catch StartError.failed {}
+        try require(events == ["throwing-willStart"], "willStart must run before a throwing host start")
+        try require(!transaction.hasPendingRequest, "throwing host start must roll back")
     }
 
     private static func testDesiredRangeAndClaim() throws {

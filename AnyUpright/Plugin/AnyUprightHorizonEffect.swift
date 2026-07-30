@@ -27,6 +27,7 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private var geoCalibCoreMLConfigurationAvailable = false
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
+        addAnalysisDisplayStatusParameter(paramAPI)
         paramAPI.addPushButton(
             withName: "Analyze Horizon",
             parameterID: HorizonParam.analyze.rawValue,
@@ -83,6 +84,9 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                     let state = analysisAPI.analysisStateForEffect()
                     return state == kFxAnalysisState_AnalysisRequested || state == kFxAnalysisState_AnalysisStarted
                 },
+                willStart: {
+                    self.setAnalysisDisplayStatus(.modelLoading, at: requestedTimelineTime)
+                },
                 startForwardAnalysis: {
                     horizonAnalysisDebugLog("start requested_timeline=\(requestedTimelineTime)")
                     try analysisAPI.startForwardAnalysis(kFxAnalysisLocation_CPU)
@@ -99,13 +103,16 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                 horizonAnalysisDebugLog("start invalid timeline time=\(requestedTimelineTime)")
             }
         } catch {
+            setAnalysisDisplayStatus(.none, at: requestedTimelineTime)
             horizonAnalysisDebugLog("startForwardAnalysis error=\(String(describing: error))")
         }
     }
 
     func desiredAnalysisTimeRange(_ desiredRange: UnsafeMutablePointer<CMTimeRange>, forInputWith inputTimeRange: CMTimeRange) throws {
+        let requestedTimelineTime = analysisTransaction.requestedTimelineTime ?? currentParameterTime()
         guard let timingAPI = _apiManager.api(for: FxTimingAPI_v4.self) as? FxTimingAPI_v4 else {
             analysisTransaction.cancelCurrentRequest()
+            setAnalysisDisplayStatus(.none, at: requestedTimelineTime)
             throw horizonAnalysisError("FxTimingAPI_v4 is unavailable")
         }
         do {
@@ -128,6 +135,7 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             desiredRange.pointee = details.range
             horizonAnalysisDebugLog("desired range timeline=\(details.requestedTimelineTime) input=\(details.inputTime) sample_duration=\(details.sampleDuration) start=\(details.range.start) duration=\(details.range.duration)")
         } catch {
+            setAnalysisDisplayStatus(.none, at: requestedTimelineTime)
             throw horizonAnalysisError(String(describing: error))
         }
     }
@@ -156,7 +164,7 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         let sinceStart = AUMonotonicClock.elapsedMilliseconds(since: claim.analysisStartNanos)
         horizonAnalysisDebugLog(String(format: "analyze begin frameTime=%@ bounds=%@ since_start_ms=%.3f", String(describing: frameTime), String(describing: bounds), sinceStart))
 
-        switch analyzeGeoCalibHorizon(frame) {
+        switch analyzeGeoCalibHorizon(frame, requestedTimelineTime: claim.requestedTimelineTime) {
         case .accepted(let correctionRadians):
             rotationRadians = correctionRadians
             horizonAnalysisDebugLog(String(format: "analyze geocalib accepted correctionDeg=%.6f", correctionRadians * 180 / Double.pi))
@@ -165,6 +173,7 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             horizonAnalysisDebugLog("analyze geocalib rejected")
             return
         case .unavailable:
+            setAnalysisDisplayStatus(.analyzingFrame, at: claim.requestedTimelineTime)
             horizonAnalysisDebugLog("analyze geocalib unavailable; trying fallback detectors")
             guard let image = AnyUprightAnalysisImage.ciImage(from: frame) else {
                 analysisTransaction.relinquishFrame(token: claim.token)
@@ -224,7 +233,14 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     func cleanupAnalysis() throws {
-        guard let snapshot = analysisTransaction.cleanup() else {
+        let snapshot = analysisTransaction.cleanup()
+        defer {
+            setAnalysisDisplayStatus(
+                .none,
+                at: snapshot?.requestedTimelineTime ?? currentParameterTime()
+            )
+        }
+        guard let snapshot else {
             horizonAnalysisDebugLog("cleanup ignored without pending request")
             return
         }
@@ -329,7 +345,10 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         )
     }
 
-    private func analyzeGeoCalibHorizon(_ frame: FxImageTile) -> GeoCalibHorizonAnalysisOutcome {
+    private func analyzeGeoCalibHorizon(
+        _ frame: FxImageTile,
+        requestedTimelineTime: CMTime
+    ) -> GeoCalibHorizonAnalysisOutcome {
         let totalStart = AUMonotonicClock.nowNanos()
 
         do {
@@ -357,7 +376,10 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             let run = try AUGeoCalibCoreMLSharedCache.shared.run(
                 inputRGB: preprocessed.inputRGBNCHW,
                 inputShape: preprocessed.inputShape,
-                logger: Self.horizonAnalysisDebugLog
+                logger: Self.horizonAnalysisDebugLog,
+                sessionReady: { [weak self] _ in
+                    self?.setAnalysisDisplayStatus(.analyzingFrame, at: requestedTimelineTime)
+                }
             )
             coreMLRun = run
             let optimizerStart = AUMonotonicClock.nowNanos()

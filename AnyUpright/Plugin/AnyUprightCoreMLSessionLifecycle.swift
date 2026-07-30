@@ -181,6 +181,7 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
 
     func withSessionForAnalysis<Output>(
         key: Key,
+        sessionReady: ((Bool) -> Void)? = nil,
         run: (Session) throws -> Output
     ) throws -> AUCoreMLSessionLifecycleRunResult<Output> {
         let totalStart = AUMonotonicClock.nowNanos()
@@ -215,6 +216,7 @@ final class AUCoreMLSessionLifecycleCache<Key: Hashable, Session> {
             throw error
         }
         pendingLogs.forEach(emit)
+        sessionReady?(acquisition.cacheHit)
 
         let predictionStart = AUMonotonicClock.nowNanos()
         do {

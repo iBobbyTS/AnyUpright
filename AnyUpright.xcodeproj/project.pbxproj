@@ -62,6 +62,8 @@
 		B0B4FADB2FD2A99500794BBA /* Exceptions for "AnyUpright" folder in "Wrapper Application" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Plugin/AnyUprightAnalysisStatus.swift,
+				Plugin/AnyUprightAnalysisStatusTextRenderer.swift,
 				"/Localized: Plugin/InfoPlist.strings",
 				"/Localized: Plugin/Localizable.strings",
 				Plugin/AnyUprightAnalysisSupport.swift,

@@ -233,9 +233,10 @@ final class AnyUprightOSCOverlayRenderer {
         handleStyle: AUOSCOverlayStyle = AUOSCOverlayStyle(),
         dimmingRegions: [[AUPoint]] = [],
         textureOverlay: AUOSCTextureOverlay? = nil,
+        analysisStatus: AUAnalysisDisplayStatus = .none,
         debugLog: ((String) -> Void)? = nil
     ) {
-        guard !segments.isEmpty || !handles.isEmpty || textureOverlay != nil else {
+        guard !segments.isEmpty || !handles.isEmpty || textureOverlay != nil || analysisStatus != .none else {
             return
         }
 
@@ -248,10 +249,6 @@ final class AnyUprightOSCOverlayRenderer {
         }
         guard let commandQueue = device.makeCommandQueue(),
               let commandBuffer = commandQueue.makeCommandBuffer() else {
-            return
-        }
-
-        guard let pipelineState = pipelineState(device: device, pixelFormat: outputTexture.pixelFormat) else {
             return
         }
 
@@ -335,6 +332,13 @@ final class AnyUprightOSCOverlayRenderer {
             appendHandle(center: handle.point, radius: handleStyle.handleRadius, color: color, shape: handleStyle.handleShape, coordinateSpace: coordinateSpace, coordinateSize: coordinateSize, pixelFrame: coordinateFrame, width: width, height: height, to: &vertices)
         }
 
+        let linePipelineState = vertices.isEmpty
+            ? nil
+            : pipelineState(device: device, pixelFormat: outputTexture.pixelFormat)
+        guard vertices.isEmpty || linePipelineState != nil else {
+            return
+        }
+
         debugOverlayVertexSummary(vertices: vertices, width: width, height: height, log: debugLog)
 
         let colorAttachment = MTLRenderPassColorAttachmentDescriptor()
@@ -384,12 +388,29 @@ final class AnyUprightOSCOverlayRenderer {
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: textureVertices.count)
         }
         if !vertices.isEmpty {
-            encoder.setRenderPipelineState(pipelineState)
+            encoder.setRenderPipelineState(linePipelineState!)
             encoder.setVertexBuffer(vertexBuffer!, offset: 0, index: Int(AUVII_Vertices.rawValue))
             encoder.setVertexBytes(&viewportSize, length: MemoryLayout.size(ofValue: viewportSize), index: Int(AUVII_ViewportSize.rawValue))
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: vertices.count)
         }
         encoder.endEncoding()
+
+        if analysisStatus != .none {
+            let imageRect = AUAnalysisStatusRect(
+                left: 0.0,
+                bottom: 0.0,
+                right: Double(outputTexture.width),
+                top: Double(outputTexture.height)
+            )
+            AUAnalysisStatusTextRenderer.shared.encode(
+                status: analysisStatus,
+                commandBuffer: commandBuffer,
+                device: device,
+                drawableTexture: outputTexture,
+                imageRect: imageRect,
+                tileRect: imageRect
+            )
+        }
 
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()

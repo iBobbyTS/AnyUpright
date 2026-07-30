@@ -168,10 +168,14 @@ final class AUScaleLSDCoreMLSharedCache {
         cache.prewarmAfterPluginAdded(key: .fixed512)
     }
 
-    func run(inputNCHW: [Float], logger: @escaping Logger) throws -> AUScaleLSDCoreMLRunResult {
+    func run(
+        inputNCHW: [Float],
+        logger: @escaping Logger,
+        sessionReady: ((Bool) -> Void)? = nil
+    ) throws -> AUScaleLSDCoreMLRunResult {
         let cache = try configuredCache()
         cache.updateLogger(logger)
-        return try cache.withSessionForAnalysis(key: .fixed512) { session in
+        return try cache.withSessionForAnalysis(key: .fixed512, sessionReady: sessionReady) { session in
             try session.run(inputNCHW: inputNCHW)
         }
     }

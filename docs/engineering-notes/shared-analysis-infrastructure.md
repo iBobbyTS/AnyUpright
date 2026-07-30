@@ -8,6 +8,7 @@ AnyUpright shares three internal mechanisms across explicit analysis paths witho
 - `AUCoreMLMultiArrayIO` for GeoCalib and ScaleLSD Float32 tensor transport.
 - `AUAppleSiliconImageResampler` for GeoCalib and ScaleLSD Metal texture downsampling and tensor packing.
 - `AUAnalysisLogger` and `AUMonotonicClock` for analysis diagnostics and timing.
+- `AUAnalysisDisplayStatus` and `AUAnalysisStatusTextRenderer` for transient OSC-only analysis feedback.
 
 Warp rendering, Upright reference-line rendering, Stretch OSC diagnostics, model-specific resize layout, output interpretation, fallback decisions, candidate ranking, and parameter writeback remain outside these components.
 
@@ -36,3 +37,11 @@ The production resampler is intentionally Apple Silicon Metal-only. FxAnalysis f
 `AUMonotonicClock` is the single source for analysis and Core ML lifecycle durations. `AUAnalysisLogger` checks a marker file and serializes append operations per process-level logger instance. Horizon and Upright/ScaleLSD retain separate marker and output paths; Upright and ScaleLSD intentionally share one logger and write lock.
 
 These diagnostics do not cover playback rendering or Stretch OSC event logging.
+
+## Analysis Status Overlay
+
+Horizon and Upright register the same hidden, non-animatable, `DONT_SAVE` integer parameter. It carries transient analysis state from the filter instance to its OSC companion; it is not project state and must never affect correction geometry or persisted parameters.
+
+An accepted request first writes `模型加载中`. The typed Core ML lifecycle cache invokes its `sessionReady` callback after session acquisition and immediately before prediction, which changes the state to `画面分析中`. Upright may enter the loading state again when its optional GeoCalib camera-prior session is acquired. Host-busy or local-busy requests do not touch the current state. Start failure, invalid time conversion, normal completion, model failure, and host cleanup all clear the parameter.
+
+The shared renderer creates a cached CoreText texture with a translucent background and composites it in the FxOnScreenControl drawable after the normal OSC geometry. Horizon reuses the existing stable `AnyUprightUprightOSCPlugIn` registration for this status-only pass; Upright adds the status to the same control pass. The status is therefore excluded from final Warp output and tiled render output. `AUAnalysisStatusOverlayLayout` centers the card in the OSC drawable and clips both vertices and texture coordinates to that drawable. The status renderer does not own analysis transitions; each effect remains responsible for mapping its model stages to the shared enum.

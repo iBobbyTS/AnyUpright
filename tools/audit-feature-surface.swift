@@ -59,6 +59,10 @@ struct AuditFeatureSurface {
         let analysisTransaction = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightFxAnalysisTransaction.swift"), encoding: .utf8)
 
         try auditRegisteredPlugins(infoPlist)
+        try reject(warp, "AUAnalysisStatusTextRenderer.shared.encode", "Analysis status remains outside the final Warp output")
+        try reject(warp, "var analysisDisplayStatus:", "Warp parameter state does not carry OSC-only analysis status")
+        try reject(warp, "populateAnalysisDisplayStatus", "Warp render state does not read OSC-only analysis status")
+        try require(overlay, "analysisStatus: AUAnalysisDisplayStatus", "OSC overlay owns analysis status composition")
         try auditHorizon(horizonEffect, transaction: analysisTransaction)
         try auditStretch(stretchEffects, geometry: geometry, overlay: overlay, metal: metal)
         try auditUpright(uprightEffects, geometry: geometry, warp: warp, metal: metal, candidates: candidates, transaction: analysisTransaction)
@@ -86,7 +90,7 @@ struct AuditFeatureSurface {
             FeaturePluginExpectation(className: "AnyUprightInnerStretchOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]),
             FeaturePluginExpectation(className: "AnyUprightOuterStretchOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["81C621CF-4119-46E9-BC04-47A1539A8B54"]),
             FeaturePluginExpectation(className: "AnyUprightUprightPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
-            FeaturePluginExpectation(className: "AnyUprightUprightOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB"])
+            FeaturePluginExpectation(className: "AnyUprightUprightOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB", "2E32E3C2-91C7-44D4-A0AC-0E87832A86A1"])
         ]
 
         for item in expected {
@@ -197,7 +201,7 @@ struct AuditFeatureSurface {
         try require(effects, "selectionValueAfterToggling", "Upright semi-auto can select candidates from onscreen controls")
         try require(effects, "writeUprightManualGuides", "Upright can transfer selected automatic lines into manual guides")
         try require(effects, "class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer", "Upright filter is separated from its onscreen control")
-        try require(effects, "class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Upright exposes onscreen controls as a separate FxPlug class")
+        try require(effects, "class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Upright and Horizon share the stable status/OSC control class")
         try require(effects, "guide4Enabled", "Upright exposes four guide lines")
         try require(effects, "guide4Start", "Upright exposes the fourth guide start handle")
         try require(effects, "guide4End", "Upright exposes the fourth guide end handle")

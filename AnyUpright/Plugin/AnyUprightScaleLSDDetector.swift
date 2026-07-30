@@ -39,7 +39,8 @@ enum AnyUprightScaleLSDDetector {
 
     static func detectCandidates(
         in frame: FxImageTile,
-        request: UprightAnalysisRequest
+        request: UprightAnalysisRequest,
+        statusChanged: ((AUAnalysisDisplayStatus) -> Void)? = nil
     ) throws -> [UprightDetectedCandidate] {
         let totalStart = AUMonotonicClock.nowNanos()
         let sourceBounds = frame.imagePixelBounds
@@ -51,7 +52,12 @@ enum AnyUprightScaleLSDDetector {
         let input = try resampledGrayscaleInput(from: frame)
         let preprocessMS = AUMonotonicClock.elapsedMilliseconds(since: preprocessStart)
 
-        let coreMLRun = try configuredCache().run(inputNCHW: input, logger: debugLog)
+        statusChanged?(.modelLoading)
+        let coreMLRun = try configuredCache().run(
+            inputNCHW: input,
+            logger: debugLog,
+            sessionReady: { _ in statusChanged?(.analyzingFrame) }
+        )
         let dense = coreMLRun.output
 
         let decodeStart = AUMonotonicClock.nowNanos()
@@ -70,7 +76,8 @@ enum AnyUprightScaleLSDDetector {
                     lines: lines,
                     frame: frame,
                     imageSize: AUSize(width: Double(inputSize), height: Double(inputSize)),
-                    policy: v2Policy
+                    policy: v2Policy,
+                    statusChanged: statusChanged
                 )
                 let candidatesMS = AUMonotonicClock.elapsedMilliseconds(since: candidatesStart)
                 debugLog(
@@ -122,17 +129,21 @@ enum AnyUprightScaleLSDDetector {
         lines: [AUScaleLSDLineSegment],
         frame: FxImageTile,
         imageSize: AUSize,
-        policy: AUUprightV2GuideSelectionPolicy
+        policy: AUUprightV2GuideSelectionPolicy,
+        statusChanged: ((AUAnalysisDisplayStatus) -> Void)?
     ) throws -> [UprightDetectedCandidate] {
         let priorStart = AUMonotonicClock.nowNanos()
         let prior: AUUprightV2CameraPrior?
         do {
+            statusChanged?(.modelLoading)
             prior = try AnyUprightGeoCalibCameraPriorProvider.cameraPrior(
                 for: frame,
-                logger: debugLog
+                logger: debugLog,
+                sessionReady: { _ in statusChanged?(.analyzingFrame) }
             )
         } catch {
             prior = nil
+            statusChanged?(.analyzingFrame)
             debugLog("upright_v2_geocalib unavailable error=\(String(describing: error)); using_no_prior")
         }
         let selectorStart = AUMonotonicClock.nowNanos()

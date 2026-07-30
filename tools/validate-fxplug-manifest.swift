@@ -104,7 +104,7 @@ struct ValidateFxPlugManifest {
                 protocols: ["FxOnScreenControl"],
                 localizedDisplayName: "AnyUpright Upright Controls",
                 localizedDescription: "Onscreen guide and candidate line controls for AnyUpright Upright.",
-                supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB"]
+                supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB", "2E32E3C2-91C7-44D4-A0AC-0E87832A86A1"]
             )
         ]
 

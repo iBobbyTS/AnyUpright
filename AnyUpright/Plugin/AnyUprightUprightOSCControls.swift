@@ -21,7 +21,27 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     @objc(drawOSCWithWidth:height:activePart:destinationImage:atTime:)
     func drawOSC(withWidth width: Int, height: Int, activePart: Int, destinationImage: FxImageTile, at time: CMTime) {
         let paramAPI = parameterRetrievalAPI()
-        guard uprightEditMode(at: time, paramAPI: paramAPI) else {
+        let analysisStatus = analysisDisplayStatus(at: time)
+
+        if analysisStatus != .none {
+            overlayRenderer.renderStyledSegments(
+                [],
+                handles: [],
+                activePart: activePart,
+                destinationImage: destinationImage,
+                destinationSize: AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height))),
+                canvasFrame: objectCanvasFrame(),
+                coordinateSpace: .canvasFramePixels,
+                analysisStatus: analysisStatus
+            )
+            return
+        }
+
+        guard hasParameter(UprightParam.editMode.rawValue, paramAPI: paramAPI) else {
+            overlayRenderer.clear(destinationImage: destinationImage)
+            return
+        }
+        guard uprightEditMode(at: time, paramAPI: paramAPI) || analysisStatus != .none else {
             overlayRenderer.clear(destinationImage: destinationImage)
             return
         }
@@ -73,7 +93,7 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
                 AUOSCHandle(point: $0.end, part: $0.guide.spec.endPart.rawValue, colorOverride: colorOverride)
             ]
         }
-        guard !segments.isEmpty || !handles.isEmpty else {
+        guard !segments.isEmpty || !handles.isEmpty || analysisStatus != .none else {
             overlayRenderer.clear(destinationImage: destinationImage)
             return
         }
@@ -85,7 +105,8 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
             destinationImage: destinationImage,
             destinationSize: AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height))),
             canvasFrame: objectCanvasFrame(),
-            coordinateSpace: .canvasFramePixels
+            coordinateSpace: .canvasFramePixels,
+            analysisStatus: analysisStatus
         )
     }
 
@@ -94,6 +115,9 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
         let paramAPI = parameterRetrievalAPI()
         let mouse = AUPoint(x: mousePositionX, y: mousePositionY)
         activePart?.pointee = UprightOSCPart.none.rawValue
+        guard hasParameter(UprightParam.editMode.rawValue, paramAPI: paramAPI) else {
+            return
+        }
         guard uprightEditMode(at: time, paramAPI: paramAPI) else {
             return
         }
@@ -149,10 +173,14 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     @objc(mouseDownAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseDown(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         let paramAPI = parameterRetrievalAPI()
+        guard hasParameter(UprightParam.editMode.rawValue, paramAPI: paramAPI),
+              let settingAPI = parameterSettingAPI() else {
+            forceUpdate?.pointee = false
+            return
+        }
         let correctionMode = uprightCorrectionMode(at: time, paramAPI: paramAPI)
         let controlMode = uprightControlMode(at: time, paramAPI: paramAPI)
-        guard uprightEditMode(at: time, paramAPI: paramAPI),
-              let settingAPI = parameterSettingAPI() else {
+        guard uprightEditMode(at: time, paramAPI: paramAPI) else {
             forceUpdate?.pointee = false
             return
         }
@@ -186,7 +214,8 @@ class AnyUprightUprightOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4 {
     @objc(mouseDraggedAtPositionX:positionY:activePart:modifiers:forceUpdate:atTime:)
     func mouseDragged(atPositionX mousePositionX: Double, positionY mousePositionY: Double, activePart: Int, modifiers: FxModifierKeys, forceUpdate: UnsafeMutablePointer<ObjCBool>?, at time: CMTime) {
         let paramAPI = parameterRetrievalAPI()
-        guard uprightEditMode(at: time, paramAPI: paramAPI),
+        guard hasParameter(UprightParam.editMode.rawValue, paramAPI: paramAPI),
+              uprightEditMode(at: time, paramAPI: paramAPI),
               uprightControlMode(at: time, paramAPI: paramAPI) == .manual else {
             forceUpdate?.pointee = false
             return

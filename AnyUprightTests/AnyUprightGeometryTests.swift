@@ -30,7 +30,7 @@ struct AnyUprightGeometryTests {
         try testInnerStretchObjectDragPreservesFullFrameBase()
         try testInnerStretchWritebackUsesImageCoordinates()
         try testLineIntersectionFindsCrossingPoint()
-        try testInnerStretchFullFrameSelectionHasNoDYDrift()
+        try testInnerStretchDefaultSelectionHasNoDYDrift()
         try testInnerStretchObjectSpacePixelsMatchFxPlugOSCEvents()
         try testInnerStretchMappedSurfaceDragWritesObjectYDirectly()
         try testInnerStretchRawCanvasDragWritesObjectYDirectly()
@@ -322,9 +322,9 @@ struct AnyUprightGeometryTests {
         try assertApprox(point.y, 26.76, "corner y", accuracy: 0.01)
     }
 
-    static func testInnerStretchFullFrameSelectionHasNoDYDrift() throws {
+    static func testInnerStretchDefaultSelectionHasNoDYDrift() throws {
         let size = AUSize(width: 200.0, height: 100.0)
-        let offsets = fullFrameSourceOffsets(size: size)
+        let offsets = AUCornerOffsets()
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
         let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
         let outputHandles = AnyUprightGeometry.innerStretchOutputHandles(
@@ -3394,10 +3394,6 @@ struct AnyUprightGeometryTests {
         guard actual == expected else {
             throw TestFailure.failed("\(label): expected \(expected), got \(actual)")
         }
-    }
-
-    static func fullFrameSourceOffsets(size: AUSize) -> AUCornerOffsets {
-        AUCornerOffsets()
     }
 
     static func line(angleDegrees: Double, length: Double) -> AULineSegment {

@@ -167,6 +167,7 @@ struct AuditFeatureSurface {
         try require(geometry, "stretchSelectionToOutputRectMatrix", "Inner Stretch edit preview identifies the selected source area")
         try require(geometry, "innerStretchDefault", "Inner Stretch defines its default input selection")
         try require(geometry, "AUStretchCorners.fullFrame(size)", "Inner Stretch defaults to the four source-frame corners")
+        try reject(geometry, "innerStretchInset", "Inner Stretch no longer keeps a central-inset default")
         try require(geometry, "innerStretchObjectPoints", "Inner Stretch converts persistent offsets into object-space handles")
         try require(geometry, "guard !showCornerAdjuster else", "Inner Stretch mode can preview handles without warping")
         try require(geometry, "sourceCornerPixelOffset", "Inner Stretch OSC writes source-corner pixel offsets")

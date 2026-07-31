@@ -45,10 +45,10 @@ struct AnyUprightAnalysisStatusTests {
             SIMD2<Float>(-100, 40),
         ], "full tile positions")
         try require(quad.textureCoordinates == [
-            SIMD2<Float>(1, 1),
-            SIMD2<Float>(0, 1),
             SIMD2<Float>(1, 0),
             SIMD2<Float>(0, 0),
+            SIMD2<Float>(1, 1),
+            SIMD2<Float>(0, 1),
         ], "full tile texture coordinates")
     }
 
@@ -75,8 +75,8 @@ struct AnyUprightAnalysisStatusTests {
             cardWidth: 200,
             cardHeight: 80
         ))
-        try require(approximatelyEqual(top.textureCoordinates[0].y, 0.5), "top tile lower v clipping")
-        try require(top.textureCoordinates[2].y == 0, "top tile starts at v=0")
+        try require(approximatelyEqual(top.textureCoordinates[0].y, 0.5), "top tile lower flipped-v clipping")
+        try require(top.textureCoordinates[2].y == 1, "top tile ends at flipped v=1")
     }
 
     private static func testNoIntersectionAndInvalidDimensions() throws {

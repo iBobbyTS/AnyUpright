@@ -106,8 +106,10 @@ enum AUAnalysisStatusOverlayLayout {
 
         let uLeft = Float((visible.left - card.left) / card.width)
         let uRight = Float((visible.right - card.left) / card.width)
-        let vTop = Float((card.top - visible.top) / card.height)
-        let vBottom = Float((card.top - visible.bottom) / card.height)
+        // Motion composes the OSC IOSurface across the Y-up Canvas boundary.
+        // Flip only the text texture UVs; the Canvas-space quad stays unchanged.
+        let vBottom = Float((visible.bottom - card.bottom) / card.height)
+        let vTop = Float((visible.top - card.bottom) / card.height)
 
         return AUAnalysisStatusOverlayQuad(
             positions: [

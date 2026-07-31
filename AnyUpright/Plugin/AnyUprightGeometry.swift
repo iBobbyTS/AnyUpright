@@ -412,8 +412,6 @@ func resolveOSCDisplayPart(hostActivePart: Int = 0, hoverPart: Int, dragPart: In
 }
 
 enum AnyUprightGeometry {
-    private static let innerStretchInset = 0.10
-
     static func outputCoordinateBounds(for tileBounds: AUPixelBounds, imageBounds: AUPixelBounds) -> AUOutputCoordinateBounds {
         AUOutputCoordinateBounds(
             left: Double(tileBounds.left - imageBounds.left),
@@ -587,12 +585,7 @@ enum AnyUprightGeometry {
     }
 
     static func innerStretchDefault(_ size: AUSize) -> AUStretchCorners {
-        AUStretchCorners(
-            topLeft: AUPoint(x: size.width * innerStretchInset, y: size.height * innerStretchInset),
-            topRight: AUPoint(x: size.width * (1.0 - innerStretchInset), y: size.height * innerStretchInset),
-            bottomRight: AUPoint(x: size.width * (1.0 - innerStretchInset), y: size.height * (1.0 - innerStretchInset)),
-            bottomLeft: AUPoint(x: size.width * innerStretchInset, y: size.height * (1.0 - innerStretchInset))
-        )
+        AUStretchCorners.fullFrame(size)
     }
 
     static func innerStretch(from offsets: AUCornerOffsets, size: AUSize) -> AUStretchCorners {
@@ -1937,12 +1930,7 @@ enum AnyUprightGeometry {
     }
 
     private static func innerStretchObjectBase() -> AUStretchCorners {
-        AUStretchCorners(
-            topLeft: AUPoint(x: innerStretchInset, y: 1.0 - innerStretchInset),
-            topRight: AUPoint(x: 1.0 - innerStretchInset, y: 1.0 - innerStretchInset),
-            bottomRight: AUPoint(x: 1.0 - innerStretchInset, y: innerStretchInset),
-            bottomLeft: AUPoint(x: innerStretchInset, y: innerStretchInset)
-        )
+        fullFrameObjectBase()
     }
 
     private static func objectBasePoint(for corner: AUStretchCorner, in base: AUStretchCorners) -> AUPoint {

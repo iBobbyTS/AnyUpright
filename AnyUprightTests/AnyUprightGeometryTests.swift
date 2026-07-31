@@ -25,8 +25,8 @@ struct AnyUprightGeometryTests {
         try testStretchObjectPointsKeepCanvasCornerDefinitions()
         try testStretchObjectDragWritesAbsolutePixelOffsets()
         try testStretchOutputCornersKeepTheirNamedPositions()
-        try testInnerStretchDefaultsToCentralEightyPercent()
-        try testInnerStretchObjectDragPreservesCentralBase()
+        try testInnerStretchDefaultsToFullFrame()
+        try testInnerStretchObjectDragPreservesFullFrameBase()
         try testInnerStretchWritebackUsesImageCoordinates()
         try testLineIntersectionFindsCrossingPoint()
         try testInnerStretchFullFrameSelectionHasNoDYDrift()
@@ -238,7 +238,7 @@ struct AnyUprightGeometryTests {
         try assertMaps(matrix, outputStretch.bottomLeft, to: AUPoint(x: 0.0, y: size.height))
     }
 
-    static func testInnerStretchDefaultsToCentralEightyPercent() throws {
+    static func testInnerStretchDefaultsToFullFrame() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         let offsets = AUCornerOffsets()
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
@@ -251,15 +251,15 @@ struct AnyUprightGeometryTests {
             sourceSize: size
         )
 
-        try assertEqual(innerStretch.topLeft, AUPoint(x: 20.0, y: 10.0), "source default top-left")
-        try assertEqual(innerStretch.topRight, AUPoint(x: 180.0, y: 10.0), "source default top-right")
-        try assertEqual(innerStretch.bottomRight, AUPoint(x: 180.0, y: 90.0), "source default bottom-right")
-        try assertEqual(innerStretch.bottomLeft, AUPoint(x: 20.0, y: 90.0), "source default bottom-left")
+        try assertEqual(innerStretch.topLeft, AUPoint(x: 0.0, y: 0.0), "source default top-left")
+        try assertEqual(innerStretch.topRight, AUPoint(x: size.width, y: 0.0), "source default top-right")
+        try assertEqual(innerStretch.bottomRight, AUPoint(x: size.width, y: size.height), "source default bottom-right")
+        try assertEqual(innerStretch.bottomLeft, AUPoint(x: 0.0, y: size.height), "source default bottom-left")
 
-        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.10, y: 0.90), "source default object top-left")
-        try assertEqual(objectPoints.topRight, AUPoint(x: 0.90, y: 0.90), "source default object top-right")
-        try assertEqual(objectPoints.bottomRight, AUPoint(x: 0.90, y: 0.10), "source default object bottom-right")
-        try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.10, y: 0.10), "source default object bottom-left")
+        try assertEqual(objectPoints.topLeft, AUPoint(x: 0.0, y: 1.0), "source default object top-left")
+        try assertEqual(objectPoints.topRight, AUPoint(x: 1.0, y: 1.0), "source default object top-right")
+        try assertEqual(objectPoints.bottomRight, AUPoint(x: 1.0, y: 0.0), "source default object bottom-right")
+        try assertEqual(objectPoints.bottomLeft, AUPoint(x: 0.0, y: 0.0), "source default object bottom-left")
 
         try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: 0.0), to: innerStretch.topLeft)
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: innerStretch.topRight)
@@ -267,7 +267,7 @@ struct AnyUprightGeometryTests {
         try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: innerStretch.bottomLeft)
     }
 
-    static func testInnerStretchObjectDragPreservesCentralBase() throws {
+    static func testInnerStretchObjectDragPreservesFullFrameBase() throws {
         let size = AUSize(width: 200.0, height: 100.0)
         var offsets = AUCornerOffsets()
 
@@ -281,7 +281,7 @@ struct AnyUprightGeometryTests {
         let objectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
-        try assertEqual(pixels, AUPoint(x: 20.0, y: -10.0), "source dragged top-left pixel offset")
+        try assertEqual(pixels, AUPoint(x: 40.0, y: -20.0), "source dragged top-left pixel offset")
         try assertEqual(objectPoints.topLeft, AUPoint(x: 0.20, y: 0.80), "source dragged top-left object point")
         try assertEqual(innerStretch.topLeft, AUPoint(x: 40.0, y: 20.0), "source dragged top-left source point")
     }
@@ -357,10 +357,10 @@ struct AnyUprightGeometryTests {
         let defaultObjectPoints = AnyUprightGeometry.innerStretchObjectPoints(from: offsets, size: size)
         let defaultPixels = AnyUprightGeometry.objectPixelSelection(fromNormalizedObjectSelection: defaultObjectPoints, size: size)
 
-        try assertEqual(defaultPixels.topLeft, AUPoint(x: 20.0, y: 90.0), "source object top-left pixel")
-        try assertEqual(defaultPixels.topRight, AUPoint(x: 180.0, y: 90.0), "source object top-right pixel")
-        try assertEqual(defaultPixels.bottomRight, AUPoint(x: 180.0, y: 10.0), "source object bottom-right pixel")
-        try assertEqual(defaultPixels.bottomLeft, AUPoint(x: 20.0, y: 10.0), "source object bottom-left pixel")
+        try assertEqual(defaultPixels.topLeft, AUPoint(x: 0.0, y: size.height), "source object top-left pixel")
+        try assertEqual(defaultPixels.topRight, AUPoint(x: size.width, y: size.height), "source object top-right pixel")
+        try assertEqual(defaultPixels.bottomRight, AUPoint(x: size.width, y: 0.0), "source object bottom-right pixel")
+        try assertEqual(defaultPixels.bottomLeft, AUPoint(x: 0.0, y: 0.0), "source object bottom-left pixel")
 
         let draggedPixel = AUPoint(x: 45.0, y: 75.0)
         let draggedNormalized = AnyUprightGeometry.normalizedObjectPoint(fromObjectPixelPoint: draggedPixel, size: size)
@@ -376,7 +376,7 @@ struct AnyUprightGeometryTests {
             size: size
         )
         let updatedInnerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
-        try assertEqual(pixels, AUPoint(x: 25.0, y: -15.0), "source object-space drag pixel offset")
+        try assertEqual(pixels, AUPoint(x: 45.0, y: -25.0), "source object-space drag pixel offset")
         try assertEqual(updatedObjectPixels.topLeft, draggedPixel, "source object-space drag target")
         try assertEqual(updatedInnerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "inner stretch should sample the Y-flipped image point matching the visible handle")
     }
@@ -399,7 +399,7 @@ struct AnyUprightGeometryTests {
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
         try assertEqual(objectPoint, AUPoint(x: 0.225, y: 0.75), "mapped-surface object point")
-        try assertEqual(pixels, AUPoint(x: 25.0, y: -15.0), "mapped-surface drag pixels")
+        try assertEqual(pixels, AUPoint(x: 45.0, y: -25.0), "mapped-surface drag pixels")
         try assertEqual(innerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "mapped-surface object Y should map to the same visual corner")
     }
 
@@ -417,7 +417,7 @@ struct AnyUprightGeometryTests {
         let innerStretch = AnyUprightGeometry.innerStretch(from: offsets, size: size)
 
         try assertEqual(rawCanvasTopLeftObjectPoint, AUPoint(x: 0.225, y: 0.75), "raw-canvas object point")
-        try assertEqual(pixels, AUPoint(x: 25.0, y: -15.0), "raw-canvas source pixels")
+        try assertEqual(pixels, AUPoint(x: 45.0, y: -25.0), "raw-canvas source pixels")
         try assertEqual(innerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "raw-canvas object Y should map to the same visual corner")
     }
 
@@ -458,9 +458,9 @@ struct AnyUprightGeometryTests {
         )
         let oscStretch = AnyUprightGeometry.verticallyFlippedPixelSelection(innerStretch, size: size)
 
-        try assertEqual(innerStretch.topLeft, AUPoint(x: 20.0, y: 10.0), "source top-left")
-        try assertEqual(oscStretch.topLeft, AUPoint(x: 20.0, y: 90.0), "osc top-left")
-        try assertEqual(oscStretch.bottomLeft, AUPoint(x: 20.0, y: 10.0), "osc bottom-left")
+        try assertEqual(innerStretch.topLeft, AUPoint(x: 0.0, y: 0.0), "source top-left")
+        try assertEqual(oscStretch.topLeft, AUPoint(x: 0.0, y: size.height), "osc top-left")
+        try assertEqual(oscStretch.bottomLeft, AUPoint(x: 0.0, y: 0.0), "osc bottom-left")
     }
 
     static func testOuterStretchRenderMaskUsesPhysicalOutputCoordinates() throws {
@@ -1446,7 +1446,7 @@ struct AnyUprightGeometryTests {
         // The fitted 2:1 target occupies y=50...150. Continuing its mapping
         // upward maps beyond the selected source quad instead of switching to
         // the unwarped full-frame coordinate at y=0.
-        try assertMaps(matrix, AUPoint(x: 100.0, y: 0.0), to: AUPoint(x: 100.0, y: -30.0))
+        try assertMaps(matrix, AUPoint(x: 100.0, y: 0.0), to: AUPoint(x: 100.0, y: -50.0))
     }
 
     static func testInnerStretchApplyMatrixIsStableAcrossMotionPreviewSizes() throws {
@@ -3391,12 +3391,7 @@ struct AnyUprightGeometryTests {
     }
 
     static func fullFrameSourceOffsets(size: AUSize) -> AUCornerOffsets {
-        AUCornerOffsets(
-            topLeftPixels: AUPoint(x: -0.10 * size.width, y: 0.10 * size.height),
-            topRightPixels: AUPoint(x: 0.10 * size.width, y: 0.10 * size.height),
-            bottomRightPixels: AUPoint(x: 0.10 * size.width, y: -0.10 * size.height),
-            bottomLeftPixels: AUPoint(x: -0.10 * size.width, y: -0.10 * size.height)
-        )
+        AUCornerOffsets()
     }
 
     static func line(angleDegrees: Double, length: Double) -> AULineSegment {

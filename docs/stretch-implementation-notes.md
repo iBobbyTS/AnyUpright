@@ -12,8 +12,8 @@ This file records AnyUpright-specific Stretch implementation choices. Reusable d
 - The older combined Stretch effect with a user-visible Mode or Stretch Mode selector is historical context only.
 - Each filter fixes the hidden Stretch mode parameter to its intended render semantics.
 - Mirror modes were accidental exploratory work and are not part of current Stretch behavior.
-- `AnyUpright Inner Stretch` defaults to the central 80% input selection.
-- The full-frame Inner Stretch case remains a regression fixture for identity/no-offset render checks, not the current product default.
+- `AnyUpright Inner Stretch` defaults to the four input-frame corners.
+- The full-frame Inner Stretch case is the product default and remains a regression fixture for identity/no-offset render checks.
 - `AnyUpright Inner Stretch` is manual-only. It does not implement `FxAnalyzer` or expose detector, score-threshold, or candidate-selection parameters. Former parameter IDs `216...218`, groups `384...385`, and hidden detection-slot ranges starting at `400` and `600` are retired and must not be reused.
 
 ## Inner Stretch

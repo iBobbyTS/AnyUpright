@@ -320,7 +320,8 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
                     scaleLSDCandidates,
                     request: request,
                     time: frameTime,
-                    token: claim.token
+                    token: claim.token,
+                    requestedTimelineTime: claim.requestedTimelineTime
                 )
                 analysisDebugLog(
                     String(
@@ -404,7 +405,8 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             candidates,
             request: request,
             time: frameTime,
-            token: claim.token
+            token: claim.token,
+            requestedTimelineTime: claim.requestedTimelineTime
         )
         analysisDebugLog(
             String(
@@ -419,7 +421,8 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         _ candidates: [UprightDetectedCandidate],
         request: UprightAnalysisRequest,
         time: CMTime,
-        token: AUFxAnalysisTransactionToken
+        token: AUFxAnalysisTransactionToken,
+        requestedTimelineTime: CMTime
     ) {
         let ranked = AnyUprightUprightCandidates.analysisCandidates(
             from: candidates,
@@ -428,19 +431,16 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         analysisTransaction.complete(
             token: token,
             outcome: .produced(Array(ranked.prefix(AnyUprightUprightCandidates.slotCount))),
-            inputFrameTime: time
+            inputFrameTime: time,
+            onCompleted: {
+                self.setAnalysisDisplayStatus(.none, at: requestedTimelineTime)
+            }
         )
     }
 
     func cleanupAnalysis() throws {
         let cleanupStartNanos = AUMonotonicClock.nowNanos()
         let snapshot = analysisTransaction.cleanup()
-        defer {
-            setAnalysisDisplayStatus(
-                .none,
-                at: snapshot?.requestedTimelineTime ?? currentParameterTime()
-            )
-        }
         guard let snapshot else {
             analysisDebugLog("cleanup_skipped missing_request")
             return

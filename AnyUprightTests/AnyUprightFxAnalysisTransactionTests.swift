@@ -22,6 +22,7 @@ struct AnyUprightFxAnalysisTransactionTests {
         try testConcurrentStart()
         try testDesiredRangeAndClaim()
         try testGenerationIsolationAndCleanupOutcomes()
+        try testCompletionHookGenerationIsolation()
         try testCompletedWithoutResultAndNoCallback()
         print("AnyUprightFxAnalysisTransactionTests passed")
     }
@@ -217,6 +218,42 @@ struct AnyUprightFxAnalysisTransactionTests {
         guard case .notProduced? = noCallback.cleanup()?.outcome else {
             throw FxAnalysisTransactionTestFailure.failed("zero callback must remain not produced")
         }
+    }
+
+    private static func testCompletionHookGenerationIsolation() throws {
+        let transaction = AUFxAnalysisTransaction<Request, Int>()
+        let first = try startedToken(transaction.start(
+            request: Request(value: 1),
+            requestedTimelineTime: .zero,
+            hostIsBusy: { false },
+            startForwardAnalysis: {}
+        ))
+        transaction.cancel(token: first)
+        let second = try startedToken(transaction.start(
+            request: Request(value: 2),
+            requestedTimelineTime: .zero,
+            hostIsBusy: { false },
+            startForwardAnalysis: {}
+        ))
+
+        var completionCount = 0
+        let staleCompleted = transaction.complete(
+            token: first,
+            outcome: .produced(1),
+            inputFrameTime: .zero,
+            onCompleted: { completionCount += 1 }
+        )
+        try require(!staleCompleted, "stale generation must not complete")
+        try require(completionCount == 0, "stale generation must not invoke completion hook")
+
+        let currentCompleted = transaction.complete(
+            token: second,
+            outcome: .produced(2),
+            inputFrameTime: .zero,
+            onCompleted: { completionCount += 1 }
+        )
+        try require(currentCompleted, "current generation must complete")
+        try require(completionCount == 1, "current generation must invoke completion hook once")
     }
 
     private static func startedToken(_ disposition: AUFxAnalysisStartDisposition) throws -> AUFxAnalysisTransactionToken {

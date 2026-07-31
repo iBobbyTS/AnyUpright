@@ -230,19 +230,26 @@ final class AUFxAnalysisTransaction<Request, Result> {
         }
     }
 
+    @discardableResult
     func complete(
         token: AUFxAnalysisTransactionToken,
         outcome: AUFxAnalysisOutcome<Result>,
-        inputFrameTime: CMTime
-    ) {
-        lock.withLock {
+        inputFrameTime: CMTime,
+        onCompleted: () -> Void = {}
+    ) -> Bool {
+        let completed = lock.withLock {
             guard var active, active.token == token else {
-                return
+                return false
             }
             active.outcome = outcome
             active.inputFrameTime = inputFrameTime
             self.active = active
+            return true
         }
+        if completed {
+            onCompleted()
+        }
+        return completed
     }
 
     func cleanup() -> AUFxAnalysisCleanupSnapshot<Request, Result>? {

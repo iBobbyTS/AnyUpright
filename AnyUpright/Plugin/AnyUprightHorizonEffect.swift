@@ -169,7 +169,14 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             rotationRadians = correctionRadians
             horizonAnalysisDebugLog(String(format: "analyze geocalib accepted correctionDeg=%.6f", correctionRadians * 180 / Double.pi))
         case .rejected:
-            analysisTransaction.complete(token: claim.token, outcome: .completedWithoutResult, inputFrameTime: frameTime)
+            analysisTransaction.complete(
+                token: claim.token,
+                outcome: .completedWithoutResult,
+                inputFrameTime: frameTime,
+                onCompleted: {
+                    self.setAnalysisDisplayStatus(.none, at: claim.requestedTimelineTime)
+                }
+            )
             horizonAnalysisDebugLog("analyze geocalib rejected")
             return
         case .unavailable:
@@ -217,12 +224,26 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         }
 
         guard let rotationRadians else {
-            analysisTransaction.complete(token: claim.token, outcome: .completedWithoutResult, inputFrameTime: frameTime)
+            analysisTransaction.complete(
+                token: claim.token,
+                outcome: .completedWithoutResult,
+                inputFrameTime: frameTime,
+                onCompleted: {
+                    self.setAnalysisDisplayStatus(.none, at: claim.requestedTimelineTime)
+                }
+            )
             horizonAnalysisDebugLog("analyze no rotation detected")
             return
         }
 
-        analysisTransaction.complete(token: claim.token, outcome: .produced(rotationRadians), inputFrameTime: frameTime)
+        analysisTransaction.complete(
+            token: claim.token,
+            outcome: .produced(rotationRadians),
+            inputFrameTime: frameTime,
+            onCompleted: {
+                self.setAnalysisDisplayStatus(.none, at: claim.requestedTimelineTime)
+            }
+        )
         horizonAnalysisDebugLog(String(
             format: "analyze stored correctionDeg=%.6f frameTime=%@ frame_ms=%.3f since_start_ms=%.3f",
             rotationRadians * 180 / Double.pi,
@@ -234,12 +255,6 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
     func cleanupAnalysis() throws {
         let snapshot = analysisTransaction.cleanup()
-        defer {
-            setAnalysisDisplayStatus(
-                .none,
-                at: snapshot?.requestedTimelineTime ?? currentParameterTime()
-            )
-        }
         guard let snapshot else {
             horizonAnalysisDebugLog("cleanup ignored without pending request")
             return

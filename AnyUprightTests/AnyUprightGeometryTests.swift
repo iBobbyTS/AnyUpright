@@ -25,6 +25,7 @@ struct AnyUprightGeometryTests {
         try testStretchObjectPointsKeepCanvasCornerDefinitions()
         try testStretchObjectDragWritesAbsolutePixelOffsets()
         try testStretchOutputCornersKeepTheirNamedPositions()
+        try testUprightWorkflowDefaultsToVerticalAuto()
         try testInnerStretchDefaultsToFullFrame()
         try testInnerStretchObjectDragPreservesFullFrameBase()
         try testInnerStretchWritebackUsesImageCoordinates()
@@ -265,6 +266,11 @@ struct AnyUprightGeometryTests {
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: 0.0), to: innerStretch.topRight)
         try assertMaps(appliedMatrix, AUPoint(x: size.width, y: size.height), to: innerStretch.bottomRight)
         try assertMaps(appliedMatrix, AUPoint(x: 0.0, y: size.height), to: innerStretch.bottomLeft)
+    }
+
+    static func testUprightWorkflowDefaultsToVerticalAuto() throws {
+        try assertTrue(defaultUprightCorrectionMode == .vertical, "Upright default direction should be Vertical")
+        try assertTrue(defaultUprightControlMode == .automatic, "Upright default mode should be Auto")
     }
 
     static func testInnerStretchObjectDragPreservesFullFrameBase() throws {

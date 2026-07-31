@@ -203,22 +203,22 @@ func writeUprightManualGuides(
 
 func uprightCorrectionMode(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> UprightCorrectionMode {
     guard let paramAPI else {
-        return .full
+        return defaultUprightCorrectionMode
     }
 
-    var raw = Int32(UprightCorrectionMode.full.rawValue)
+    var raw = Int32(defaultUprightCorrectionMode.rawValue)
     paramAPI.getIntValue(&raw, fromParameter: UprightParam.correctionMode.rawValue, at: time)
-    return UprightCorrectionMode(rawValue: raw) ?? .full
+    return UprightCorrectionMode(rawValue: raw) ?? defaultUprightCorrectionMode
 }
 
 func uprightControlMode(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> UprightControlMode {
     guard let paramAPI else {
-        return .manual
+        return defaultUprightControlMode
     }
 
-    var raw = Int32(UprightControlMode.manual.rawValue)
+    var raw = Int32(defaultUprightControlMode.rawValue)
     paramAPI.getIntValue(&raw, fromParameter: UprightParam.controlMode.rawValue, at: time)
-    return UprightControlMode(rawValue: raw) ?? .manual
+    return UprightControlMode(rawValue: raw) ?? defaultUprightControlMode
 }
 
 func uprightAutoCrop(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> Bool {
@@ -245,7 +245,7 @@ func addUprightWorkflowParameters(_ paramAPI: FxParameterCreationAPI_v5, default
     paramAPI.addPopupMenu(
         withName: "Direction",
         parameterID: UprightParam.correctionMode.rawValue,
-        defaultValue: UInt32(UprightCorrectionMode.full.rawValue),
+        defaultValue: UInt32(defaultUprightCorrectionMode.rawValue),
         menuEntries: ["Vertical", "Horizontal", "Full"],
         parameterFlags: defaultFlags
     )
@@ -258,7 +258,7 @@ func addUprightWorkflowParameters(_ paramAPI: FxParameterCreationAPI_v5, default
     paramAPI.addPopupMenu(
         withName: "Mode",
         parameterID: UprightParam.controlMode.rawValue,
-        defaultValue: UInt32(UprightControlMode.manual.rawValue),
+        defaultValue: UInt32(defaultUprightControlMode.rawValue),
         menuEntries: ["Manual", "Semi Auto", "Auto"],
         parameterFlags: defaultFlags
     )

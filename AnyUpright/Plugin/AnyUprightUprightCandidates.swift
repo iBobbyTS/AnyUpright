@@ -38,6 +38,9 @@ enum UprightControlMode: Int32 {
     case automatic = 2
 }
 
+let defaultUprightCorrectionMode: UprightCorrectionMode = .vertical
+let defaultUprightControlMode: UprightControlMode = .automatic
+
 struct UprightAnalysisRequest {
     var correctionMode: UprightCorrectionMode
     var controlMode: UprightControlMode

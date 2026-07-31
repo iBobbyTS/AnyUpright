@@ -101,6 +101,7 @@ Current implementation:
 
 - `AnyUpright Upright` is registered as a separate FxPlug filter.
 - The visible parameter surface is `Direction`, `Analyze`, `Mode`, `Auto Crop`, and `Edit Mode`. The implementation no longer exposes separate chosen-detection, threshold, guide, candidate, vertical-perspective, horizontal-perspective, or rotation controls in the inspector.
+- New `AnyUpright Upright` instances default to `Direction: Vertical` and `Mode: Auto`.
 - `Direction` chooses the correction family: `Vertical`, `Horizontal`, or `Full`. Hidden vertical perspective, horizontal perspective, and rotation parameter IDs remain registered only so existing Motion and Final Cut documents can still load; Upright rendering no longer reads or writes those values.
 - `Mode` chooses only how reference lines are selected: `Manual` uses enabled manual guides, `Semi Auto` uses user-selected detected candidates, and `Auto` uses an automatic selector. `Analyze` is a no-op in manual mode and starts candidate-line analysis in semi/auto modes.
 - Semi Auto and Auto show the same shared centered analysis overlay as Horizon through OSC only. ScaleLSD and the optional GeoCalib camera-prior stage each report model loading until their typed Core ML session is ready, then frame analysis; every cleanup path clears the text. The status never enters the final Warp output.

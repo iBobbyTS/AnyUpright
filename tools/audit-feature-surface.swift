@@ -105,6 +105,7 @@ struct AuditFeatureSurface {
     }
 
     private static func auditHorizon(_ effects: String, transaction: String) throws {
+        try require(effects, "override var needsFullBuffer: Bool", "Horizon requests a full frame for its global rotation warp")
         try require(effects, "VNDetectHorizonRequest()", "Horizon uses Vision horizon detection")
         try require(effects, "dominantHorizonCorrectionRadians", "Horizon has a traditional line fallback")
         try require(effects, "Analyze Horizon", "Horizon exposes explicit analysis button")

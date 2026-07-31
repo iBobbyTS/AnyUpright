@@ -26,6 +26,10 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private var geoCalibCoreMLConfigurationAttempted = false
     private var geoCalibCoreMLConfigurationAvailable = false
 
+    override var needsFullBuffer: Bool {
+        true
+    }
+
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         addAnalysisDisplayStatusParameter(paramAPI)
         paramAPI.addPushButton(

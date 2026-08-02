@@ -18,6 +18,7 @@ enum UprightParam: UInt32 {
     case controlMode = 305
     case autoCrop = 306
     case editMode = 307
+    case defaults = 308
 
     case guide1Enabled = 320
     case guide1Orientation = 321
@@ -241,11 +242,15 @@ func uprightEditMode(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6?) -> 
     return value.boolValue
 }
 
-func addUprightWorkflowParameters(_ paramAPI: FxParameterCreationAPI_v5, defaultFlags: FxParameterFlags) {
+func addUprightWorkflowParameters(
+    _ paramAPI: FxParameterCreationAPI_v5,
+    defaults: AUUprightDefaultSettings,
+    defaultFlags: FxParameterFlags
+) {
     paramAPI.addPopupMenu(
         withName: "Direction",
         parameterID: UprightParam.correctionMode.rawValue,
-        defaultValue: UInt32(defaultUprightCorrectionMode.rawValue),
+        defaultValue: UInt32(defaults.direction.rawValue),
         menuEntries: ["Vertical", "Horizontal", "Full"],
         parameterFlags: defaultFlags
     )
@@ -258,20 +263,26 @@ func addUprightWorkflowParameters(_ paramAPI: FxParameterCreationAPI_v5, default
     paramAPI.addPopupMenu(
         withName: "Mode",
         parameterID: UprightParam.controlMode.rawValue,
-        defaultValue: UInt32(defaultUprightControlMode.rawValue),
+        defaultValue: UInt32(defaults.mode.rawValue),
         menuEntries: ["Manual", "Semi Auto", "Auto"],
         parameterFlags: defaultFlags
     )
     paramAPI.addToggleButton(
         withName: "Auto Crop",
         parameterID: UprightParam.autoCrop.rawValue,
-        defaultValue: true,
+        defaultValue: defaults.autoCrop,
         parameterFlags: defaultFlags
     )
     paramAPI.addToggleButton(
         withName: "Edit Mode",
         parameterID: UprightParam.editMode.rawValue,
         defaultValue: true,
+        parameterFlags: defaultFlags
+    )
+    paramAPI.addPushButton(
+        withName: "Defaults...",
+        parameterID: UprightParam.defaults.rawValue,
+        selector: #selector(AnyUprightUprightPlugIn.showUprightDefaults),
         parameterFlags: defaultFlags
     )
 }

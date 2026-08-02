@@ -90,6 +90,8 @@
 				Plugin/AnyUprightOSCOverlayRenderer.swift,
 				Plugin/AnyUprightOuterStretchOSCPreview.swift,
 				Plugin/AnyUprightOuterStretchOSCPreviewGeometry.swift,
+				Plugin/AnyUprightPluginDefaults.swift,
+				Plugin/AnyUprightPluginDefaultsUI.swift,
 				Plugin/AnyUprightScaleLSDCoreML.swift,
 				Plugin/AnyUprightScaleLSDDetector.swift,
 				Plugin/AnyUprightScaleLSDPostprocessor.swift,

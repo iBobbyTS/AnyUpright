@@ -105,7 +105,7 @@ enum AUStretchTransformMode: Int32 {
     case innerStretch = 1
 }
 
-enum AUStretchRatioMode: Int32 {
+enum AUStretchRatioMode: Int32, Codable, CaseIterable {
     case none = 0
     case fit = 1
     case fill = 2

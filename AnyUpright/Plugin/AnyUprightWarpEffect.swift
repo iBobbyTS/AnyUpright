@@ -131,12 +131,20 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
     private let stableRenderSizeLock = NSLock()
     private var cachedStableRenderSize: AUSize?
     private lazy var outerStretchPreviewSourceID = ObjectIdentifier(self)
+    private let pluginDefaultsWindowPresenter = AUPluginDefaultsWindowPresenter()
 
     required init?(apiManager: PROAPIAccessing) {
         _apiManager = apiManager
+        super.init()
+        AUPluginDefaultsDiagnostics.log(
+            "effect init effect=\(String(describing: type(of: self))) instance=\(ObjectIdentifier(self))"
+        )
     }
 
     deinit {
+        AUPluginDefaultsDiagnostics.log(
+            "effect deinit effect=\(String(describing: type(of: self))) instance=\(ObjectIdentifier(self))"
+        )
         AUOuterStretchOSCPreviewCache.shared.remove(sourceID: outerStretchPreviewSourceID)
     }
 
@@ -147,6 +155,45 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
 
     func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         fatalError("Subclasses must add their parameters.")
+    }
+
+    func presentPluginDefaults(makeEditor: @escaping () -> AUPluginDefaultsEditor) {
+        let sourceThread = Thread.isMainThread ? "main" : "background"
+        AUPluginDefaultsDiagnostics.log(
+            "button action scheduled effect=\(String(describing: type(of: self))) instance=\(ObjectIdentifier(self)) sourceThread=\(sourceThread)"
+        )
+
+        // Host APIs are resolved in the FxPlug callback context. AppKit view
+        // construction and attachment are dispatched to the main thread below.
+        guard let remoteWindowAPI = _apiManager?.api(for: FxRemoteWindowAPI.self) as? FxRemoteWindowAPI else {
+            AUPluginDefaultsDiagnostics.log(
+                "button action failed reason=missing-base-api effect=\(String(describing: type(of: self))) instance=\(ObjectIdentifier(self)) lookupThread=\(sourceThread)"
+            )
+            NSLog("AnyUpright defaults window unavailable: FxRemoteWindowAPI is missing")
+            return
+        }
+        AUPluginDefaultsDiagnostics.log(
+            "button action api-ready effect=\(String(describing: type(of: self))) instance=\(ObjectIdentifier(self)) api=\(String(describing: type(of: remoteWindowAPI))) lookupThread=\(sourceThread)"
+        )
+
+        let presentOnMain = { [weak self] in
+            guard let self else {
+                AUPluginDefaultsDiagnostics.log("button action cancelled reason=effect-released")
+                return
+            }
+
+            let editor = makeEditor()
+            AUPluginDefaultsDiagnostics.log(
+                "button action main effect=\(String(describing: type(of: self))) instance=\(ObjectIdentifier(self)) editor=\(editor.title)"
+            )
+            self.pluginDefaultsWindowPresenter.present(remoteWindowAPI: remoteWindowAPI, editor: editor)
+        }
+
+        if Thread.isMainThread {
+            presentOnMain()
+        } else {
+            DispatchQueue.main.async(execute: presentOnMain)
+        }
     }
 
     func addAnalysisDisplayStatusParameter(_ paramAPI: FxParameterCreationAPI_v5) {

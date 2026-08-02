@@ -14,6 +14,7 @@ enum HorizonParam: UInt32 {
     case rotation = 100
     case fillFrame = 101
     case analyze = 102
+    case defaults = 103
 }
 
 
@@ -31,6 +32,7 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     }
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
+        let defaults = AUPluginDefaults.horizon.load()
         addAnalysisDisplayStatusParameter(paramAPI)
         paramAPI.addPushButton(
             withName: "Analyze Horizon",
@@ -49,10 +51,23 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         paramAPI.addToggleButton(
             withName: "Fill Frame",
             parameterID: HorizonParam.fillFrame.rawValue,
-            defaultValue: false,
+            defaultValue: defaults.fillFrame,
+            parameterFlags: defaultFlags()
+        )
+        paramAPI.addPushButton(
+            withName: "Defaults...",
+            parameterID: HorizonParam.defaults.rawValue,
+            selector: #selector(showHorizonDefaults),
             parameterFlags: defaultFlags()
         )
         prepareGeoCalibCoreMLCacheForPluginAdd()
+    }
+
+    @objc private func showHorizonDefaults() {
+        AUPluginDefaultsDiagnostics.log(
+            "selector enter selector=showHorizonDefaults instance=\(ObjectIdentifier(self))"
+        )
+        presentPluginDefaults { AUHorizonDefaultsEditor() }
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {

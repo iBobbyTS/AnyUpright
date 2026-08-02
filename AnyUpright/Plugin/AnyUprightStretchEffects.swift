@@ -20,11 +20,14 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         addFixedModeParameter(paramAPI)
+        let ratioDefault = showsSourceEditMode
+            ? AUPluginDefaults.innerStretch.load().ratio
+            : AUStretchRatioMode.none
 
         paramAPI.addPopupMenu(
             withName: "Ratio",
             parameterID: StretchParam.ratio.rawValue,
-            defaultValue: UInt32(AUStretchRatioMode.none.rawValue),
+            defaultValue: UInt32(ratioDefault.rawValue),
             menuEntries: ["None", "Fit", "Fill"],
             parameterFlags: showsSourceEditMode ? defaultFlags() : hiddenFlags()
         )
@@ -51,6 +54,21 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         addCornerParameters(paramAPI, title: "Bottom Right", groupID: StretchGroup.bottomRight.rawValue, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
         addCornerParameters(paramAPI, title: "Bottom Left", groupID: StretchGroup.bottomLeft.rawValue, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
 
+        if showsSourceEditMode {
+            paramAPI.addPushButton(
+                withName: "Defaults...",
+                parameterID: StretchParam.defaults.rawValue,
+                selector: #selector(showInnerStretchDefaults),
+                parameterFlags: defaultFlags()
+            )
+        }
+    }
+
+    @objc private func showInnerStretchDefaults() {
+        AUPluginDefaultsDiagnostics.log(
+            "selector enter selector=showInnerStretchDefaults instance=\(ObjectIdentifier(self))"
+        )
+        presentPluginDefaults { AUInnerStretchDefaultsEditor() }
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {

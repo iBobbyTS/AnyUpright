@@ -24,11 +24,22 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
         addAnalysisDisplayStatusParameter(paramAPI)
-        addUprightWorkflowParameters(paramAPI, defaultFlags: defaultFlags())
+        addUprightWorkflowParameters(
+            paramAPI,
+            defaults: AUPluginDefaults.upright.load(),
+            defaultFlags: defaultFlags()
+        )
         addLegacyCorrectionResultParameters(paramAPI)
         addUprightGuideParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
         addUprightCandidateParameters(paramAPI, collapsedFlags: hiddenCollapsedFlags(), defaultFlags: hiddenFlags())
         AnyUprightScaleLSDDetector.prepareCoreMLCacheForPluginAdd()
+    }
+
+    @objc func showUprightDefaults() {
+        AUPluginDefaultsDiagnostics.log(
+            "selector enter selector=showUprightDefaults instance=\(ObjectIdentifier(self))"
+        )
+        presentPluginDefaults { AUUprightDefaultsEditor() }
     }
 
     func pluginInstanceAddedToDocument() {

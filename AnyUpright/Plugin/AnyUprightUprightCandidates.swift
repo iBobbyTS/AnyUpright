@@ -8,7 +8,7 @@ import simd
 
 let uprightCandidateOSCPartBase = 1000
 
-enum UprightCorrectionMode: Int32 {
+enum UprightCorrectionMode: Int32, Codable, CaseIterable {
     case vertical = 0
     case horizontal = 1
     case full = 2
@@ -32,7 +32,7 @@ enum UprightCorrectionMode: Int32 {
     }
 }
 
-enum UprightControlMode: Int32 {
+enum UprightControlMode: Int32, Codable, CaseIterable {
     case manual = 0
     case semiAutomatic = 1
     case automatic = 2

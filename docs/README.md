@@ -17,7 +17,9 @@ AnyUpright is a suite of FxPlug effects for single-frame-assisted perspective an
 
 ## Engineering Notes
 
-If you are a person or agent debugging FxPlug coordinate flips, Final Cut/Motion OSC hit testing, viewer-vs-video drift, `drawOSC` drawable sizing, tiled render sampling shifts, or fixed-shape Core ML model routing, start with `docs/engineering-notes/`.
+If you are a person or agent debugging FxPlug coordinate flips, Final Cut/Motion OSC hit testing, viewer-vs-video drift, `drawOSC` drawable sizing, tiled render sampling shifts, remote-window hosting, or fixed-shape Core ML model routing, start with `docs/engineering-notes/`.
+
+For plugin-defaults product behavior and persistence, see `docs/plugin-defaults-implementation-notes.md`. For reusable FxRemoteWindow/ViewBridge behavior, see `docs/engineering-notes/fxplug-remote-window-hosting.md`.
 
 ## Effects
 

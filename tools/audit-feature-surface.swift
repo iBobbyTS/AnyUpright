@@ -101,6 +101,8 @@ struct AuditFeatureSurface {
         try require(ui, "final class AUPluginDefaultsEditorSession<Settings: AUPluginDefaultSettings>", "Defaults editors share one typed in-memory edit session")
         try require(ui, "resetButton.isEnabled = editor.canRestoreFactoryDefaults", "Restore is enabled only when current differs from factory defaults")
         try require(ui, "saveButton.isEnabled = editor.canSave", "Save is enabled only when current differs from the saved snapshot")
+        try reject(ui, "AnyUpright::Defaults Saved", "Defaults Save success is represented only by disabling the Save button")
+        try reject(ui, "AnyUpright::Defaults Restored", "Defaults Restore success is represented only by disabling the Restore button")
         try reject(ui, "try store.reset()", "Restore does not persist until Save is pressed")
         try require(ui, "final class AUHorizonDefaultsEditor", "Horizon has an independent defaults editor")
         try require(ui, "final class AUInnerStretchDefaultsEditor", "Inner Stretch has an independent defaults editor")

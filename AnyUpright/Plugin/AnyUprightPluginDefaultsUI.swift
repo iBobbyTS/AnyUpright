@@ -367,10 +367,8 @@ private final class AUPluginDefaultsViewController: NSViewController {
     @objc private func save() {
         do {
             try editor.save()
-            statusLabel.stringValue = defaultsLocalized(
-                "AnyUpright::Defaults Saved",
-                fallback: "Saved for new instances."
-            )
+            statusLabel.stringValue = ""
+            updateActionState()
         } catch {
             statusLabel.stringValue = defaultsLocalized(
                 "AnyUpright::Defaults Save Failed",
@@ -382,10 +380,8 @@ private final class AUPluginDefaultsViewController: NSViewController {
 
     @objc private func restoreFactoryDefaults() {
         editor.restoreFactoryDefaults()
-        statusLabel.stringValue = defaultsLocalized(
-            "AnyUpright::Defaults Restored",
-            fallback: "Factory defaults selected. Save to apply."
-        )
+        statusLabel.stringValue = ""
+        updateActionState()
     }
 }
 

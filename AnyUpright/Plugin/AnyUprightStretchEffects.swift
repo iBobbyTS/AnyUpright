@@ -147,13 +147,21 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
                     keyframeAPI: keyframeAPI,
                     settingAPI: settingAPI
                 )
-                showTransientDisplayStatus(.keyframesSet, at: time)
+                showTransientDisplayStatus(
+                    .keyframesSet,
+                    at: time,
+                    duration: AUAnalysisDisplayStatus.keyframesSet.preferredTransientDuration
+                )
             case .unset(let targets):
                 let removalIndices = try targets.map { target in
                     (target, try keyframeIndex(for: target, at: time, keyframeAPI: keyframeAPI))
                 }
                 try unsetKeyframes(removalIndices, keyframeAPI: keyframeAPI)
-                showTransientDisplayStatus(.keyframesRemoved, at: time)
+                showTransientDisplayStatus(
+                    .keyframesRemoved,
+                    at: time,
+                    duration: AUAnalysisDisplayStatus.keyframesRemoved.preferredTransientDuration
+                )
             }
         } catch {
             NSLog("AnyUpright Stretch: unable to toggle corner keyframes: %@", String(describing: error))

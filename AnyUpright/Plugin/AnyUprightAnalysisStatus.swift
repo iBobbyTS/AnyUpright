@@ -20,6 +20,17 @@ enum AUAnalysisDisplayStatus: Int32, CaseIterable, Hashable {
     case keyframesSet = 3
     case keyframesRemoved = 4
 
+    var preferredTransientDuration: TimeInterval {
+        switch self {
+        case .keyframesSet:
+            return 2.0
+        case .keyframesRemoved:
+            return 6.0
+        case .none, .modelLoading, .analyzingFrame:
+            return AUTransientDisplayStatusController.defaultDuration
+        }
+    }
+
     var message: String? {
         switch self {
         case .none:

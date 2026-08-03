@@ -78,21 +78,24 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         addCornerParameters(paramAPI, title: "Bottom Right", groupID: StretchGroup.bottomRight.rawValue, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
         addCornerParameters(paramAPI, title: "Bottom Left", groupID: StretchGroup.bottomLeft.rawValue, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
 
-        if showsSourceEditMode {
-            paramAPI.addPushButton(
-                withName: "Defaults...",
-                parameterID: StretchParam.defaults.rawValue,
-                selector: #selector(showInnerStretchDefaults),
-                parameterFlags: defaultFlags()
-            )
-        }
+        paramAPI.addPushButton(
+            withName: "Defaults...",
+            parameterID: StretchParam.defaults.rawValue,
+            selector: #selector(showStretchDefaults),
+            parameterFlags: defaultFlags()
+        )
     }
 
-    @objc private func showInnerStretchDefaults() {
+    @objc private func showStretchDefaults() {
         AUPluginDefaultsDiagnostics.log(
-            "selector enter selector=showInnerStretchDefaults instance=\(ObjectIdentifier(self))"
+            "selector enter selector=showStretchDefaults mode=\(fixedStretchMode.rawValue) instance=\(ObjectIdentifier(self))"
         )
-        presentPluginDefaults { AUInnerStretchDefaultsEditor() }
+        switch fixedStretchMode {
+        case .innerStretch:
+            presentPluginDefaults { AUInnerStretchDefaultsEditor() }
+        case .outputCorners:
+            presentPluginDefaults { AUOuterStretchDefaultsEditor() }
+        }
     }
 
     @objc private func toggleCornerKeyframe() {
@@ -161,8 +164,14 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
     }
 
     private func showKeyframeNotification(_ status: AUAnalysisDisplayStatus, at time: CMTime) {
-        if showsSourceEditMode,
-           AUPluginDefaults.innerStretch.load().suppressKeyframeNotifications {
+        let suppressesNotification: Bool
+        switch fixedStretchMode {
+        case .innerStretch:
+            suppressesNotification = AUPluginDefaults.innerStretch.load().suppressKeyframeNotifications
+        case .outputCorners:
+            suppressesNotification = AUPluginDefaults.outerStretch.load().suppressKeyframeNotifications
+        }
+        if suppressesNotification {
             return
         }
         showTransientDisplayStatus(

@@ -17,6 +17,7 @@
 "AnyUpright::Defaults Save Failed" = "Unable to save defaults.";
 "AnyUpright::Horizon Defaults Title" = "Horizon Defaults";
 "AnyUpright::Inner Stretch Defaults Title" = "Inner Stretch Defaults";
+"AnyUpright::Outer Stretch Defaults Title" = "Outer Stretch Defaults";
 "AnyUpright::Upright Defaults Title" = "Upright Defaults";
 "AnyUpright::Defaults Fill Frame" = "Fill Frame";
 "AnyUpright::Defaults Ratio" = "Ratio";

@@ -43,21 +43,27 @@ struct AnyUprightPluginDefaultsTests {
     private static func testFactoryDefaults(root: URL) throws {
         let horizon = horizonStore(root)
         let innerStretch = innerStretchStore(root)
+        let outerStretch = outerStretchStore(root)
         let upright = uprightStore(root)
 
         try require(horizon.load() == .factoryDefaults, "Horizon missing-file default")
         try require(innerStretch.load() == .factoryDefaults, "Inner Stretch missing-file default")
+        try require(outerStretch.load() == .factoryDefaults, "Outer Stretch missing-file default")
         try require(upright.load() == .factoryDefaults, "Upright missing-file default")
     }
 
     private static func testIndependentRoundTrips(root: URL) throws {
         let horizon = horizonStore(root)
         let innerStretch = innerStretchStore(root)
+        let outerStretch = outerStretchStore(root)
         let upright = uprightStore(root)
 
         try horizon.save(AUHorizonDefaultSettings(fillFrame: true))
         try innerStretch.save(AUInnerStretchDefaultSettings(
             ratio: .fill,
+            suppressKeyframeNotifications: true
+        ))
+        try outerStretch.save(AUOuterStretchDefaultSettings(
             suppressKeyframeNotifications: true
         ))
         try upright.save(AUUprightDefaultSettings(
@@ -69,6 +75,7 @@ struct AnyUprightPluginDefaultsTests {
         try require(horizon.load().fillFrame, "Horizon persisted Fill Frame")
         try require(innerStretch.load().ratio == .fill, "Inner Stretch persisted Ratio")
         try require(innerStretch.load().suppressKeyframeNotifications, "Inner Stretch persisted keyframe notification preference")
+        try require(outerStretch.load().suppressKeyframeNotifications, "Outer Stretch persisted keyframe notification preference")
         let uprightValue = upright.load()
         try require(uprightValue.direction == .full, "Upright persisted Direction")
         try require(uprightValue.mode == .semiAutomatic, "Upright persisted Mode")
@@ -78,7 +85,14 @@ struct AnyUprightPluginDefaultsTests {
         try require(horizon.load() == .factoryDefaults, "Horizon reset")
         try require(innerStretch.load().ratio == .fill, "Horizon reset leaves Inner Stretch unchanged")
         try require(innerStretch.load().suppressKeyframeNotifications, "Horizon reset leaves Inner Stretch notification preference unchanged")
+        try require(outerStretch.load().suppressKeyframeNotifications, "Horizon reset leaves Outer Stretch notification preference unchanged")
         try require(upright.load().direction == .full, "Horizon reset leaves Upright unchanged")
+
+        try innerStretch.save(AUInnerStretchDefaultSettings(
+            ratio: .none,
+            suppressKeyframeNotifications: false
+        ))
+        try require(outerStretch.load().suppressKeyframeNotifications, "Inner Stretch save leaves Outer Stretch preference unchanged")
     }
 
     private static func testInvalidFilesFailClosed(root: URL) throws {
@@ -130,6 +144,10 @@ struct AnyUprightPluginDefaultsTests {
 
     private static func innerStretchStore(_ root: URL) -> AUPluginDefaultsStore<AUInnerStretchDefaultSettings> {
         AUPluginDefaultsStore(fileURL: root.appendingPathComponent(AUInnerStretchDefaultSettings.fileName))
+    }
+
+    private static func outerStretchStore(_ root: URL) -> AUPluginDefaultsStore<AUOuterStretchDefaultSettings> {
+        AUPluginDefaultsStore(fileURL: root.appendingPathComponent(AUOuterStretchDefaultSettings.fileName))
     }
 
     private static func uprightStore(_ root: URL) -> AUPluginDefaultsStore<AUUprightDefaultSettings> {

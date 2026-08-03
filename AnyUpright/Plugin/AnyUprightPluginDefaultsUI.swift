@@ -519,6 +519,67 @@ final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
     }
 }
 
+final class AUOuterStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
+    let title = defaultsLocalized("AnyUpright::Outer Stretch Defaults Title", fallback: "Outer Stretch Defaults")
+
+    private let session: AUPluginDefaultsEditorSession<AUOuterStretchDefaultSettings>
+    private let suppressKeyframeNotificationsButton = NSButton(
+        checkboxWithTitle: defaultsLocalized(
+            "AnyUpright::Defaults Suppress Keyframe Notifications",
+            fallback: "Don't show keyframe notifications"
+        ),
+        target: nil,
+        action: nil
+    )
+    var onChange: (() -> Void)? {
+        get { session.onChange }
+        set { session.onChange = newValue }
+    }
+
+    var canRestoreFactoryDefaults: Bool { session.canRestoreFactoryDefaults }
+    var canSave: Bool { session.canSave }
+
+    lazy var contentView: NSView = {
+        let stack = NSStackView(views: [suppressKeyframeNotificationsButton])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        return stack
+    }()
+
+    init(store: AUPluginDefaultsStore<AUOuterStretchDefaultSettings> = AUPluginDefaults.outerStretch) {
+        session = AUPluginDefaultsEditorSession(store: store)
+        super.init()
+        suppressKeyframeNotificationsButton.target = self
+        suppressKeyframeNotificationsButton.action = #selector(controlDidChange)
+    }
+
+    func beginEditingSession() {
+        apply(session.beginEditingSession())
+    }
+
+    func save() throws {
+        try session.save(settingsFromControls())
+    }
+
+    func restoreFactoryDefaults() {
+        apply(session.restoreFactoryDefaults())
+    }
+
+    @objc private func controlDidChange() {
+        session.updateCurrent(settingsFromControls())
+    }
+
+    private func settingsFromControls() -> AUOuterStretchDefaultSettings {
+        AUOuterStretchDefaultSettings(
+            suppressKeyframeNotifications: suppressKeyframeNotificationsButton.state == .on
+        )
+    }
+
+    private func apply(_ settings: AUOuterStretchDefaultSettings) {
+        suppressKeyframeNotificationsButton.state = settings.suppressKeyframeNotifications ? .on : .off
+    }
+}
+
 final class AUUprightDefaultsEditor: NSObject, AUPluginDefaultsEditor {
     let title = defaultsLocalized("AnyUpright::Upright Defaults Title", fallback: "Upright Defaults")
 

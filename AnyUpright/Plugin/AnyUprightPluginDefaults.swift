@@ -94,6 +94,22 @@ struct AUInnerStretchDefaultSettings: AUPluginDefaultSettings {
     }
 }
 
+struct AUOuterStretchDefaultSettings: AUPluginDefaultSettings {
+    static let currentSchemaVersion = 1
+    static let fileName = "OuterStretch.plist"
+    static let factoryDefaults = AUOuterStretchDefaultSettings(
+        suppressKeyframeNotifications: false
+    )
+
+    let schemaVersion: Int
+    var suppressKeyframeNotifications: Bool
+
+    init(suppressKeyframeNotifications: Bool = false) {
+        schemaVersion = Self.currentSchemaVersion
+        self.suppressKeyframeNotifications = suppressKeyframeNotifications
+    }
+}
+
 struct AUUprightDefaultSettings: AUPluginDefaultSettings {
     static let currentSchemaVersion = 1
     static let fileName = "Upright.plist"
@@ -177,5 +193,6 @@ final class AUPluginDefaultsStore<Settings: AUPluginDefaultSettings> {
 enum AUPluginDefaults {
     static let horizon = AUPluginDefaultsStore<AUHorizonDefaultSettings>()
     static let innerStretch = AUPluginDefaultsStore<AUInnerStretchDefaultSettings>()
+    static let outerStretch = AUPluginDefaultsStore<AUOuterStretchDefaultSettings>()
     static let upright = AUPluginDefaultsStore<AUUprightDefaultSettings>()
 }

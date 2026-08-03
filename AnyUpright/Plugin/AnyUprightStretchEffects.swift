@@ -6,6 +6,17 @@
 import Foundation
 
 class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
+    private static let cornerKeyframeTargets = [
+        AUStretchKeyframeTarget(parameterID: StretchParam.topLeftPixelX.rawValue, channelIndex: 0),
+        AUStretchKeyframeTarget(parameterID: StretchParam.topLeftPixelY.rawValue, channelIndex: 0),
+        AUStretchKeyframeTarget(parameterID: StretchParam.topRightPixelX.rawValue, channelIndex: 0),
+        AUStretchKeyframeTarget(parameterID: StretchParam.topRightPixelY.rawValue, channelIndex: 0),
+        AUStretchKeyframeTarget(parameterID: StretchParam.bottomRightPixelX.rawValue, channelIndex: 0),
+        AUStretchKeyframeTarget(parameterID: StretchParam.bottomRightPixelY.rawValue, channelIndex: 0),
+        AUStretchKeyframeTarget(parameterID: StretchParam.bottomLeftPixelX.rawValue, channelIndex: 0),
+        AUStretchKeyframeTarget(parameterID: StretchParam.bottomLeftPixelY.rawValue, channelIndex: 0)
+    ]
+
     var fixedStretchMode: AUStretchTransformMode {
         fatalError("Subclasses must choose a fixed Stretch mode.")
     }
@@ -48,6 +59,13 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
             )
         }
 
+        paramAPI.addPushButton(
+            withName: "Set Corner Keyframe",
+            parameterID: StretchParam.setCornerKeyframe.rawValue,
+            selector: #selector(setCornerKeyframe),
+            parameterFlags: defaultFlags()
+        )
+
         let cornerGroupFlags = collapsedFlags()
         addCornerParameters(paramAPI, title: "Top Left", groupID: StretchGroup.topLeft.rawValue, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY, groupFlags: cornerGroupFlags)
         addCornerParameters(paramAPI, title: "Top Right", groupID: StretchGroup.topRight.rawValue, pixelX: .topRightPixelX, pixelY: .topRightPixelY, groupFlags: cornerGroupFlags)
@@ -69,6 +87,61 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
             "selector enter selector=showInnerStretchDefaults instance=\(ObjectIdentifier(self))"
         )
         presentPluginDefaults { AUInnerStretchDefaultsEditor() }
+    }
+
+    @objc private func setCornerKeyframe() {
+        guard let actionAPI = _apiManager.api(for: FxCustomParameterActionAPI_v4.self) as? FxCustomParameterActionAPI_v4,
+              let keyframeAPI = _apiManager.api(for: FxKeyframeAPI_v3.self) as? FxKeyframeAPI_v3 else {
+            NSLog("AnyUpright Stretch: keyframe APIs unavailable")
+            return
+        }
+
+        let time = actionAPI.currentTime()
+        do {
+            let missingTargets = try AUStretchKeyframePolicy.missingTargets(
+                from: Self.cornerKeyframeTargets,
+                at: time
+            ) { target, targetTime in
+                var hasKeyframe = ObjCBool(false)
+                if let error = keyframeAPI.parameter(
+                    UInt(target.parameterID),
+                    channel: target.channelIndex,
+                    hasKeyframe: &hasKeyframe,
+                    at: targetTime
+                ) {
+                    throw error
+                }
+                return hasKeyframe.boolValue
+            }
+
+            guard !missingTargets.isEmpty else {
+                return
+            }
+
+            let undoAPI = _apiManager.api(for: FxUndoAPI.self) as? FxUndoAPI
+            let startedUndoGroup = undoAPI?.startUndoGroup("Set Corner Keyframe") ?? false
+            defer {
+                if startedUndoGroup {
+                    _ = undoAPI?.endUndoGroup()
+                }
+            }
+
+            for target in missingTargets {
+                var keyframe = FxKeyframe()
+                keyframe.version = 3
+                keyframe.time = time
+                keyframe.segmentStyle = .linear
+                if let error = keyframeAPI.add(
+                    &keyframe,
+                    toParameter: UInt(target.parameterID),
+                    andChannel: target.channelIndex
+                ) {
+                    throw error
+                }
+            }
+        } catch {
+            NSLog("AnyUpright Stretch: unable to set corner keyframes: %@", String(describing: error))
+        }
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {

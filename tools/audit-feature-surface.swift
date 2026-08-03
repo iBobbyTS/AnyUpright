@@ -184,6 +184,8 @@ struct AuditFeatureSurface {
         try require(effects, "class AnyUprightOuterStretchOSCPlugIn: AnyUprightInnerStretchOSCPlugIn", "Outer Stretch exposes its own onscreen control")
         try require(effects, "parameterFlags: hiddenFlags()", "Stretch fixed mode parameter is hidden from the inspector")
         try require(effects, "Edit Mode", "Stretch exposes edit mode for inner-stretch handles without applying the warp")
+        try require(effects, "Set Corner Keyframe", "Both Stretch filters expose one-click keyframing for all eight corner channels")
+        try require(effects, "FxKeyframeAPI_v3", "Stretch uses the host keyframe API for its existing corner channels")
         try require(effects, "class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Inner Stretch exposes onscreen controls as a separate FxPlug class")
         try require(effects, "renderOutputCornersOSC", "Outer Stretch draws host onscreen output-corner controls")
         try require(

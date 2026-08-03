@@ -19,6 +19,7 @@ enum StretchParam: UInt32 {
     // Parameter IDs 200, 201, 204, 205, 208, 209, 212, 213, and 216...218 are retired.
     case ratio = 219
     case defaults = 224
+    case setCornerKeyframe = 225
 }
 
 enum StretchGroup: UInt32, CaseIterable {

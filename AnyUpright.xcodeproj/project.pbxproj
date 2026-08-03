@@ -97,6 +97,7 @@
 				Plugin/AnyUprightScaleLSDPostprocessor.swift,
 				Plugin/AnyUprightScaleLSDPreprocessor.swift,
 				Plugin/AnyUprightStretchEffects.swift,
+				Plugin/AnyUprightStretchKeyframePolicy.swift,
 				Plugin/AnyUprightStretchOSCDebugLogger.swift,
 				Plugin/AnyUprightStretchOSCControls.swift,
 				Plugin/AnyUprightStretchOSCEventResolver.swift,

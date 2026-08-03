@@ -5,6 +5,11 @@
 
 import Foundation
 
+private enum AUStretchKeyframeOperationError: Error {
+    case keyframeIndexNotFound(AUStretchKeyframeTarget, CMTime)
+    case parameterValueUnavailable(AUStretchKeyframeTarget, CMTime)
+}
+
 class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
     private static let cornerKeyframeTargets = [
         AUStretchKeyframeTarget(parameterID: StretchParam.topLeftPixelX.rawValue, channelIndex: 0),
@@ -60,9 +65,9 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         }
 
         paramAPI.addPushButton(
-            withName: "Set Corner Keyframe",
+            withName: "Set/Unset Corner Keyframe",
             parameterID: StretchParam.setCornerKeyframe.rawValue,
-            selector: #selector(setCornerKeyframe),
+            selector: #selector(toggleCornerKeyframe),
             parameterFlags: defaultFlags()
         )
 
@@ -89,7 +94,7 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         presentPluginDefaults { AUInnerStretchDefaultsEditor() }
     }
 
-    @objc private func setCornerKeyframe() {
+    @objc private func toggleCornerKeyframe() {
         guard let actionAPI = _apiManager.api(for: FxCustomParameterActionAPI_v4.self) as? FxCustomParameterActionAPI_v4,
               let keyframeAPI = _apiManager.api(for: FxKeyframeAPI_v3.self) as? FxKeyframeAPI_v3 else {
             NSLog("AnyUpright Stretch: keyframe APIs unavailable")
@@ -98,7 +103,7 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
 
         let time = actionAPI.currentTime()
         do {
-            let missingTargets = try AUStretchKeyframePolicy.missingTargets(
+            let action = try AUStretchKeyframePolicy.action(
                 from: Self.cornerKeyframeTargets,
                 at: time
             ) { target, targetTime in
@@ -114,34 +119,138 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
                 return hasKeyframe.boolValue
             }
 
-            guard !missingTargets.isEmpty else {
-                return
-            }
-
-            let undoAPI = _apiManager.api(for: FxUndoAPI.self) as? FxUndoAPI
-            let startedUndoGroup = undoAPI?.startUndoGroup("Set Corner Keyframe") ?? false
-            defer {
-                if startedUndoGroup {
-                    _ = undoAPI?.endUndoGroup()
+            switch action {
+            case .set(let targets):
+                guard let retrievalAPI = parameterRetrievalAPI(),
+                      let settingAPI = parameterSettingAPI() else {
+                    NSLog("AnyUpright Stretch: parameter APIs unavailable")
+                    return
                 }
-            }
-
-            for target in missingTargets {
-                var keyframe = FxKeyframe()
-                keyframe.version = 3
-                keyframe.time = time
-                keyframe.segmentStyle = .linear
-                if let error = keyframeAPI.add(
-                    &keyframe,
-                    toParameter: UInt(target.parameterID),
-                    andChannel: target.channelIndex
-                ) {
-                    throw error
+                let assignments = try AUStretchKeyframePolicy.assignments(
+                    for: targets,
+                    at: time
+                ) { target, targetTime in
+                    var value = 0.0
+                    guard retrievalAPI.getFloatValue(
+                        &value,
+                        fromParameter: target.parameterID,
+                        at: targetTime
+                    ) else {
+                        throw AUStretchKeyframeOperationError.parameterValueUnavailable(target, targetTime)
+                    }
+                    return value
                 }
+                try setKeyframes(
+                    assignments,
+                    at: time,
+                    keyframeAPI: keyframeAPI,
+                    settingAPI: settingAPI
+                )
+            case .unset(let targets):
+                let removalIndices = try targets.map { target in
+                    (target, try keyframeIndex(for: target, at: time, keyframeAPI: keyframeAPI))
+                }
+                try unsetKeyframes(removalIndices, keyframeAPI: keyframeAPI)
             }
         } catch {
-            NSLog("AnyUpright Stretch: unable to set corner keyframes: %@", String(describing: error))
+            NSLog("AnyUpright Stretch: unable to toggle corner keyframes: %@", String(describing: error))
         }
+    }
+
+    private func unsetKeyframes(
+        _ removals: [(target: AUStretchKeyframeTarget, index: UInt)],
+        keyframeAPI: FxKeyframeAPI_v3
+    ) throws {
+        let undoAPI = _apiManager.api(for: FxUndoAPI.self) as? FxUndoAPI
+        let startedUndoGroup = undoAPI?.startUndoGroup("Unset Corner Keyframe") ?? false
+        defer {
+            if startedUndoGroup {
+                _ = undoAPI?.endUndoGroup()
+            }
+        }
+
+        for removal in removals {
+            if let error = keyframeAPI.removeKeyframe(
+                at: removal.index,
+                fromParameter: UInt(removal.target.parameterID),
+                andChannel: removal.target.channelIndex
+            ) {
+                throw error
+            }
+        }
+    }
+
+    private func setKeyframes(
+        _ assignments: [AUStretchKeyframeAssignment],
+        at time: CMTime,
+        keyframeAPI: FxKeyframeAPI_v3,
+        settingAPI: FxParameterSettingAPI_v5
+    ) throws {
+        let undoAPI = _apiManager.api(for: FxUndoAPI.self) as? FxUndoAPI
+        let startedUndoGroup = undoAPI?.startUndoGroup("Set Corner Keyframe") ?? false
+        defer {
+            if startedUndoGroup {
+                _ = undoAPI?.endUndoGroup()
+            }
+        }
+
+        for assignment in assignments {
+            var keyframe = FxKeyframe()
+            keyframe.version = 3
+            keyframe.time = time
+            keyframe.segmentStyle = .linear
+            if let error = keyframeAPI.add(
+                &keyframe,
+                toParameter: UInt(assignment.target.parameterID),
+                andChannel: assignment.target.channelIndex
+            ) {
+                throw error
+            }
+        }
+
+        for assignment in assignments {
+            let didSet = settingAPI.setFloatValue(
+                assignment.value,
+                toParameter: assignment.target.parameterID,
+                at: time
+            )
+            guard didSet else {
+                throw AUStretchKeyframeOperationError.parameterValueUnavailable(assignment.target, time)
+            }
+        }
+    }
+
+    private func keyframeIndex(
+        for target: AUStretchKeyframeTarget,
+        at time: CMTime,
+        keyframeAPI: FxKeyframeAPI_v3
+    ) throws -> UInt {
+        var count: UInt = 0
+        if let error = keyframeAPI.keyframeCount(
+            &count,
+            forParameter: UInt(target.parameterID),
+            andChannel: target.channelIndex
+        ) {
+            throw error
+        }
+
+        for index in 0..<count {
+            var keyframe = FxKeyframe()
+            keyframe.version = 3
+            if let error = keyframeAPI.keyframe(
+                &keyframe,
+                forParameter: UInt(target.parameterID),
+                channel: target.channelIndex,
+                andIndex: index
+            ) {
+                throw error
+            }
+            if CMTimeCompare(keyframe.time, time) == 0 {
+                return index
+            }
+        }
+
+        throw AUStretchKeyframeOperationError.keyframeIndexNotFound(target, time)
     }
 
     override func state(at renderTime: CMTime) -> AnyUprightParameterState {

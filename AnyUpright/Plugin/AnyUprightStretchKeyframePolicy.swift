@@ -10,25 +10,52 @@ struct AUStretchKeyframeTarget: Equatable {
     let channelIndex: UInt
 }
 
+struct AUStretchKeyframeAssignment: Equatable {
+    let target: AUStretchKeyframeTarget
+    let value: Double
+}
+
 enum AUStretchKeyframePolicyError: Error, Equatable {
     case invalidTime
 }
 
+enum AUStretchKeyframeAction: Equatable {
+    case set([AUStretchKeyframeTarget])
+    case unset([AUStretchKeyframeTarget])
+}
+
 enum AUStretchKeyframePolicy {
-    static func missingTargets(
+    static func action(
         from targets: [AUStretchKeyframeTarget],
         at time: CMTime,
         hasKeyframe: (AUStretchKeyframeTarget, CMTime) throws -> Bool
-    ) throws -> [AUStretchKeyframeTarget] {
+    ) throws -> AUStretchKeyframeAction {
         guard time.isValid, time.isNumeric, !time.isIndefinite else {
             throw AUStretchKeyframePolicyError.invalidTime
         }
 
-        var missing: [AUStretchKeyframeTarget] = []
-        missing.reserveCapacity(targets.count)
-        for target in targets where try !hasKeyframe(target, time) {
-            missing.append(target)
+        var keyframed: [AUStretchKeyframeTarget] = []
+        keyframed.reserveCapacity(targets.count)
+        for target in targets where try hasKeyframe(target, time) {
+            keyframed.append(target)
         }
-        return missing
+        return keyframed.isEmpty ? .set(targets) : .unset(keyframed)
+    }
+
+    static func assignments(
+        for targets: [AUStretchKeyframeTarget],
+        at time: CMTime,
+        currentValue: (AUStretchKeyframeTarget, CMTime) throws -> Double
+    ) throws -> [AUStretchKeyframeAssignment] {
+        guard time.isValid, time.isNumeric, !time.isIndefinite else {
+            throw AUStretchKeyframePolicyError.invalidTime
+        }
+
+        return try targets.map { target in
+            AUStretchKeyframeAssignment(
+                target: target,
+                value: try currentValue(target, time)
+            )
+        }
     }
 }

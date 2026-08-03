@@ -9,6 +9,8 @@
 "AnyUpright::Upright OSC Description" = "Onscreen guide and candidate line controls for AnyUpright Upright.";
 "AnyUpright::Analysis Model Loading" = "模型加载中";
 "AnyUpright::Analysis Frame Analyzing" = "画面分析中";
+"AnyUpright::Keyframes Set" = "已设置关键帧";
+"AnyUpright::Keyframes Removed" = "已删除关键帧\n如果片段上已经有关键帧，拖动本身就会在当前帧创建新的关键帧，不需要重复点击本按钮";
 "AnyUpright::Defaults New Instances Only" = "These defaults apply only to new filter instances.";
 "AnyUpright::Defaults Restore Factory" = "Restore Factory Defaults";
 "AnyUpright::Defaults Save" = "Save";

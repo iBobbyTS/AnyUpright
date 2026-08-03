@@ -74,6 +74,8 @@ struct AnyUprightParameterState {
 
 class AnyUprightOSCPlugIn: NSObject {
     let _apiManager: PROAPIAccessing!
+    private let displayStatusDiagnosticsLock = NSLock()
+    private var lastDiagnosticDisplayStatus: Int32?
 
     required init?(apiManager: PROAPIAccessing) {
         _apiManager = apiManager
@@ -114,14 +116,29 @@ class AnyUprightOSCPlugIn: NSObject {
 
     func analysisDisplayStatus(at time: CMTime) -> AUAnalysisDisplayStatus {
         guard let paramAPI = parameterRetrievalAPI() else {
+            AUTransientDisplayStatusDiagnostics.log(
+                "osc-read-missing-api osc=\(ObjectIdentifier(self)) time=\(AUTransientDisplayStatusDiagnostics.time(time))"
+            )
             return .none
         }
         var rawValue = AUAnalysisDisplayStatus.none.rawValue
-        paramAPI.getIntValue(
+        let succeeded = paramAPI.getIntValue(
             &rawValue,
             fromParameter: AUAnalysisDisplayStatusParameter.id,
             at: time
         )
+        displayStatusDiagnosticsLock.lock()
+        let previous = lastDiagnosticDisplayStatus
+        let changed = previous != rawValue
+        if changed {
+            lastDiagnosticDisplayStatus = rawValue
+        }
+        displayStatusDiagnosticsLock.unlock()
+        if changed || !succeeded {
+            AUTransientDisplayStatusDiagnostics.log(
+                "osc-read osc=\(ObjectIdentifier(self)) api=\(ObjectIdentifier(paramAPI as AnyObject)) time=\(AUTransientDisplayStatusDiagnostics.time(time)) success=\(succeeded ? 1 : 0) previous=\(previous.map(String.init) ?? "nil") raw=\(rawValue)"
+            )
+        }
         return AUAnalysisDisplayStatus(rawValue: rawValue) ?? .none
     }
 }
@@ -132,6 +149,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
     private var cachedStableRenderSize: AUSize?
     private lazy var outerStretchPreviewSourceID = ObjectIdentifier(self)
     private let pluginDefaultsWindowPresenter = AUPluginDefaultsWindowPresenter()
+    private let transientDisplayStatusController = AUTransientDisplayStatusController()
 
     required init?(apiManager: PROAPIAccessing) {
         _apiManager = apiManager
@@ -208,9 +226,9 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             parameterID: AUAnalysisDisplayStatusParameter.id,
             defaultValue: AUAnalysisDisplayStatus.none.rawValue,
             parameterMin: AUAnalysisDisplayStatus.none.rawValue,
-            parameterMax: AUAnalysisDisplayStatus.analyzingFrame.rawValue,
+            parameterMax: AUAnalysisDisplayStatus.keyframesRemoved.rawValue,
             sliderMin: AUAnalysisDisplayStatus.none.rawValue,
-            sliderMax: AUAnalysisDisplayStatus.analyzingFrame.rawValue,
+            sliderMax: AUAnalysisDisplayStatus.keyframesRemoved.rawValue,
             delta: 1,
             parameterFlags: flags
         )
@@ -225,6 +243,79 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
             status.rawValue,
             toParameter: AUAnalysisDisplayStatusParameter.id,
             at: time
+        )
+    }
+
+    func showTransientDisplayStatus(
+        _ status: AUAnalysisDisplayStatus,
+        at time: CMTime,
+        duration: TimeInterval = AUTransientDisplayStatusController.defaultDuration
+    ) {
+        guard time.isValid, time.isNumeric,
+              let settingAPI = parameterSettingAPI() else {
+            AUTransientDisplayStatusDiagnostics.log(
+                "effect-show-rejected effect=\(ObjectIdentifier(self)) status=\(status.rawValue) time=\(AUTransientDisplayStatusDiagnostics.time(time)) valid=\(time.isValid ? 1 : 0) numeric=\(time.isNumeric ? 1 : 0)"
+            )
+            return
+        }
+        let traceID = UUID().uuidString
+        let effectID = ObjectIdentifier(self)
+        AUTransientDisplayStatusDiagnostics.log(
+            "effect-show trace=\(traceID) effect=\(effectID) controller=\(ObjectIdentifier(transientDisplayStatusController)) api=\(ObjectIdentifier(settingAPI as AnyObject)) status=\(status.rawValue) time=\(AUTransientDisplayStatusDiagnostics.time(time)) duration=\(String(format: "%.3f", duration))"
+        )
+        transientDisplayStatusController.show(
+            status,
+            duration: duration,
+            traceID: traceID,
+            applyInitial: { updatedStatus in
+                AUTransientDisplayStatusDiagnostics.log(
+                    "effect-write-begin trace=\(traceID) effect=\(effectID) api=\(ObjectIdentifier(settingAPI as AnyObject)) status=\(updatedStatus.rawValue) time=\(AUTransientDisplayStatusDiagnostics.time(time))"
+                )
+                let succeeded = settingAPI.setIntValue(
+                    updatedStatus.rawValue,
+                    toParameter: AUAnalysisDisplayStatusParameter.id,
+                    at: time
+                )
+                AUTransientDisplayStatusDiagnostics.log(
+                    "effect-write-end trace=\(traceID) effect=\(effectID) status=\(updatedStatus.rawValue) success=\(succeeded ? 1 : 0)"
+                )
+            },
+            clear: { [self] in
+                clearTransientDisplayStatus(traceID: traceID)
+            }
+        )
+    }
+
+    private func clearTransientDisplayStatus(traceID: String) {
+        guard let actionAPI = _apiManager.api(for: FxCustomParameterActionAPI_v4.self) as? FxCustomParameterActionAPI_v4 else {
+            AUTransientDisplayStatusDiagnostics.log(
+                "effect-clear-missing-action-api trace=\(traceID) effect=\(ObjectIdentifier(self))"
+            )
+            return
+        }
+
+        actionAPI.startAction(self)
+        defer { actionAPI.endAction(self) }
+
+        let time = actionAPI.currentTime()
+        guard time.isValid, time.isNumeric,
+              let settingAPI = parameterSettingAPI() else {
+            AUTransientDisplayStatusDiagnostics.log(
+                "effect-clear-rejected trace=\(traceID) effect=\(ObjectIdentifier(self)) time=\(AUTransientDisplayStatusDiagnostics.time(time)) valid=\(time.isValid ? 1 : 0) numeric=\(time.isNumeric ? 1 : 0)"
+            )
+            return
+        }
+
+        AUTransientDisplayStatusDiagnostics.log(
+            "effect-clear-write-begin trace=\(traceID) effect=\(ObjectIdentifier(self)) api=\(ObjectIdentifier(settingAPI as AnyObject)) time=\(AUTransientDisplayStatusDiagnostics.time(time))"
+        )
+        let succeeded = settingAPI.setIntValue(
+            AUAnalysisDisplayStatus.none.rawValue,
+            toParameter: AUAnalysisDisplayStatusParameter.id,
+            at: time
+        )
+        AUTransientDisplayStatusDiagnostics.log(
+            "effect-clear-write-end trace=\(traceID) effect=\(ObjectIdentifier(self)) success=\(succeeded ? 1 : 0)"
         )
     }
 

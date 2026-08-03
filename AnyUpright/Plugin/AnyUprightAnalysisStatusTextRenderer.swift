@@ -21,6 +21,7 @@ final class AUAnalysisStatusTextRenderer {
         var registryID: UInt64
         var status: AUAnalysisDisplayStatus
         var fontPixelSize: Int
+        var maximumTextWidth: Int
     }
 
     private struct TextTexture {
@@ -44,7 +45,12 @@ final class AUAnalysisStatusTextRenderer {
         tileRect: AUAnalysisStatusRect
     ) {
         guard status != .none,
-              let textTexture = textTexture(status: status, imageHeight: imageRect.height, device: device),
+              let textTexture = textTexture(
+                  status: status,
+                  imageWidth: imageRect.width,
+                  imageHeight: imageRect.height,
+                  device: device
+              ),
               let quad = AUAnalysisStatusOverlayLayout.quad(
                   imageRect: imageRect,
                   tileRect: tileRect,
@@ -97,14 +103,17 @@ final class AUAnalysisStatusTextRenderer {
 
     private func textTexture(
         status: AUAnalysisDisplayStatus,
+        imageWidth: Double,
         imageHeight: Double,
         device: MTLDevice
     ) -> TextTexture? {
         let fontPixelSize = Int(round(min(72.0, max(24.0, imageHeight * 0.032))))
+        let maximumTextWidth = Int(round(min(1200.0, max(240.0, imageWidth * 0.8))))
         let key = TextureKey(
             registryID: device.registryID,
             status: status,
-            fontPixelSize: fontPixelSize
+            fontPixelSize: fontPixelSize,
+            maximumTextWidth: maximumTextWidth
         )
         cacheLock.lock()
         if let cached = textures[key] {
@@ -114,7 +123,11 @@ final class AUAnalysisStatusTextRenderer {
         cacheLock.unlock()
 
         guard let message = status.message,
-              let image = makeTextImage(message: message, fontPixelSize: fontPixelSize) else {
+              let image = makeTextImage(
+                  message: message,
+                  fontPixelSize: fontPixelSize,
+                  maximumTextWidth: maximumTextWidth
+              ) else {
             return nil
         }
         do {
@@ -136,24 +149,38 @@ final class AUAnalysisStatusTextRenderer {
         }
     }
 
-    private func makeTextImage(message: String, fontPixelSize: Int) -> CGImage? {
+    private func makeTextImage(
+        message: String,
+        fontPixelSize: Int,
+        maximumTextWidth: Int
+    ) -> CGImage? {
         let font = NSFont.systemFont(ofSize: CGFloat(fontPixelSize), weight: .semibold)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.lineSpacing = CGFloat(fontPixelSize) * 0.18
         let attributed = NSAttributedString(
             string: message,
             attributes: [
                 .font: font,
                 .foregroundColor: NSColor.white,
+                .paragraphStyle: paragraphStyle,
             ]
         )
-        let line = CTLineCreateWithAttributedString(attributed)
-        var ascent: CGFloat = 0.0
-        var descent: CGFloat = 0.0
-        var leading: CGFloat = 0.0
-        let textWidth = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
         let horizontalPadding = CGFloat(fontPixelSize) * 0.72
         let verticalPadding = CGFloat(fontPixelSize) * 0.42
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed)
+        let availableTextWidth = max(1.0, CGFloat(maximumTextWidth) - horizontalPadding * 2.0)
+        let suggestedSize = CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter,
+            CFRange(location: 0, length: attributed.length),
+            nil,
+            CGSize(width: availableTextWidth, height: .greatestFiniteMagnitude),
+            nil
+        )
+        let textWidth = min(availableTextWidth, ceil(suggestedSize.width))
+        let textHeight = ceil(suggestedSize.height)
         let width = max(1, Int(ceil(textWidth + horizontalPadding * 2.0)))
-        let height = max(1, Int(ceil(ascent + descent + leading + verticalPadding * 2.0)))
+        let height = max(1, Int(ceil(textHeight + verticalPadding * 2.0)))
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         guard let context = CGContext(
@@ -173,11 +200,19 @@ final class AUAnalysisStatusTextRenderer {
         let radius = CGFloat(fontPixelSize) * 0.42
         context.addPath(CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil))
         context.fillPath()
-        context.textPosition = CGPoint(
-            x: (CGFloat(width) - textWidth) * 0.5,
-            y: verticalPadding + descent
+        let textRect = CGRect(
+            x: horizontalPadding,
+            y: verticalPadding,
+            width: CGFloat(width) - horizontalPadding * 2.0,
+            height: CGFloat(height) - verticalPadding * 2.0
         )
-        CTLineDraw(line, context)
+        let frame = CTFramesetterCreateFrame(
+            framesetter,
+            CFRange(location: 0, length: attributed.length),
+            CGPath(rect: textRect, transform: nil),
+            nil
+        )
+        CTFrameDraw(frame, context)
         return context.makeImage()
     }
 

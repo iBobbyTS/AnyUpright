@@ -35,6 +35,7 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
     }
 
     override func addEffectParameters(_ paramAPI: FxParameterCreationAPI_v5) throws {
+        addAnalysisDisplayStatusParameter(paramAPI)
         addFixedModeParameter(paramAPI)
         let ratioDefault = showsSourceEditMode
             ? AUPluginDefaults.innerStretch.load().ratio
@@ -146,11 +147,13 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
                     keyframeAPI: keyframeAPI,
                     settingAPI: settingAPI
                 )
+                showTransientDisplayStatus(.keyframesSet, at: time)
             case .unset(let targets):
                 let removalIndices = try targets.map { target in
                     (target, try keyframeIndex(for: target, at: time, keyframeAPI: keyframeAPI))
                 }
                 try unsetKeyframes(removalIndices, keyframeAPI: keyframeAPI)
+                showTransientDisplayStatus(.keyframesRemoved, at: time)
             }
         } catch {
             NSLog("AnyUpright Stretch: unable to toggle corner keyframes: %@", String(describing: error))

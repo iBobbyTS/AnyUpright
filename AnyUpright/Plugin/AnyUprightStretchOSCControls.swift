@@ -41,20 +41,34 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let paramAPI = parameterRetrievalAPI()
         let state = stretchParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedStretchMode)
         let mode = stretchMode(from: state)
-        guard shouldEnableStretchOSCControls(from: state, mode: mode) else {
+        let displayStatus = analysisDisplayStatus(at: time)
+        let controlsEnabled = shouldEnableStretchOSCControls(from: state, mode: mode)
+        guard controlsEnabled || displayStatus != .none else {
             overlayRenderer.clear(destinationImage: destinationImage)
             return
         }
 
         updateLastSurfaceSize(from: destinationImage, fallback: AUSize(width: Double(width), height: Double(height)))
         let outputSize = AUSize(width: max(1.0, Double(width)), height: max(1.0, Double(height)))
+        if !controlsEnabled {
+            overlayRenderer.renderStyledSegments(
+                [],
+                handles: [],
+                activePart: StretchOSCPart.none.rawValue,
+                destinationImage: destinationImage,
+                destinationSize: outputSize,
+                analysisStatus: displayStatus
+            )
+            return
+        }
         if mode == .outputCorners {
             renderOutputCornersOSC(
                 from: state,
                 hostActivePart: activePart,
                 outputSize: outputSize,
                 destinationImage: destinationImage,
-                time: time
+                time: time,
+                displayStatus: displayStatus
             )
             return
         }
@@ -84,6 +98,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             destinationImage: destinationImage,
             outputSize: outputSize,
             canvasFrame: canvasFrame,
+            displayStatus: displayStatus,
             debugLog: { [weak self] message in
                 self?.debugLog("draw-source seq=\(debugSequence) \(message)")
             }
@@ -307,7 +322,8 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         hostActivePart: Int,
         outputSize: AUSize,
         destinationImage: FxImageTile,
-        time: CMTime
+        time: CMTime,
+        displayStatus: AUAnalysisDisplayStatus
     ) {
         let objectPoints = stretchObjectPoints(from: state, size: objectPixelSizeForOSC(defaultSize: outputSize), mode: .outputCorners)
         let canvasPoints = stretchCanvasPoints(from: objectPoints)
@@ -343,7 +359,8 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             destinationImage: destinationImage,
             outputSize: outputSize,
             canvasFrame: objectCanvasFrame(),
-            textureOverlay: textureOverlay
+            textureOverlay: textureOverlay,
+            displayStatus: displayStatus
         )
     }
 
@@ -354,6 +371,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         outputSize: AUSize,
         canvasFrame: [AUPoint],
         textureOverlay: AUOSCTextureOverlay? = nil,
+        displayStatus: AUAnalysisDisplayStatus = .none,
         debugLog: ((String) -> Void)? = nil
     ) {
         guard points.count == 4 else {
@@ -377,6 +395,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             coordinateSpace: .canvasFramePixels,
             handleStyle: innerStretchOverlayStyle(),
             textureOverlay: textureOverlay,
+            analysisStatus: displayStatus,
             debugLog: debugLog
         )
     }

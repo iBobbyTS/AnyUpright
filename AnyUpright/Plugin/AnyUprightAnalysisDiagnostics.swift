@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import CoreMedia
 
 enum AUMonotonicClock {
     static func nowNanos() -> UInt64 {
@@ -65,4 +66,24 @@ enum AUAnalysisDiagnostics {
         markerPath: "/tmp/AnyUprightUprightAnalysis.debug",
         logPath: "/tmp/AnyUprightUprightAnalysis.log"
     )
+}
+
+enum AUTransientDisplayStatusDiagnostics {
+    static let markerPath = "/tmp/AnyUprightTransientDisplayStatus.debug"
+    static let logPath = "/tmp/AnyUprightTransientDisplayStatus.log"
+
+    private static let logger = AUAnalysisLogger(
+        markerPath: markerPath,
+        logPath: logPath,
+        prefix: "transient-status "
+    )
+
+    static func log(_ message: String) {
+        logger.log("thread=\(Thread.isMainThread ? "main" : "background") \(message)")
+    }
+
+    static func time(_ time: CMTime) -> String {
+        guard time.isValid else { return "invalid" }
+        return "\(time.value)/\(time.timescale)=\(String(format: "%.6f", CMTimeGetSeconds(time)))"
+    }
 }

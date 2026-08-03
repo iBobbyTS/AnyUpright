@@ -15,6 +15,9 @@ private enum AnalysisStatusTestFailure: Error, CustomStringConvertible {
 struct AnyUprightAnalysisStatusTests {
     static func main() throws {
         try testMessages()
+        try testTransientStatusExpires()
+        try testNewTransientStatusSupersedesOldExpiration()
+        try testTransientStatusOutlivesCallingOwner()
         try testFullTileLayout()
         try testPartialTileClipping()
         try testNoIntersectionAndInvalidDimensions()
@@ -27,7 +30,110 @@ struct AnyUprightAnalysisStatusTests {
         try require(AUAnalysisDisplayStatus.none.message == nil, "none must not render text")
         try require(AUAnalysisDisplayStatus.modelLoading.message == "模型加载中", "model loading message")
         try require(AUAnalysisDisplayStatus.analyzingFrame.message == "画面分析中", "analyzing message")
-        try require(AUAnalysisDisplayStatus.allCases.count == 3, "status cases")
+        try require(AUAnalysisDisplayStatus.keyframesSet.message == "已设置关键帧", "keyframes set message")
+        try require(
+            AUAnalysisDisplayStatus.keyframesRemoved.message == "已删除关键帧\n如果片段上已经有关键帧，拖动本身就会在当前帧创建新的关键帧，不需要重复点击本按钮",
+            "keyframes removed message"
+        )
+        try require(AUAnalysisDisplayStatus.allCases.count == 5, "status cases")
+    }
+
+    private static func testTransientStatusExpires() throws {
+        let queue = DispatchQueue(label: "AnyUprightAnalysisStatusTests.expiration")
+        let controller = AUTransientDisplayStatusController(queue: queue)
+        let lock = NSLock()
+        var statuses: [AUAnalysisDisplayStatus] = []
+        controller.show(
+            .keyframesSet,
+            duration: 0.02,
+            applyInitial: { status in
+                lock.lock()
+                statuses.append(status)
+                lock.unlock()
+            },
+            clear: {
+                lock.lock()
+                statuses.append(.none)
+                lock.unlock()
+            }
+        )
+        Thread.sleep(forTimeInterval: 0.08)
+        lock.lock()
+        let captured = statuses
+        lock.unlock()
+        try require(captured == [.keyframesSet, .none], "transient status must clear after its duration")
+    }
+
+    private static func testNewTransientStatusSupersedesOldExpiration() throws {
+        let queue = DispatchQueue(label: "AnyUprightAnalysisStatusTests.generation")
+        let controller = AUTransientDisplayStatusController(queue: queue)
+        let lock = NSLock()
+        var statuses: [AUAnalysisDisplayStatus] = []
+        let record: (AUAnalysisDisplayStatus) -> Void = { status in
+            lock.lock()
+            statuses.append(status)
+            lock.unlock()
+        }
+        controller.show(
+            .keyframesSet,
+            duration: 0.02,
+            applyInitial: record,
+            clear: { record(.none) }
+        )
+        Thread.sleep(forTimeInterval: 0.01)
+        controller.show(
+            .keyframesRemoved,
+            duration: 0.06,
+            applyInitial: record,
+            clear: { record(.none) }
+        )
+        Thread.sleep(forTimeInterval: 0.03)
+        lock.lock()
+        let beforeLatestExpiration = statuses
+        lock.unlock()
+        try require(
+            beforeLatestExpiration == [.keyframesSet, .keyframesRemoved],
+            "an old timer must not clear a newer status"
+        )
+        Thread.sleep(forTimeInterval: 0.06)
+        lock.lock()
+        let afterLatestExpiration = statuses
+        lock.unlock()
+        try require(
+            afterLatestExpiration == [.keyframesSet, .keyframesRemoved, .none],
+            "the newest timer must clear the current status"
+        )
+    }
+
+    private static func testTransientStatusOutlivesCallingOwner() throws {
+        let queue = DispatchQueue(label: "AnyUprightAnalysisStatusTests.owner-lifetime")
+        let lock = NSLock()
+        var statuses: [AUAnalysisDisplayStatus] = []
+        var controller: AUTransientDisplayStatusController? = AUTransientDisplayStatusController(queue: queue)
+        controller?.show(
+            .keyframesSet,
+            duration: 0.02,
+            applyInitial: { status in
+                lock.lock()
+                statuses.append(status)
+                lock.unlock()
+            },
+            clear: {
+                lock.lock()
+                statuses.append(.none)
+                lock.unlock()
+            }
+        )
+        controller = nil
+
+        Thread.sleep(forTimeInterval: 0.08)
+        lock.lock()
+        let captured = statuses
+        lock.unlock()
+        try require(
+            captured == [.keyframesSet, .none],
+            "a pending clear must survive release of the calling owner"
+        )
     }
 
     private static func testFullTileLayout() throws {

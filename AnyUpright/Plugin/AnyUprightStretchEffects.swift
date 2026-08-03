@@ -65,7 +65,7 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         }
 
         paramAPI.addPushButton(
-            withName: "Set/Unset Corner Keyframe",
+            withName: "Set/Unset Key Frame",
             parameterID: StretchParam.setCornerKeyframe.rawValue,
             selector: #selector(toggleCornerKeyframe),
             parameterFlags: defaultFlags()

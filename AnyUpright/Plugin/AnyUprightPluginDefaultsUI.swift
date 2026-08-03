@@ -290,7 +290,7 @@ private final class AUPluginDefaultsViewController: NSViewController {
 
         let scopeLabel = NSTextField(wrappingLabelWithString: defaultsLocalized(
             "AnyUpright::Defaults New Instances Only",
-            fallback: "These defaults apply only to new filter instances."
+            fallback: "Default parameter values apply only to new filter instances."
         ))
         scopeLabel.textColor = .secondaryLabelColor
 
@@ -450,6 +450,14 @@ final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
         (defaultsLocalized("AnyUpright::Defaults Ratio Fit", fallback: "Fit"), Int(AUStretchRatioMode.fit.rawValue)),
         (defaultsLocalized("AnyUpright::Defaults Ratio Fill", fallback: "Fill"), Int(AUStretchRatioMode.fill.rawValue)),
     ])
+    private let suppressKeyframeNotificationsButton = NSButton(
+        checkboxWithTitle: defaultsLocalized(
+            "AnyUpright::Defaults Suppress Keyframe Notifications",
+            fallback: "Don't show keyframe notifications"
+        ),
+        target: nil,
+        action: nil
+    )
     var onChange: (() -> Void)? {
         get { session.onChange }
         set { session.onChange = newValue }
@@ -459,10 +467,17 @@ final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
     var canSave: Bool { session.canSave }
 
     lazy var contentView: NSView = {
-        AUPluginDefaultsForm.labeledRow(
-            label: defaultsLocalized("AnyUpright::Defaults Ratio", fallback: "Ratio"),
-            control: ratioPopup
-        )
+        let stack = NSStackView(views: [
+            AUPluginDefaultsForm.labeledRow(
+                label: defaultsLocalized("AnyUpright::Defaults Ratio", fallback: "Ratio"),
+                control: ratioPopup
+            ),
+            AUPluginDefaultsForm.labeledRow(label: "", control: suppressKeyframeNotificationsButton),
+        ])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10.0
+        return stack
     }()
 
     init(store: AUPluginDefaultsStore<AUInnerStretchDefaultSettings> = AUPluginDefaults.innerStretch) {
@@ -470,6 +485,8 @@ final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
         super.init()
         ratioPopup.target = self
         ratioPopup.action = #selector(controlDidChange)
+        suppressKeyframeNotificationsButton.target = self
+        suppressKeyframeNotificationsButton.action = #selector(controlDidChange)
     }
 
     func beginEditingSession() {
@@ -490,11 +507,15 @@ final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
 
     private func settingsFromControls() -> AUInnerStretchDefaultSettings {
         let ratio = AUStretchRatioMode(rawValue: Int32(ratioPopup.selectedTag())) ?? .none
-        return AUInnerStretchDefaultSettings(ratio: ratio)
+        return AUInnerStretchDefaultSettings(
+            ratio: ratio,
+            suppressKeyframeNotifications: suppressKeyframeNotificationsButton.state == .on
+        )
     }
 
     private func apply(_ settings: AUInnerStretchDefaultSettings) {
         AUPluginDefaultsForm.select(tag: Int(settings.ratio.rawValue), in: ratioPopup)
+        suppressKeyframeNotificationsButton.state = settings.suppressKeyframeNotifications ? .on : .off
     }
 }
 

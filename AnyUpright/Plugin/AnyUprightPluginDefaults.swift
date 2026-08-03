@@ -62,14 +62,35 @@ struct AUHorizonDefaultSettings: AUPluginDefaultSettings {
 struct AUInnerStretchDefaultSettings: AUPluginDefaultSettings {
     static let currentSchemaVersion = 1
     static let fileName = "InnerStretch.plist"
-    static let factoryDefaults = AUInnerStretchDefaultSettings(ratio: .none)
+    static let factoryDefaults = AUInnerStretchDefaultSettings(
+        ratio: .none,
+        suppressKeyframeNotifications: false
+    )
 
     let schemaVersion: Int
     var ratio: AUStretchRatioMode
+    var suppressKeyframeNotifications: Bool
 
-    init(ratio: AUStretchRatioMode) {
+    init(ratio: AUStretchRatioMode, suppressKeyframeNotifications: Bool = false) {
         schemaVersion = Self.currentSchemaVersion
         self.ratio = ratio
+        self.suppressKeyframeNotifications = suppressKeyframeNotifications
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case ratio
+        case suppressKeyframeNotifications
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        ratio = try container.decode(AUStretchRatioMode.self, forKey: .ratio)
+        suppressKeyframeNotifications = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .suppressKeyframeNotifications
+        ) ?? false
     }
 }
 

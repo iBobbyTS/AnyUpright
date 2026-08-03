@@ -19,9 +19,25 @@ struct AnyUprightPluginDefaultsTests {
 
         try testFactoryDefaults(root: root)
         try testIndependentRoundTrips(root: root)
+        try testLegacyInnerStretchSettings(root: root)
         try testInvalidFilesFailClosed(root: root)
         try testEditingStateTransitions()
         print("AnyUprightPluginDefaultsTests passed")
+    }
+
+    private static func testLegacyInnerStretchSettings(root: URL) throws {
+        let legacyURL = root.appendingPathComponent("LegacyInnerStretch.plist")
+        let legacy: [String: Any] = [
+            "schemaVersion": AUInnerStretchDefaultSettings.currentSchemaVersion,
+            "ratio": AUStretchRatioMode.fit.rawValue,
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: legacy, format: .xml, options: 0)
+        try data.write(to: legacyURL)
+
+        let store = AUPluginDefaultsStore<AUInnerStretchDefaultSettings>(fileURL: legacyURL)
+        let loaded = store.load()
+        try require(loaded.ratio == .fit, "legacy Inner Stretch preserves Ratio")
+        try require(!loaded.suppressKeyframeNotifications, "legacy Inner Stretch enables notifications")
     }
 
     private static func testFactoryDefaults(root: URL) throws {
@@ -40,7 +56,10 @@ struct AnyUprightPluginDefaultsTests {
         let upright = uprightStore(root)
 
         try horizon.save(AUHorizonDefaultSettings(fillFrame: true))
-        try innerStretch.save(AUInnerStretchDefaultSettings(ratio: .fill))
+        try innerStretch.save(AUInnerStretchDefaultSettings(
+            ratio: .fill,
+            suppressKeyframeNotifications: true
+        ))
         try upright.save(AUUprightDefaultSettings(
             direction: .full,
             mode: .semiAutomatic,
@@ -49,6 +68,7 @@ struct AnyUprightPluginDefaultsTests {
 
         try require(horizon.load().fillFrame, "Horizon persisted Fill Frame")
         try require(innerStretch.load().ratio == .fill, "Inner Stretch persisted Ratio")
+        try require(innerStretch.load().suppressKeyframeNotifications, "Inner Stretch persisted keyframe notification preference")
         let uprightValue = upright.load()
         try require(uprightValue.direction == .full, "Upright persisted Direction")
         try require(uprightValue.mode == .semiAutomatic, "Upright persisted Mode")
@@ -57,6 +77,7 @@ struct AnyUprightPluginDefaultsTests {
         try horizon.reset()
         try require(horizon.load() == .factoryDefaults, "Horizon reset")
         try require(innerStretch.load().ratio == .fill, "Horizon reset leaves Inner Stretch unchanged")
+        try require(innerStretch.load().suppressKeyframeNotifications, "Horizon reset leaves Inner Stretch notification preference unchanged")
         try require(upright.load().direction == .full, "Horizon reset leaves Upright unchanged")
     }
 

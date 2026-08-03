@@ -14,7 +14,7 @@
 "AnyUpright::Defaults Save" = "Save";
 "AnyUpright::Defaults Saved" = "Saved for new instances.";
 "AnyUpright::Defaults Save Failed" = "Unable to save defaults.";
-"AnyUpright::Defaults Restored" = "Factory defaults restored.";
+"AnyUpright::Defaults Restored" = "Factory defaults selected. Save to apply.";
 "AnyUpright::Horizon Defaults Title" = "Horizon Defaults";
 "AnyUpright::Inner Stretch Defaults Title" = "Inner Stretch Defaults";
 "AnyUpright::Upright Defaults Title" = "Upright Defaults";

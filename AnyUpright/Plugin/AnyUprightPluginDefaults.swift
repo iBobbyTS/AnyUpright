@@ -13,6 +13,38 @@ protocol AUPluginDefaultSettings: Codable, Equatable {
     var schemaVersion: Int { get }
 }
 
+struct AUPluginDefaultsEditingState<Settings: Equatable> {
+    let factoryDefaults: Settings
+    private(set) var saved: Settings
+    private(set) var current: Settings
+
+    init(factoryDefaults: Settings, saved: Settings) {
+        self.factoryDefaults = factoryDefaults
+        self.saved = saved
+        current = saved
+    }
+
+    var canRestoreFactoryDefaults: Bool {
+        current != factoryDefaults
+    }
+
+    var canSave: Bool {
+        current != saved
+    }
+
+    mutating func updateCurrent(_ settings: Settings) {
+        current = settings
+    }
+
+    mutating func restoreFactoryDefaults() {
+        current = factoryDefaults
+    }
+
+    mutating func markCurrentAsSaved() {
+        saved = current
+    }
+}
+
 struct AUHorizonDefaultSettings: AUPluginDefaultSettings {
     static let currentSchemaVersion = 1
     static let fileName = "Horizon.plist"

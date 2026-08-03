@@ -48,10 +48,57 @@ private func defaultsLocalized(_ key: String, fallback: String) -> String {
 protocol AUPluginDefaultsEditor: AnyObject {
     var title: String { get }
     var contentView: NSView { get }
+    var canRestoreFactoryDefaults: Bool { get }
+    var canSave: Bool { get }
+    var onChange: (() -> Void)? { get set }
 
-    func reloadFromStore()
+    func beginEditingSession()
     func save() throws
-    func restoreFactoryDefaults() throws
+    func restoreFactoryDefaults()
+}
+
+private final class AUPluginDefaultsEditorSession<Settings: AUPluginDefaultSettings> {
+    private let store: AUPluginDefaultsStore<Settings>
+    private var state: AUPluginDefaultsEditingState<Settings>
+
+    var onChange: (() -> Void)?
+    var canRestoreFactoryDefaults: Bool { state.canRestoreFactoryDefaults }
+    var canSave: Bool { state.canSave }
+
+    init(store: AUPluginDefaultsStore<Settings>) {
+        self.store = store
+        state = AUPluginDefaultsEditingState(
+            factoryDefaults: Settings.factoryDefaults,
+            saved: Settings.factoryDefaults
+        )
+    }
+
+    func beginEditingSession() -> Settings {
+        let saved = store.load()
+        state = AUPluginDefaultsEditingState(
+            factoryDefaults: Settings.factoryDefaults,
+            saved: saved
+        )
+        return state.current
+    }
+
+    func updateCurrent(_ settings: Settings) {
+        state.updateCurrent(settings)
+        onChange?()
+    }
+
+    func save(_ settings: Settings) throws {
+        state.updateCurrent(settings)
+        try store.save(state.current)
+        state.markCurrentAsSaved()
+        onChange?()
+    }
+
+    func restoreFactoryDefaults() -> Settings {
+        state.restoreFactoryDefaults()
+        onChange?()
+        return state.current
+    }
 }
 
 enum AUPluginDefaultsForm {
@@ -88,6 +135,33 @@ enum AUPluginDefaultsForm {
     }
 }
 
+private enum AUPluginDefaultsRemoteWindowMount {
+    static func attach(
+        rootView: NSView,
+        to callbackParentView: NSView,
+        identifier: NSUserInterfaceItemIdentifier
+    ) -> NSView {
+        precondition(Thread.isMainThread, "Plugin defaults UI must be attached on the main thread")
+
+        let hostView = callbackParentView.superview ?? callbackParentView
+        hostView.subviews
+            .filter { $0.identifier == identifier }
+            .forEach { $0.removeFromSuperview() }
+
+        rootView.identifier = identifier
+        rootView.translatesAutoresizingMaskIntoConstraints = false
+        hostView.addSubview(rootView)
+        NSLayoutConstraint.activate([
+            rootView.leadingAnchor.constraint(equalTo: hostView.leadingAnchor),
+            rootView.trailingAnchor.constraint(equalTo: hostView.trailingAnchor),
+            rootView.topAnchor.constraint(equalTo: hostView.topAnchor),
+            rootView.bottomAnchor.constraint(equalTo: hostView.bottomAnchor),
+        ])
+        hostView.layoutSubtreeIfNeeded()
+        return hostView
+    }
+}
+
 final class AUPluginDefaultsWindowPresenter {
     private static let rootIdentifier = NSUserInterfaceItemIdentifier("AnyUpright.PluginDefaults.Root")
     private static let contentSize = CGSize(width: 480.0, height: 260.0)
@@ -95,14 +169,14 @@ final class AUPluginDefaultsWindowPresenter {
     private let stateLock = NSLock()
     private var requestPending = false
     private var nextRequestID: UInt64 = 0
-    private weak var activeParentView: NSView?
+    private weak var activeHostView: NSView?
     private var viewController: AUPluginDefaultsViewController?
 
     func present(remoteWindowAPI: FxRemoteWindowAPI, editor: AUPluginDefaultsEditor) {
         precondition(Thread.isMainThread, "Plugin defaults UI must be presented on the main thread")
 
-        if let activeParentView,
-           let activeWindow = activeParentView.window,
+        if let activeHostView,
+           let activeWindow = activeHostView.window,
            activeWindow.isVisible {
             AUPluginDefaultsDiagnostics.log(
                 "present reused presenter=\(ObjectIdentifier(self)) editor=\(editor.title)"
@@ -110,7 +184,7 @@ final class AUPluginDefaultsWindowPresenter {
             activeWindow.makeKeyAndOrderFront(nil)
             return
         }
-        activeParentView = nil
+        activeHostView = nil
 
         stateLock.lock()
         guard !requestPending else {
@@ -128,7 +202,7 @@ final class AUPluginDefaultsWindowPresenter {
         AUPluginDefaultsDiagnostics.log(
             "present begin request=\(requestID) presenter=\(ObjectIdentifier(self)) editor=\(editor.title) api=\(String(describing: type(of: remoteWindowAPI)))"
         )
-        editor.reloadFromStore()
+        editor.beginEditingSession()
         AUPluginDefaultsDiagnostics.log("present reloaded request=\(requestID) editor=\(editor.title)")
         remoteWindowAPI.remoteWindow(of: Self.contentSize) { [weak self] parentView, error in
             AUPluginDefaultsDiagnostics.log(
@@ -154,23 +228,21 @@ final class AUPluginDefaultsWindowPresenter {
                     return
                 }
 
+                let hostView = parentView.superview ?? parentView
                 AUPluginDefaultsDiagnostics.log(
-                    "present attach begin request=\(requestID) parentFrame=\(NSStringFromRect(parentView.frame)) parentBounds=\(NSStringFromRect(parentView.bounds)) existingSubviews=\(parentView.subviews.count)"
+                    "present attach begin request=\(requestID) parentFrame=\(NSStringFromRect(parentView.frame)) parentBounds=\(NSStringFromRect(parentView.bounds)) parentSubviews=\(parentView.subviews.count) hostIsSuperview=\(hostView !== parentView) hostFrame=\(NSStringFromRect(hostView.frame)) hostBounds=\(NSStringFromRect(hostView.bounds)) hostSubviews=\(hostView.subviews.count)"
                 )
                 let controller = AUPluginDefaultsViewController(editor: editor)
                 self.viewController = controller
                 let rootView = controller.view
-                rootView.identifier = Self.rootIdentifier
-                rootView.frame = NSRect(origin: .zero, size: parentView.bounds.size)
-                rootView.autoresizingMask = [.width, .height]
-
-                parentView.subviews
-                    .filter { $0.identifier == Self.rootIdentifier }
-                    .forEach { $0.removeFromSuperview() }
-                parentView.addSubview(rootView)
-                self.activeParentView = parentView
+                let mountedHostView = AUPluginDefaultsRemoteWindowMount.attach(
+                    rootView: rootView,
+                    to: parentView,
+                    identifier: Self.rootIdentifier
+                )
+                self.activeHostView = mountedHostView
                 AUPluginDefaultsDiagnostics.log(
-                    "present attach end request=\(requestID) rootFrame=\(NSStringFromRect(rootView.frame)) parentSubviews=\(parentView.subviews.count)"
+                    "present attach end request=\(requestID) rootFrame=\(NSStringFromRect(rootView.frame)) hostBounds=\(NSStringFromRect(mountedHostView.bounds)) hostSubviews=\(mountedHostView.subviews.count)"
                 )
             }
         }
@@ -179,8 +251,25 @@ final class AUPluginDefaultsWindowPresenter {
 }
 
 private final class AUPluginDefaultsViewController: NSViewController {
+    private static let contentInset = 20.0
+    private static let contentToFooterSpacing = 20.0
+    private static let actionSpacing = 10.0
+
     private let editor: AUPluginDefaultsEditor
     private let statusLabel = NSTextField(labelWithString: "")
+    private lazy var resetButton = NSButton(
+        title: defaultsLocalized(
+            "AnyUpright::Defaults Restore Factory",
+            fallback: "Restore Factory Defaults"
+        ),
+        target: self,
+        action: #selector(restoreFactoryDefaults)
+    )
+    private lazy var saveButton = NSButton(
+        title: defaultsLocalized("AnyUpright::Defaults Save", fallback: "Save"),
+        target: self,
+        action: #selector(save)
+    )
 
     init(editor: AUPluginDefaultsEditor) {
         self.editor = editor
@@ -210,45 +299,69 @@ private final class AUPluginDefaultsViewController: NSViewController {
         contentStack.alignment = .leading
         contentStack.spacing = 14.0
         contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.setContentHuggingPriority(.required, for: .vertical)
+        contentStack.setContentCompressionResistancePriority(.required, for: .vertical)
+        editor.contentView.translatesAutoresizingMaskIntoConstraints = false
 
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.lineBreakMode = .byTruncatingTail
-
-        let resetButton = NSButton(
-            title: defaultsLocalized(
-                "AnyUpright::Defaults Restore Factory",
-                fallback: "Restore Factory Defaults"
-            ),
-            target: self,
-            action: #selector(restoreFactoryDefaults)
-        )
-        let saveButton = NSButton(
-            title: defaultsLocalized("AnyUpright::Defaults Save", fallback: "Save"),
-            target: self,
-            action: #selector(save)
-        )
-        saveButton.keyEquivalent = "\r"
-
-        let actionStack = NSStackView(views: [statusLabel, resetButton, saveButton])
-        actionStack.orientation = .horizontal
-        actionStack.alignment = .centerY
-        actionStack.spacing = 10.0
-        actionStack.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        rootView.addSubview(contentStack)
-        rootView.addSubview(actionStack)
+        saveButton.keyEquivalent = "\r"
+        resetButton.setContentHuggingPriority(.required, for: .horizontal)
+        resetButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        saveButton.setContentHuggingPriority(.required, for: .horizontal)
+        saveButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        let footerStack = NSStackView(views: [statusLabel, resetButton, saveButton])
+        footerStack.orientation = .horizontal
+        footerStack.alignment = .centerY
+        footerStack.spacing = Self.actionSpacing
+        footerStack.translatesAutoresizingMaskIntoConstraints = false
+        footerStack.setContentHuggingPriority(.required, for: .vertical)
+        footerStack.setContentCompressionResistancePriority(.required, for: .vertical)
+
+        let flexibleSpacer = NSView()
+        flexibleSpacer.translatesAutoresizingMaskIntoConstraints = false
+        flexibleSpacer.setContentHuggingPriority(.defaultLow, for: .vertical)
+        flexibleSpacer.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+
+        let layoutStack = NSStackView(views: [contentStack, flexibleSpacer, footerStack])
+        layoutStack.orientation = .vertical
+        layoutStack.alignment = .leading
+        layoutStack.distribution = .fill
+        layoutStack.spacing = 0.0
+        layoutStack.setCustomSpacing(Self.contentToFooterSpacing, after: contentStack)
+        layoutStack.translatesAutoresizingMaskIntoConstraints = false
+
+        rootView.addSubview(layoutStack)
         NSLayoutConstraint.activate([
-            contentStack.leadingAnchor.constraint(equalTo: rootView.leadingAnchor, constant: 20.0),
-            contentStack.trailingAnchor.constraint(lessThanOrEqualTo: rootView.trailingAnchor, constant: -20.0),
-            contentStack.topAnchor.constraint(equalTo: rootView.topAnchor, constant: 20.0),
-            editor.contentView.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
+            layoutStack.leadingAnchor.constraint(equalTo: rootView.leadingAnchor, constant: Self.contentInset),
+            layoutStack.trailingAnchor.constraint(equalTo: rootView.trailingAnchor, constant: -Self.contentInset),
+            layoutStack.topAnchor.constraint(equalTo: rootView.topAnchor, constant: Self.contentInset),
+            layoutStack.bottomAnchor.constraint(equalTo: rootView.bottomAnchor, constant: -Self.contentInset),
 
-            actionStack.leadingAnchor.constraint(equalTo: rootView.leadingAnchor, constant: 20.0),
-            actionStack.trailingAnchor.constraint(equalTo: rootView.trailingAnchor, constant: -20.0),
-            actionStack.bottomAnchor.constraint(equalTo: rootView.bottomAnchor, constant: -20.0),
-            actionStack.topAnchor.constraint(greaterThanOrEqualTo: contentStack.bottomAnchor, constant: 20.0),
+            contentStack.widthAnchor.constraint(equalTo: layoutStack.widthAnchor),
+            flexibleSpacer.widthAnchor.constraint(equalTo: layoutStack.widthAnchor),
+            footerStack.widthAnchor.constraint(equalTo: layoutStack.widthAnchor),
+            editor.contentView.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
         ])
+
+        editor.onChange = { [weak self] in
+            self?.editorDidChange()
+        }
+        updateActionState()
+    }
+
+    private func editorDidChange() {
+        statusLabel.stringValue = ""
+        updateActionState()
+    }
+
+    private func updateActionState() {
+        resetButton.isEnabled = editor.canRestoreFactoryDefaults
+        saveButton.isEnabled = editor.canSave
     }
 
     @objc private func save() {
@@ -268,31 +381,30 @@ private final class AUPluginDefaultsViewController: NSViewController {
     }
 
     @objc private func restoreFactoryDefaults() {
-        do {
-            try editor.restoreFactoryDefaults()
-            statusLabel.stringValue = defaultsLocalized(
-                "AnyUpright::Defaults Restored",
-                fallback: "Factory defaults restored."
-            )
-        } catch {
-            statusLabel.stringValue = defaultsLocalized(
-                "AnyUpright::Defaults Save Failed",
-                fallback: "Unable to save defaults."
-            )
-            NSLog("AnyUpright defaults restore error: %@", String(describing: error))
-        }
+        editor.restoreFactoryDefaults()
+        statusLabel.stringValue = defaultsLocalized(
+            "AnyUpright::Defaults Restored",
+            fallback: "Factory defaults selected. Save to apply."
+        )
     }
 }
 
-final class AUHorizonDefaultsEditor: AUPluginDefaultsEditor {
+final class AUHorizonDefaultsEditor: NSObject, AUPluginDefaultsEditor {
     let title = defaultsLocalized("AnyUpright::Horizon Defaults Title", fallback: "Horizon Defaults")
 
-    private let store: AUPluginDefaultsStore<AUHorizonDefaultSettings>
+    private let session: AUPluginDefaultsEditorSession<AUHorizonDefaultSettings>
     private let fillFrameButton = NSButton(
         checkboxWithTitle: defaultsLocalized("AnyUpright::Defaults Fill Frame", fallback: "Fill Frame"),
         target: nil,
         action: nil
     )
+    var onChange: (() -> Void)? {
+        get { session.onChange }
+        set { session.onChange = newValue }
+    }
+
+    var canRestoreFactoryDefaults: Bool { session.canRestoreFactoryDefaults }
+    var canSave: Bool { session.canSave }
 
     lazy var contentView: NSView = {
         let stack = NSStackView(views: [fillFrameButton])
@@ -302,32 +414,53 @@ final class AUHorizonDefaultsEditor: AUPluginDefaultsEditor {
     }()
 
     init(store: AUPluginDefaultsStore<AUHorizonDefaultSettings> = AUPluginDefaults.horizon) {
-        self.store = store
+        session = AUPluginDefaultsEditorSession(store: store)
+        super.init()
+        fillFrameButton.target = self
+        fillFrameButton.action = #selector(controlDidChange)
     }
 
-    func reloadFromStore() {
-        fillFrameButton.state = store.load().fillFrame ? .on : .off
+    func beginEditingSession() {
+        apply(session.beginEditingSession())
     }
 
     func save() throws {
-        try store.save(AUHorizonDefaultSettings(fillFrame: fillFrameButton.state == .on))
+        try session.save(settingsFromControls())
     }
 
-    func restoreFactoryDefaults() throws {
-        try store.reset()
-        reloadFromStore()
+    func restoreFactoryDefaults() {
+        apply(session.restoreFactoryDefaults())
+    }
+
+    @objc private func controlDidChange() {
+        session.updateCurrent(settingsFromControls())
+    }
+
+    private func settingsFromControls() -> AUHorizonDefaultSettings {
+        AUHorizonDefaultSettings(fillFrame: fillFrameButton.state == .on)
+    }
+
+    private func apply(_ settings: AUHorizonDefaultSettings) {
+        fillFrameButton.state = settings.fillFrame ? .on : .off
     }
 }
 
-final class AUInnerStretchDefaultsEditor: AUPluginDefaultsEditor {
+final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
     let title = defaultsLocalized("AnyUpright::Inner Stretch Defaults Title", fallback: "Inner Stretch Defaults")
 
-    private let store: AUPluginDefaultsStore<AUInnerStretchDefaultSettings>
+    private let session: AUPluginDefaultsEditorSession<AUInnerStretchDefaultSettings>
     private let ratioPopup = AUPluginDefaultsForm.popup(entries: [
         (defaultsLocalized("AnyUpright::Defaults Ratio None", fallback: "None"), Int(AUStretchRatioMode.none.rawValue)),
         (defaultsLocalized("AnyUpright::Defaults Ratio Fit", fallback: "Fit"), Int(AUStretchRatioMode.fit.rawValue)),
         (defaultsLocalized("AnyUpright::Defaults Ratio Fill", fallback: "Fill"), Int(AUStretchRatioMode.fill.rawValue)),
     ])
+    var onChange: (() -> Void)? {
+        get { session.onChange }
+        set { session.onChange = newValue }
+    }
+
+    var canRestoreFactoryDefaults: Bool { session.canRestoreFactoryDefaults }
+    var canSave: Bool { session.canSave }
 
     lazy var contentView: NSView = {
         AUPluginDefaultsForm.labeledRow(
@@ -337,28 +470,42 @@ final class AUInnerStretchDefaultsEditor: AUPluginDefaultsEditor {
     }()
 
     init(store: AUPluginDefaultsStore<AUInnerStretchDefaultSettings> = AUPluginDefaults.innerStretch) {
-        self.store = store
+        session = AUPluginDefaultsEditorSession(store: store)
+        super.init()
+        ratioPopup.target = self
+        ratioPopup.action = #selector(controlDidChange)
     }
 
-    func reloadFromStore() {
-        AUPluginDefaultsForm.select(tag: Int(store.load().ratio.rawValue), in: ratioPopup)
+    func beginEditingSession() {
+        apply(session.beginEditingSession())
     }
 
     func save() throws {
-        let ratio = AUStretchRatioMode(rawValue: Int32(ratioPopup.selectedTag())) ?? .none
-        try store.save(AUInnerStretchDefaultSettings(ratio: ratio))
+        try session.save(settingsFromControls())
     }
 
-    func restoreFactoryDefaults() throws {
-        try store.reset()
-        reloadFromStore()
+    func restoreFactoryDefaults() {
+        apply(session.restoreFactoryDefaults())
+    }
+
+    @objc private func controlDidChange() {
+        session.updateCurrent(settingsFromControls())
+    }
+
+    private func settingsFromControls() -> AUInnerStretchDefaultSettings {
+        let ratio = AUStretchRatioMode(rawValue: Int32(ratioPopup.selectedTag())) ?? .none
+        return AUInnerStretchDefaultSettings(ratio: ratio)
+    }
+
+    private func apply(_ settings: AUInnerStretchDefaultSettings) {
+        AUPluginDefaultsForm.select(tag: Int(settings.ratio.rawValue), in: ratioPopup)
     }
 }
 
-final class AUUprightDefaultsEditor: AUPluginDefaultsEditor {
+final class AUUprightDefaultsEditor: NSObject, AUPluginDefaultsEditor {
     let title = defaultsLocalized("AnyUpright::Upright Defaults Title", fallback: "Upright Defaults")
 
-    private let store: AUPluginDefaultsStore<AUUprightDefaultSettings>
+    private let session: AUPluginDefaultsEditorSession<AUUprightDefaultSettings>
     private let directionPopup = AUPluginDefaultsForm.popup(entries: [
         (defaultsLocalized("AnyUpright::Defaults Direction Vertical", fallback: "Vertical"), Int(UprightCorrectionMode.vertical.rawValue)),
         (defaultsLocalized("AnyUpright::Defaults Direction Horizontal", fallback: "Horizontal"), Int(UprightCorrectionMode.horizontal.rawValue)),
@@ -374,6 +521,13 @@ final class AUUprightDefaultsEditor: AUPluginDefaultsEditor {
         target: nil,
         action: nil
     )
+    var onChange: (() -> Void)? {
+        get { session.onChange }
+        set { session.onChange = newValue }
+    }
+
+    var canRestoreFactoryDefaults: Bool { session.canRestoreFactoryDefaults }
+    var canSave: Bool { session.canSave }
 
     lazy var contentView: NSView = {
         let stack = NSStackView(views: [
@@ -394,28 +548,45 @@ final class AUUprightDefaultsEditor: AUPluginDefaultsEditor {
     }()
 
     init(store: AUPluginDefaultsStore<AUUprightDefaultSettings> = AUPluginDefaults.upright) {
-        self.store = store
+        session = AUPluginDefaultsEditorSession(store: store)
+        super.init()
+        directionPopup.target = self
+        directionPopup.action = #selector(controlDidChange)
+        modePopup.target = self
+        modePopup.action = #selector(controlDidChange)
+        autoCropButton.target = self
+        autoCropButton.action = #selector(controlDidChange)
     }
 
-    func reloadFromStore() {
-        let settings = store.load()
-        AUPluginDefaultsForm.select(tag: Int(settings.direction.rawValue), in: directionPopup)
-        AUPluginDefaultsForm.select(tag: Int(settings.mode.rawValue), in: modePopup)
-        autoCropButton.state = settings.autoCrop ? .on : .off
+    func beginEditingSession() {
+        apply(session.beginEditingSession())
     }
 
     func save() throws {
+        try session.save(settingsFromControls())
+    }
+
+    func restoreFactoryDefaults() {
+        apply(session.restoreFactoryDefaults())
+    }
+
+    @objc private func controlDidChange() {
+        session.updateCurrent(settingsFromControls())
+    }
+
+    private func settingsFromControls() -> AUUprightDefaultSettings {
         let direction = UprightCorrectionMode(rawValue: Int32(directionPopup.selectedTag())) ?? .vertical
         let mode = UprightControlMode(rawValue: Int32(modePopup.selectedTag())) ?? .automatic
-        try store.save(AUUprightDefaultSettings(
+        return AUUprightDefaultSettings(
             direction: direction,
             mode: mode,
             autoCrop: autoCropButton.state == .on
-        ))
+        )
     }
 
-    func restoreFactoryDefaults() throws {
-        try store.reset()
-        reloadFromStore()
+    private func apply(_ settings: AUUprightDefaultSettings) {
+        AUPluginDefaultsForm.select(tag: Int(settings.direction.rawValue), in: directionPopup)
+        AUPluginDefaultsForm.select(tag: Int(settings.mode.rawValue), in: modePopup)
+        autoCropButton.state = settings.autoCrop ? .on : .off
     }
 }

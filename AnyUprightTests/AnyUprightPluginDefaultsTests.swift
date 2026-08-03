@@ -20,6 +20,7 @@ struct AnyUprightPluginDefaultsTests {
         try testFactoryDefaults(root: root)
         try testIndependentRoundTrips(root: root)
         try testInvalidFilesFailClosed(root: root)
+        try testEditingStateTransitions()
         print("AnyUprightPluginDefaultsTests passed")
     }
 
@@ -72,6 +73,34 @@ struct AnyUprightPluginDefaultsTests {
         try staleData.write(to: staleURL)
         let staleStore = AUPluginDefaultsStore<AUHorizonDefaultSettings>(fileURL: staleURL)
         try require(staleStore.load() == .factoryDefaults, "unknown schema fallback")
+    }
+
+    private static func testEditingStateTransitions() throws {
+        let factory = AUHorizonDefaultSettings.factoryDefaults
+        let custom = AUHorizonDefaultSettings(fillFrame: true)
+        var state = AUPluginDefaultsEditingState(factoryDefaults: factory, saved: custom)
+
+        try require(state.current == custom, "editing state starts from saved settings")
+        try require(state.canRestoreFactoryDefaults, "custom saved value can restore")
+        try require(!state.canSave, "unchanged saved value cannot save")
+
+        state.restoreFactoryDefaults()
+        try require(state.current == factory, "restore changes only current settings")
+        try require(!state.canRestoreFactoryDefaults, "factory current value cannot restore")
+        try require(state.canSave, "restored current value remains unsaved")
+        try require(state.saved == custom, "restore does not overwrite saved snapshot")
+
+        state.markCurrentAsSaved()
+        try require(!state.canSave, "saved current value cannot save again")
+        try require(state.saved == factory, "save advances saved snapshot")
+
+        state.updateCurrent(custom)
+        try require(state.canRestoreFactoryDefaults, "edited custom value can restore")
+        try require(state.canSave, "edited custom value can save")
+
+        state.updateCurrent(factory)
+        try require(!state.canRestoreFactoryDefaults, "returning to factory disables restore")
+        try require(!state.canSave, "returning to saved value disables save")
     }
 
     private static func horizonStore(_ root: URL) -> AUPluginDefaultsStore<AUHorizonDefaultSettings> {

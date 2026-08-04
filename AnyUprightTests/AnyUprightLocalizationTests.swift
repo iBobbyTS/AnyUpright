@@ -75,7 +75,7 @@ struct AnyUprightLocalizationTests {
     private static func testStablePopupOrders() throws {
         try require([AUStringKey.none, .fit, .fill].map(\.englishFallback) == ["None", "Fit", "Fill"], "Ratio popup order")
         try require([AUStringKey.vertical, .horizontal, .full].map(\.englishFallback) == ["Vertical", "Horizontal", "Full"], "Direction popup order")
-        try require([AUStringKey.manual, .semiAuto, .automatic].map(\.englishFallback) == ["Manual", "Semi Auto", "Auto"], "Mode popup order")
+        try require([AUStringKey.manual, .semiAuto, .automatic].map(\.englishFallback) == ["Manual", "Auto Detect + Manual Select", "Auto"], "Mode popup order")
     }
 
     private static func stringsDictionary(at url: URL) throws -> [String: String] {

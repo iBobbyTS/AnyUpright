@@ -1,20 +1,20 @@
 /* 宿主资源库中显示的滤镜简介。 */
-"AnyUpright::Horizon Description" = "自动校正地平线，也可手动旋转并选择填满画面。";
+"AnyUpright::Horizon Description" = "自动或手动水平，旋转后自动填充画布。";
 /* 宿主资源库中显示的滤镜简介。 */
-"AnyUpright::Inner Stretch Description" = "选择输入画面中的区域，并将其拉伸到完整画面。";
+"AnyUpright::Inner Stretch Description" = "选择输入画面中的区域，并将其拉伸到完整画面。（类似文档扫描app）";
 /* 宿主资源库中显示的滤镜简介。 */
-"AnyUpright::Outer Stretch Description" = "拖动输出画面的四角以手动校正透视。";
+"AnyUpright::Outer Stretch Description" = "拖动输出画面的四角以拉伸。（类似Final Cut Pro自带的“变换”）";
 /* 宿主显示的屏幕控制简介。 */
 "AnyUpright::Inner Stretch OSC Description" = "AnyUpright Inner Stretch 的屏幕选区控制。";
 /* 宿主显示的屏幕控制简介。 */
 "AnyUpright::Outer Stretch OSC Description" = "AnyUpright Outer Stretch 的屏幕外角控制。";
 /* 宿主资源库中显示的滤镜简介。 */
-"AnyUpright::Upright Description" = "类似 Lightroom 的手动、引导、自动和半自动透视校正。";
+"AnyUpright::Upright Description" = "类似 Lightroom 的Upright透视校正。可选择仅纵向、仅横向和全向；手动、自动识别+手动选择、全自动模式。";
 /* 宿主显示的屏幕控制简介。 */
 "AnyUpright::Upright OSC Description" = "AnyUpright Upright 的屏幕辅助线和候选线控制。";
 
 /* Horizon 检查器按钮。 */
-"AnyUpright::Parameter Analyze Horizon" = "分析地平线";
+"AnyUpright::Parameter Analyze Horizon" = "分析水平线";
 /* Upright 检查器按钮。 */
 "AnyUpright::Parameter Analyze" = "分析";
 /* 检查器参数名。 */
@@ -22,7 +22,7 @@
 /* 检查器参数名。 */
 "AnyUpright::Parameter Fill Frame" = "填满画面";
 /* 检查器参数名。 */
-"AnyUpright::Parameter Ratio" = "比例";
+"AnyUpright::Parameter Ratio" = "填充模式";
 /* 检查器参数名。 */
 "AnyUpright::Parameter Edit Mode" = "编辑模式";
 /* Stretch 关键帧操作按钮。 */
@@ -45,7 +45,7 @@
 /* 弹出菜单选项。 */
 "AnyUpright::Menu None" = "无";
 /* 比例弹出菜单选项。 */
-"AnyUpright::Menu Fit" = "适合";
+"AnyUpright::Menu Fit" = "适应";
 /* 比例弹出菜单选项。 */
 "AnyUpright::Menu Fill" = "填充";
 /* 方向或朝向弹出菜单选项。 */
@@ -53,11 +53,11 @@
 /* 方向或朝向弹出菜单选项。 */
 "AnyUpright::Menu Horizontal" = "水平";
 /* 方向弹出菜单选项。 */
-"AnyUpright::Menu Full" = "完整";
+"AnyUpright::Menu Full" = "全向";
 /* Upright 模式弹出菜单选项。 */
 "AnyUpright::Menu Manual" = "手动";
 /* Upright 模式弹出菜单选项。 */
-"AnyUpright::Menu Semi Auto" = "半自动";
+"AnyUpright::Menu Semi Auto" = "自动识别+手动选择";
 /* Upright 模式弹出菜单选项。 */
 "AnyUpright::Menu Auto" = "自动";
 /* 隐藏的 Stretch 模式选项。 */
@@ -128,12 +128,12 @@
 /* 删除 Stretch 关键帧后的 OSC 提示。 */
 "AnyUpright::Keyframes Removed" = "已删除关键帧\n如果片段上已经有关键帧，拖动本身就会在当前帧创建新的关键帧，不需要重复点击本按钮。";
 /* 宿主可见的 Horizon 分析错误；%@ 是技术原因。 */
-"AnyUpright::Horizon Analysis Error" = "地平线分析：%@";
+"AnyUpright::Horizon Analysis Error" = "水平分析：%@";
 /* 宿主可见的 Upright 分析错误；%@ 是技术原因。 */
 "AnyUpright::Upright Analysis Error" = "透视分析：%@";
 
 /* 默认设置窗口的适用范围说明。 */
-"AnyUpright::Defaults New Instances Only" = "默认参数值仅适用于新添加的滤镜实例。";
+"AnyUpright::Defaults New Instances Only" = "默认参数值仅适用于新添加滤镜的素材。";
 /* 默认设置窗口的恢复按钮。 */
 "AnyUpright::Defaults Restore Factory" = "恢复出厂默认设置";
 /* 默认设置保存失败提示。 */

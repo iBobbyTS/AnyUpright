@@ -1,20 +1,20 @@
 /* Effect description shown in the host library. */
-"AnyUpright::Horizon Description" = "Automatic horizon correction with manual rotation and optional fill.";
+"AnyUpright::Horizon Description" = "Automatic or manual leveling, with automatic canvas fill after rotation.";
 /* Effect description shown in the host library. */
-"AnyUpright::Inner Stretch Description" = "Select an input selection and stretch it to the full frame.";
+"AnyUpright::Inner Stretch Description" = "Select an area of the input image and stretch it to fill the frame, similar to a document scanning app.";
 /* Effect description shown in the host library. */
-"AnyUpright::Outer Stretch Description" = "Drag the outer output corners for manual perspective warping.";
+"AnyUpright::Outer Stretch Description" = "Drag the four corners of the output image to stretch it, similar to Final Cut Pro's built-in Transform effect.";
 /* OSC description shown by the host. */
 "AnyUpright::Inner Stretch OSC Description" = "Onscreen input selection controls for AnyUpright Inner Stretch.";
 /* OSC description shown by the host. */
 "AnyUpright::Outer Stretch OSC Description" = "Onscreen outer corner controls for AnyUpright Outer Stretch.";
 /* Effect description shown in the host library. */
-"AnyUpright::Upright Description" = "Lightroom-style manual, guided, automatic, and semi-automatic upright correction.";
+"AnyUpright::Upright Description" = "Lightroom-style Upright perspective correction with vertical-only, horizontal-only, and full correction, plus manual, auto-detect with manual selection, and fully automatic modes.";
 /* OSC description shown by the host. */
 "AnyUpright::Upright OSC Description" = "Onscreen guide and candidate line controls for AnyUpright Upright.";
 
 /* Horizon inspector button. */
-"AnyUpright::Parameter Analyze Horizon" = "Analyze Horizon";
+"AnyUpright::Parameter Analyze Horizon" = "Analyze Horizontal Line";
 /* Upright inspector button. */
 "AnyUpright::Parameter Analyze" = "Analyze";
 /* Inspector parameter label. */
@@ -22,7 +22,7 @@
 /* Inspector parameter label. */
 "AnyUpright::Parameter Fill Frame" = "Fill Frame";
 /* Inspector parameter label. */
-"AnyUpright::Parameter Ratio" = "Ratio";
+"AnyUpright::Parameter Ratio" = "Fill Mode";
 /* Inspector parameter label. */
 "AnyUpright::Parameter Edit Mode" = "Edit Mode";
 /* Stretch keyframe action button. */
@@ -57,7 +57,7 @@
 /* Upright mode popup entry. */
 "AnyUpright::Menu Manual" = "Manual";
 /* Upright mode popup entry. */
-"AnyUpright::Menu Semi Auto" = "Semi Auto";
+"AnyUpright::Menu Semi Auto" = "Auto Detect + Manual Select";
 /* Upright mode popup entry. */
 "AnyUpright::Menu Auto" = "Auto";
 /* Hidden stretch mode popup entry. */
@@ -128,12 +128,12 @@
 /* OSC confirmation after removing stretch keyframes. */
 "AnyUpright::Keyframes Removed" = "Keyframes removed\nIf the clip already has keyframes, dragging creates a keyframe at the current frame. You do not need to click this button again.";
 /* Host-visible Horizon analysis error; %@ is the technical reason. */
-"AnyUpright::Horizon Analysis Error" = "Horizon analysis: %@";
+"AnyUpright::Horizon Analysis Error" = "Leveling analysis: %@";
 /* Host-visible Upright analysis error; %@ is the technical reason. */
 "AnyUpright::Upright Analysis Error" = "Upright analysis: %@";
 
 /* Defaults window scope explanation. */
-"AnyUpright::Defaults New Instances Only" = "Default parameter values apply only to new filter instances.";
+"AnyUpright::Defaults New Instances Only" = "Default parameter values apply only to filters added to clips afterward.";
 /* Defaults window restore button. */
 "AnyUpright::Defaults Restore Factory" = "Restore Factory Defaults";
 /* Defaults window save failure. */

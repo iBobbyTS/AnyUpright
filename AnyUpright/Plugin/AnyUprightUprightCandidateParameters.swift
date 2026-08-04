@@ -40,45 +40,46 @@ func uprightCandidateLines(at time: CMTime, paramAPI: FxParameterRetrievalAPI_v6
 }
 
 func addUprightCandidateParameters(_ paramAPI: FxParameterCreationAPI_v5, collapsedFlags: FxParameterFlags, defaultFlags: FxParameterFlags) {
-    paramAPI.startParameterSubGroup("Detected Candidates", parameterID: 420, parameterFlags: collapsedFlags)
+    paramAPI.startParameterSubGroup(AUL10n.plugin.text(.detectedCandidates), parameterID: 420, parameterFlags: collapsedFlags)
     for (index, spec) in AnyUprightUprightCandidates.specs.enumerated() {
-        let title = "Candidate \(index + 1)"
+        let number = index + 1
+        let title = AUL10n.plugin.format(.candidateNumber, number)
         paramAPI.startParameterSubGroup(title, parameterID: spec.group, parameterFlags: collapsedFlags)
         paramAPI.addToggleButton(
-            withName: "\(title) Visible",
+            withName: AUL10n.plugin.format(.candidateVisible, number),
             parameterID: spec.visible,
             defaultValue: false,
             parameterFlags: defaultFlags
         )
         paramAPI.addToggleButton(
-            withName: "\(title) Selected",
+            withName: AUL10n.plugin.format(.candidateSelected, number),
             parameterID: spec.selected,
             defaultValue: false,
             parameterFlags: defaultFlags
         )
         paramAPI.addPopupMenu(
-            withName: "\(title) Orientation",
+            withName: AUL10n.plugin.format(.candidateOrientation, number),
             parameterID: spec.orientation,
             defaultValue: UInt32(UprightGuideOrientation.vertical.rawValue),
-            menuEntries: ["Vertical", "Horizontal"],
+            menuEntries: [AUL10n.plugin.text(.vertical), AUL10n.plugin.text(.horizontal)],
             parameterFlags: defaultFlags
         )
         paramAPI.addPointParameter(
-            withName: "\(title) Start",
+            withName: AUL10n.plugin.format(.candidateStart, number),
             parameterID: spec.start,
             defaultX: 0.0,
             defaultY: 0.0,
             parameterFlags: defaultFlags
         )
         paramAPI.addPointParameter(
-            withName: "\(title) End",
+            withName: AUL10n.plugin.format(.candidateEnd, number),
             parameterID: spec.end,
             defaultX: 0.0,
             defaultY: 0.0,
             parameterFlags: defaultFlags
         )
         paramAPI.addPercentSlider(
-            withName: "\(title) Score",
+            withName: AUL10n.plugin.format(.candidateScore, number),
             parameterID: spec.score,
             defaultValue: 0.0,
             parameterMin: 0.0,

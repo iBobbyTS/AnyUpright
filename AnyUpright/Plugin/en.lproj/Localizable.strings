@@ -1,35 +1,150 @@
-/* Localized versions of Info.plist keys */
-
+/* Effect description shown in the host library. */
 "AnyUpright::Horizon Description" = "Automatic horizon correction with manual rotation and optional fill.";
+/* Effect description shown in the host library. */
 "AnyUpright::Inner Stretch Description" = "Select an input selection and stretch it to the full frame.";
+/* Effect description shown in the host library. */
 "AnyUpright::Outer Stretch Description" = "Drag the outer output corners for manual perspective warping.";
+/* OSC description shown by the host. */
 "AnyUpright::Inner Stretch OSC Description" = "Onscreen input selection controls for AnyUpright Inner Stretch.";
+/* OSC description shown by the host. */
 "AnyUpright::Outer Stretch OSC Description" = "Onscreen outer corner controls for AnyUpright Outer Stretch.";
+/* Effect description shown in the host library. */
 "AnyUpright::Upright Description" = "Lightroom-style manual, guided, automatic, and semi-automatic upright correction.";
+/* OSC description shown by the host. */
 "AnyUpright::Upright OSC Description" = "Onscreen guide and candidate line controls for AnyUpright Upright.";
-"AnyUpright::Analysis Model Loading" = "模型加载中";
-"AnyUpright::Analysis Frame Analyzing" = "画面分析中";
-"AnyUpright::Keyframes Set" = "已设置关键帧";
-"AnyUpright::Keyframes Removed" = "已删除关键帧\n如果片段上已经有关键帧，拖动本身就会在当前帧创建新的关键帧，不需要重复点击本按钮";
+
+/* Horizon inspector button. */
+"AnyUpright::Parameter Analyze Horizon" = "Analyze Horizon";
+/* Upright inspector button. */
+"AnyUpright::Parameter Analyze" = "Analyze";
+/* Inspector parameter label. */
+"AnyUpright::Parameter Rotation" = "Rotation";
+/* Inspector parameter label. */
+"AnyUpright::Parameter Fill Frame" = "Fill Frame";
+/* Inspector parameter label. */
+"AnyUpright::Parameter Ratio" = "Ratio";
+/* Inspector parameter label. */
+"AnyUpright::Parameter Edit Mode" = "Edit Mode";
+/* Stretch keyframe action button. */
+"AnyUpright::Parameter Set Unset Key Frame" = "Set/Unset Key Frame";
+/* Inspector button that opens defaults. */
+"AnyUpright::Parameter Defaults" = "Defaults...";
+/* Inspector parameter label. */
+"AnyUpright::Parameter Direction" = "Direction";
+/* Inspector parameter label. */
+"AnyUpright::Parameter Mode" = "Mode";
+/* Inspector parameter label. */
+"AnyUpright::Parameter Auto Crop" = "Auto Crop";
+/* Hidden internal parameter label. */
+"AnyUpright::Parameter Analysis Status" = "Analysis Status";
+/* Hidden Upright correction parameter. */
+"AnyUpright::Parameter Vertical Perspective" = "Vertical Perspective";
+/* Hidden Upright correction parameter. */
+"AnyUpright::Parameter Horizontal Perspective" = "Horizontal Perspective";
+
+/* Popup menu entry. */
+"AnyUpright::Menu None" = "None";
+/* Ratio popup menu entry. */
+"AnyUpright::Menu Fit" = "Fit";
+/* Ratio popup menu entry. */
+"AnyUpright::Menu Fill" = "Fill";
+/* Direction or orientation popup entry. */
+"AnyUpright::Menu Vertical" = "Vertical";
+/* Direction or orientation popup entry. */
+"AnyUpright::Menu Horizontal" = "Horizontal";
+/* Direction popup entry. */
+"AnyUpright::Menu Full" = "Full";
+/* Upright mode popup entry. */
+"AnyUpright::Menu Manual" = "Manual";
+/* Upright mode popup entry. */
+"AnyUpright::Menu Semi Auto" = "Semi Auto";
+/* Upright mode popup entry. */
+"AnyUpright::Menu Auto" = "Auto";
+/* Hidden stretch mode popup entry. */
+"AnyUpright::Menu Outer Stretch" = "Outer Stretch";
+/* Hidden stretch mode popup entry. */
+"AnyUpright::Menu Inner Stretch" = "Inner Stretch";
+
+/* Stretch corner subgroup label. */
+"AnyUpright::Corner Top Left" = "Top Left";
+/* Stretch corner subgroup label. */
+"AnyUpright::Corner Top Right" = "Top Right";
+/* Stretch corner subgroup label. */
+"AnyUpright::Corner Bottom Right" = "Bottom Right";
+/* Stretch corner subgroup label. */
+"AnyUpright::Corner Bottom Left" = "Bottom Left";
+/* Stretch corner X offset in pixels. */
+"AnyUpright::Corner Top Left X px" = "Top Left X px";
+/* Stretch corner Y offset in pixels. */
+"AnyUpright::Corner Top Left Y px" = "Top Left Y px";
+/* Stretch corner X offset in pixels. */
+"AnyUpright::Corner Top Right X px" = "Top Right X px";
+/* Stretch corner Y offset in pixels. */
+"AnyUpright::Corner Top Right Y px" = "Top Right Y px";
+/* Stretch corner X offset in pixels. */
+"AnyUpright::Corner Bottom Right X px" = "Bottom Right X px";
+/* Stretch corner Y offset in pixels. */
+"AnyUpright::Corner Bottom Right Y px" = "Bottom Right Y px";
+/* Stretch corner X offset in pixels. */
+"AnyUpright::Corner Bottom Left X px" = "Bottom Left X px";
+/* Stretch corner Y offset in pixels. */
+"AnyUpright::Corner Bottom Left Y px" = "Bottom Left Y px";
+
+/* Hidden manual guide collection. */
+"AnyUpright::Guides" = "Guides";
+/* Hidden guide subgroup; %d is the one-based guide number. */
+"AnyUpright::Guide Number" = "Guide %d";
+/* Hidden guide toggle; %d is the one-based guide number. */
+"AnyUpright::Guide Enabled" = "Guide %d Enabled";
+/* Hidden guide popup; %d is the one-based guide number. */
+"AnyUpright::Guide Orientation" = "Guide %d Orientation";
+/* Hidden guide point; %d is the one-based guide number. */
+"AnyUpright::Guide Start" = "Guide %d Start";
+/* Hidden guide point; %d is the one-based guide number. */
+"AnyUpright::Guide End" = "Guide %d End";
+/* Hidden detected-candidate collection. */
+"AnyUpright::Detected Candidates" = "Detected Candidates";
+/* Hidden candidate subgroup; %d is the one-based candidate number. */
+"AnyUpright::Candidate Number" = "Candidate %d";
+/* Hidden candidate toggle; %d is the one-based candidate number. */
+"AnyUpright::Candidate Visible" = "Candidate %d Visible";
+/* Hidden candidate toggle; %d is the one-based candidate number. */
+"AnyUpright::Candidate Selected" = "Candidate %d Selected";
+/* Hidden candidate popup; %d is the one-based candidate number. */
+"AnyUpright::Candidate Orientation" = "Candidate %d Orientation";
+/* Hidden candidate point; %d is the one-based candidate number. */
+"AnyUpright::Candidate Start" = "Candidate %d Start";
+/* Hidden candidate point; %d is the one-based candidate number. */
+"AnyUpright::Candidate End" = "Candidate %d End";
+/* Hidden candidate score; %d is the one-based candidate number. */
+"AnyUpright::Candidate Score" = "Candidate %d Score";
+
+/* OSC status while loading a model. */
+"AnyUpright::Analysis Model Loading" = "Loading model";
+/* OSC status while analyzing a frame. */
+"AnyUpright::Analysis Frame Analyzing" = "Analyzing frame";
+/* OSC confirmation after setting stretch keyframes. */
+"AnyUpright::Keyframes Set" = "Keyframes set";
+/* OSC confirmation after removing stretch keyframes. */
+"AnyUpright::Keyframes Removed" = "Keyframes removed\nIf the clip already has keyframes, dragging creates a keyframe at the current frame. You do not need to click this button again.";
+/* Host-visible Horizon analysis error; %@ is the technical reason. */
+"AnyUpright::Horizon Analysis Error" = "Horizon analysis: %@";
+/* Host-visible Upright analysis error; %@ is the technical reason. */
+"AnyUpright::Upright Analysis Error" = "Upright analysis: %@";
+
+/* Defaults window scope explanation. */
 "AnyUpright::Defaults New Instances Only" = "Default parameter values apply only to new filter instances.";
+/* Defaults window restore button. */
 "AnyUpright::Defaults Restore Factory" = "Restore Factory Defaults";
+/* Defaults window save failure. */
 "AnyUpright::Defaults Save Failed" = "Unable to save defaults.";
+/* Defaults window title. */
 "AnyUpright::Horizon Defaults Title" = "Horizon Defaults";
+/* Defaults window title. */
 "AnyUpright::Inner Stretch Defaults Title" = "Inner Stretch Defaults";
+/* Defaults window title. */
 "AnyUpright::Outer Stretch Defaults Title" = "Outer Stretch Defaults";
+/* Defaults window title. */
 "AnyUpright::Upright Defaults Title" = "Upright Defaults";
-"AnyUpright::Defaults Fill Frame" = "Fill Frame";
-"AnyUpright::Defaults Ratio" = "Ratio";
-"AnyUpright::Defaults Ratio None" = "None";
-"AnyUpright::Defaults Ratio Fit" = "Fit";
-"AnyUpright::Defaults Ratio Fill" = "Fill";
+/* Defaults checkbox for stretch keyframe messages. */
 "AnyUpright::Defaults Suppress Keyframe Notifications" = "Don't show keyframe notifications";
-"AnyUpright::Defaults Direction" = "Direction";
-"AnyUpright::Defaults Direction Vertical" = "Vertical";
-"AnyUpright::Defaults Direction Horizontal" = "Horizontal";
-"AnyUpright::Defaults Direction Full" = "Full";
-"AnyUpright::Defaults Mode" = "Mode";
-"AnyUpright::Defaults Mode Manual" = "Manual";
-"AnyUpright::Defaults Mode Semi Auto" = "Semi Auto";
-"AnyUpright::Defaults Mode Auto" = "Auto";
-"AnyUpright::Defaults Auto Crop" = "Auto Crop";

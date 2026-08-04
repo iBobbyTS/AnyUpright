@@ -81,7 +81,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
     private func addLegacyCorrectionResultParameters(_ paramAPI: FxParameterCreationAPI_v5) {
         // Keep the parameter IDs readable for existing Motion/FCP documents; rendering no longer consumes them.
         paramAPI.addPercentSlider(
-            withName: "Vertical Perspective",
+            withName: AUL10n.plugin.text(.verticalPerspective),
             parameterID: UprightParam.verticalPerspective.rawValue,
             defaultValue: 0.0,
             parameterMin: -1.0,
@@ -92,7 +92,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             parameterFlags: hiddenFlags()
         )
         paramAPI.addPercentSlider(
-            withName: "Horizontal Perspective",
+            withName: AUL10n.plugin.text(.horizontalPerspective),
             parameterID: UprightParam.horizontalPerspective.rawValue,
             defaultValue: 0.0,
             parameterMin: -1.0,
@@ -103,7 +103,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             parameterFlags: hiddenFlags()
         )
         paramAPI.addAngleSlider(
-            withName: "Rotation",
+            withName: AUL10n.plugin.text(.rotation),
             parameterID: UprightParam.rotation.rawValue,
             defaultDegrees: 0.0,
             parameterMinDegrees: -45.0,
@@ -492,7 +492,7 @@ class AnyUprightUprightPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         NSError(
             domain: "AnyUpright.FxAnalysis",
             code: 2,
-            userInfo: [NSLocalizedDescriptionKey: "Upright analysis: \(message)"]
+            userInfo: [NSLocalizedDescriptionKey: AUL10n.plugin.format(.uprightAnalysisError, message)]
         )
     }
 

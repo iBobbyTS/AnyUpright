@@ -6,8 +6,6 @@
 import AppKit
 import Foundation
 
-private final class AUPluginDefaultsLocalizationToken {}
-
 enum AUPluginDefaultsDiagnostics {
     static let logPath = "/tmp/AnyUprightPluginDefaults.log"
 
@@ -35,14 +33,6 @@ enum AUPluginDefaultsDiagnostics {
             try? data.write(to: url, options: .atomic)
         }
     }
-}
-
-private func defaultsLocalized(_ key: String, fallback: String) -> String {
-    Bundle(for: AUPluginDefaultsLocalizationToken.self).localizedString(
-        forKey: key,
-        value: fallback,
-        table: nil
-    )
 }
 
 protocol AUPluginDefaultsEditor: AnyObject {
@@ -258,10 +248,7 @@ private final class AUPluginDefaultsViewController: NSViewController {
     private let editor: AUPluginDefaultsEditor
     private let statusLabel = NSTextField(labelWithString: "")
     private lazy var resetButton = NSButton(
-        title: defaultsLocalized(
-            "AnyUpright::Defaults Restore Factory",
-            fallback: "Restore Factory Defaults"
-        ),
+        title: AUL10n.plugin.text(.defaultsRestoreFactory),
         target: self,
         action: #selector(restoreFactoryDefaults)
     )
@@ -282,10 +269,7 @@ private final class AUPluginDefaultsViewController: NSViewController {
         let titleLabel = NSTextField(labelWithString: editor.title)
         titleLabel.font = NSFont.systemFont(ofSize: 17.0, weight: .semibold)
 
-        let scopeLabel = NSTextField(wrappingLabelWithString: defaultsLocalized(
-            "AnyUpright::Defaults New Instances Only",
-            fallback: "Default parameter values apply only to new filter instances."
-        ))
+        let scopeLabel = NSTextField(wrappingLabelWithString: AUL10n.plugin.text(.defaultsNewInstancesOnly))
         scopeLabel.textColor = .secondaryLabelColor
 
         let contentStack = NSStackView(views: [titleLabel, scopeLabel, editor.contentView])
@@ -347,10 +331,7 @@ private final class AUPluginDefaultsViewController: NSViewController {
 
     private func editorDidChange(error: Error?) {
         if let error {
-            statusLabel.stringValue = defaultsLocalized(
-                "AnyUpright::Defaults Save Failed",
-                fallback: "Unable to save defaults."
-            )
+            statusLabel.stringValue = AUL10n.plugin.text(.defaultsSaveFailed)
             NSLog("AnyUpright defaults save error: %@", String(describing: error))
         } else {
             statusLabel.stringValue = ""
@@ -368,11 +349,11 @@ private final class AUPluginDefaultsViewController: NSViewController {
 }
 
 final class AUHorizonDefaultsEditor: NSObject, AUPluginDefaultsEditor {
-    let title = defaultsLocalized("AnyUpright::Horizon Defaults Title", fallback: "Horizon Defaults")
+    let title = AUL10n.plugin.text(.horizonDefaultsTitle)
 
     private let session: AUPluginDefaultsEditorSession<AUHorizonDefaultSettings>
     private let fillFrameButton = NSButton(
-        checkboxWithTitle: defaultsLocalized("AnyUpright::Defaults Fill Frame", fallback: "Fill Frame"),
+        checkboxWithTitle: AUL10n.plugin.text(.fillFrame),
         target: nil,
         action: nil
     )
@@ -418,19 +399,16 @@ final class AUHorizonDefaultsEditor: NSObject, AUPluginDefaultsEditor {
 }
 
 final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
-    let title = defaultsLocalized("AnyUpright::Inner Stretch Defaults Title", fallback: "Inner Stretch Defaults")
+    let title = AUL10n.plugin.text(.innerStretchDefaultsTitle)
 
     private let session: AUPluginDefaultsEditorSession<AUInnerStretchDefaultSettings>
     private let ratioPopup = AUPluginDefaultsForm.popup(entries: [
-        (defaultsLocalized("AnyUpright::Defaults Ratio None", fallback: "None"), Int(AUStretchRatioMode.none.rawValue)),
-        (defaultsLocalized("AnyUpright::Defaults Ratio Fit", fallback: "Fit"), Int(AUStretchRatioMode.fit.rawValue)),
-        (defaultsLocalized("AnyUpright::Defaults Ratio Fill", fallback: "Fill"), Int(AUStretchRatioMode.fill.rawValue)),
+        (AUL10n.plugin.text(.none), Int(AUStretchRatioMode.none.rawValue)),
+        (AUL10n.plugin.text(.fit), Int(AUStretchRatioMode.fit.rawValue)),
+        (AUL10n.plugin.text(.fill), Int(AUStretchRatioMode.fill.rawValue)),
     ])
     private let suppressKeyframeNotificationsButton = NSButton(
-        checkboxWithTitle: defaultsLocalized(
-            "AnyUpright::Defaults Suppress Keyframe Notifications",
-            fallback: "Don't show keyframe notifications"
-        ),
+        checkboxWithTitle: AUL10n.plugin.text(.suppressKeyframeNotifications),
         target: nil,
         action: nil
     )
@@ -443,7 +421,7 @@ final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
     lazy var contentView: NSView = {
         let stack = NSStackView(views: [
             AUPluginDefaultsForm.labeledRow(
-                label: defaultsLocalized("AnyUpright::Defaults Ratio", fallback: "Ratio"),
+                label: AUL10n.plugin.text(.ratio),
                 control: ratioPopup
             ),
             AUPluginDefaultsForm.labeledRow(label: "", control: suppressKeyframeNotificationsButton),
@@ -490,14 +468,11 @@ final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
 }
 
 final class AUOuterStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
-    let title = defaultsLocalized("AnyUpright::Outer Stretch Defaults Title", fallback: "Outer Stretch Defaults")
+    let title = AUL10n.plugin.text(.outerStretchDefaultsTitle)
 
     private let session: AUPluginDefaultsEditorSession<AUOuterStretchDefaultSettings>
     private let suppressKeyframeNotificationsButton = NSButton(
-        checkboxWithTitle: defaultsLocalized(
-            "AnyUpright::Defaults Suppress Keyframe Notifications",
-            fallback: "Don't show keyframe notifications"
-        ),
+        checkboxWithTitle: AUL10n.plugin.text(.suppressKeyframeNotifications),
         target: nil,
         action: nil
     )
@@ -545,21 +520,21 @@ final class AUOuterStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
 }
 
 final class AUUprightDefaultsEditor: NSObject, AUPluginDefaultsEditor {
-    let title = defaultsLocalized("AnyUpright::Upright Defaults Title", fallback: "Upright Defaults")
+    let title = AUL10n.plugin.text(.uprightDefaultsTitle)
 
     private let session: AUPluginDefaultsEditorSession<AUUprightDefaultSettings>
     private let directionPopup = AUPluginDefaultsForm.popup(entries: [
-        (defaultsLocalized("AnyUpright::Defaults Direction Vertical", fallback: "Vertical"), Int(UprightCorrectionMode.vertical.rawValue)),
-        (defaultsLocalized("AnyUpright::Defaults Direction Horizontal", fallback: "Horizontal"), Int(UprightCorrectionMode.horizontal.rawValue)),
-        (defaultsLocalized("AnyUpright::Defaults Direction Full", fallback: "Full"), Int(UprightCorrectionMode.full.rawValue)),
+        (AUL10n.plugin.text(.vertical), Int(UprightCorrectionMode.vertical.rawValue)),
+        (AUL10n.plugin.text(.horizontal), Int(UprightCorrectionMode.horizontal.rawValue)),
+        (AUL10n.plugin.text(.full), Int(UprightCorrectionMode.full.rawValue)),
     ])
     private let modePopup = AUPluginDefaultsForm.popup(entries: [
-        (defaultsLocalized("AnyUpright::Defaults Mode Manual", fallback: "Manual"), Int(UprightControlMode.manual.rawValue)),
-        (defaultsLocalized("AnyUpright::Defaults Mode Semi Auto", fallback: "Semi Auto"), Int(UprightControlMode.semiAutomatic.rawValue)),
-        (defaultsLocalized("AnyUpright::Defaults Mode Auto", fallback: "Auto"), Int(UprightControlMode.automatic.rawValue)),
+        (AUL10n.plugin.text(.manual), Int(UprightControlMode.manual.rawValue)),
+        (AUL10n.plugin.text(.semiAuto), Int(UprightControlMode.semiAutomatic.rawValue)),
+        (AUL10n.plugin.text(.automatic), Int(UprightControlMode.automatic.rawValue)),
     ])
     private let autoCropButton = NSButton(
-        checkboxWithTitle: defaultsLocalized("AnyUpright::Defaults Auto Crop", fallback: "Auto Crop"),
+        checkboxWithTitle: AUL10n.plugin.text(.autoCrop),
         target: nil,
         action: nil
     )
@@ -572,11 +547,11 @@ final class AUUprightDefaultsEditor: NSObject, AUPluginDefaultsEditor {
     lazy var contentView: NSView = {
         let stack = NSStackView(views: [
             AUPluginDefaultsForm.labeledRow(
-                label: defaultsLocalized("AnyUpright::Defaults Direction", fallback: "Direction"),
+                label: AUL10n.plugin.text(.direction),
                 control: directionPopup
             ),
             AUPluginDefaultsForm.labeledRow(
-                label: defaultsLocalized("AnyUpright::Defaults Mode", fallback: "Mode"),
+                label: AUL10n.plugin.text(.mode),
                 control: modePopup
             ),
             AUPluginDefaultsForm.labeledRow(label: "", control: autoCropButton),

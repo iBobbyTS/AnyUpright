@@ -42,23 +42,27 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
             : AUStretchRatioMode.none
 
         paramAPI.addPopupMenu(
-            withName: "Ratio",
+            withName: AUL10n.plugin.text(.ratio),
             parameterID: StretchParam.ratio.rawValue,
             defaultValue: UInt32(ratioDefault.rawValue),
-            menuEntries: ["None", "Fit", "Fill"],
+            menuEntries: [
+                AUL10n.plugin.text(.none),
+                AUL10n.plugin.text(.fit),
+                AUL10n.plugin.text(.fill),
+            ],
             parameterFlags: showsSourceEditMode ? defaultFlags() : hiddenFlags()
         )
 
         if showsSourceEditMode {
             paramAPI.addToggleButton(
-                withName: "Edit Mode",
+                withName: AUL10n.plugin.text(.editMode),
                 parameterID: StretchParam.showCornerAdjuster.rawValue,
                 defaultValue: true,
                 parameterFlags: defaultFlags()
             )
         } else {
             paramAPI.addToggleButton(
-                withName: "Edit Mode",
+                withName: AUL10n.plugin.text(.editMode),
                 parameterID: StretchParam.showCornerAdjuster.rawValue,
                 defaultValue: false,
                 parameterFlags: hiddenFlags()
@@ -66,20 +70,20 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
         }
 
         paramAPI.addPushButton(
-            withName: "Set/Unset Key Frame",
+            withName: AUL10n.plugin.text(.setUnsetKeyFrame),
             parameterID: StretchParam.setCornerKeyframe.rawValue,
             selector: #selector(toggleCornerKeyframe),
             parameterFlags: defaultFlags()
         )
 
         let cornerGroupFlags = collapsedFlags()
-        addCornerParameters(paramAPI, title: "Top Left", groupID: StretchGroup.topLeft.rawValue, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY, groupFlags: cornerGroupFlags)
-        addCornerParameters(paramAPI, title: "Top Right", groupID: StretchGroup.topRight.rawValue, pixelX: .topRightPixelX, pixelY: .topRightPixelY, groupFlags: cornerGroupFlags)
-        addCornerParameters(paramAPI, title: "Bottom Right", groupID: StretchGroup.bottomRight.rawValue, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
-        addCornerParameters(paramAPI, title: "Bottom Left", groupID: StretchGroup.bottomLeft.rawValue, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: .topLeft, xName: .topLeftX, yName: .topLeftY, groupID: StretchGroup.topLeft.rawValue, pixelX: .topLeftPixelX, pixelY: .topLeftPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: .topRight, xName: .topRightX, yName: .topRightY, groupID: StretchGroup.topRight.rawValue, pixelX: .topRightPixelX, pixelY: .topRightPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: .bottomRight, xName: .bottomRightX, yName: .bottomRightY, groupID: StretchGroup.bottomRight.rawValue, pixelX: .bottomRightPixelX, pixelY: .bottomRightPixelY, groupFlags: cornerGroupFlags)
+        addCornerParameters(paramAPI, title: .bottomLeft, xName: .bottomLeftX, yName: .bottomLeftY, groupID: StretchGroup.bottomLeft.rawValue, pixelX: .bottomLeftPixelX, pixelY: .bottomLeftPixelY, groupFlags: cornerGroupFlags)
 
         paramAPI.addPushButton(
-            withName: "Defaults...",
+            withName: AUL10n.plugin.text(.defaults),
             parameterID: StretchParam.defaults.rawValue,
             selector: #selector(showStretchDefaults),
             parameterFlags: defaultFlags()
@@ -285,18 +289,21 @@ class AnyUprightStretchModePlugIn: AnyUprightWarpEffect {
 
     private func addFixedModeParameter(_ paramAPI: FxParameterCreationAPI_v5) {
         paramAPI.addPopupMenu(
-            withName: "Mode",
+            withName: AUL10n.plugin.text(.mode),
             parameterID: StretchParam.mode.rawValue,
             defaultValue: UInt32(fixedStretchMode.rawValue),
-            menuEntries: ["Outer Stretch", "Inner Stretch"],
+            menuEntries: [
+                AUL10n.plugin.text(.outerStretch),
+                AUL10n.plugin.text(.innerStretch),
+            ],
             parameterFlags: hiddenFlags()
         )
     }
 
-    private func addCornerParameters(_ paramAPI: FxParameterCreationAPI_v5, title: String, groupID: UInt32, pixelX: StretchParam, pixelY: StretchParam, groupFlags: FxParameterFlags) {
-        paramAPI.startParameterSubGroup(title, parameterID: groupID, parameterFlags: groupFlags)
-        addPixelSlider(paramAPI, name: "\(title) X px", id: pixelX.rawValue)
-        addPixelSlider(paramAPI, name: "\(title) Y px", id: pixelY.rawValue)
+    private func addCornerParameters(_ paramAPI: FxParameterCreationAPI_v5, title: AUStringKey, xName: AUStringKey, yName: AUStringKey, groupID: UInt32, pixelX: StretchParam, pixelY: StretchParam, groupFlags: FxParameterFlags) {
+        paramAPI.startParameterSubGroup(AUL10n.plugin.text(title), parameterID: groupID, parameterFlags: groupFlags)
+        addPixelSlider(paramAPI, name: AUL10n.plugin.text(xName), id: pixelX.rawValue)
+        addPixelSlider(paramAPI, name: AUL10n.plugin.text(yName), id: pixelY.rawValue)
         paramAPI.endParameterSubGroup()
     }
 

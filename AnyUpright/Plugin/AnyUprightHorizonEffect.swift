@@ -35,13 +35,13 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         let defaults = AUPluginDefaults.horizon.load()
         addAnalysisDisplayStatusParameter(paramAPI)
         paramAPI.addPushButton(
-            withName: "Analyze Horizon",
+            withName: AUL10n.plugin.text(.analyzeHorizon),
             parameterID: HorizonParam.analyze.rawValue,
             selector: #selector(analyzeHorizon),
             parameterFlags: defaultFlags()
         )
         paramAPI.addAngleSlider(
-            withName: "Rotation",
+            withName: AUL10n.plugin.text(.rotation),
             parameterID: HorizonParam.rotation.rawValue,
             defaultDegrees: 0.0,
             parameterMinDegrees: -45.0,
@@ -49,13 +49,13 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
             parameterFlags: defaultFlags()
         )
         paramAPI.addToggleButton(
-            withName: "Fill Frame",
+            withName: AUL10n.plugin.text(.fillFrame),
             parameterID: HorizonParam.fillFrame.rawValue,
             defaultValue: defaults.fillFrame,
             parameterFlags: defaultFlags()
         )
         paramAPI.addPushButton(
-            withName: "Defaults...",
+            withName: AUL10n.plugin.text(.defaults),
             parameterID: HorizonParam.defaults.rawValue,
             selector: #selector(showHorizonDefaults),
             parameterFlags: defaultFlags()
@@ -306,7 +306,7 @@ class AnyUprightHorizonPlugIn: AnyUprightWarpEffect, FxAnalyzer {
         NSError(
             domain: "AnyUpright.FxAnalysis",
             code: 1,
-            userInfo: [NSLocalizedDescriptionKey: "Horizon analysis: \(message)"]
+            userInfo: [NSLocalizedDescriptionKey: AUL10n.plugin.format(.horizonAnalysisError, message)]
         )
     }
 

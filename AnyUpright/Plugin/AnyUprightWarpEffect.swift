@@ -222,7 +222,7 @@ class AnyUprightWarpEffect: NSObject, FxTileableEffect {
                 | kFxParameterFlag_DONT_DISPLAY_IN_DASHBOARD
         )
         paramAPI.addIntSlider(
-            withName: "Analysis Status",
+            withName: AUL10n.plugin.text(.analysisStatus),
             parameterID: AUAnalysisDisplayStatusParameter.id,
             defaultValue: AUAnalysisDisplayStatus.none.rawValue,
             parameterMin: AUAnalysisDisplayStatus.none.rawValue,

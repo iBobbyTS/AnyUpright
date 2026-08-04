@@ -28,13 +28,13 @@ struct AnyUprightAnalysisStatusTests {
         try require(AUAnalysisDisplayStatusParameter.id >= 1, "status parameter ID lower bound")
         try require(AUAnalysisDisplayStatusParameter.id <= 9998, "status parameter ID upper bound")
         try require(AUAnalysisDisplayStatus.none.message == nil, "none must not render text")
-        try require(AUAnalysisDisplayStatus.modelLoading.message == "模型加载中", "model loading message")
-        try require(AUAnalysisDisplayStatus.analyzingFrame.message == "画面分析中", "analyzing message")
-        try require(AUAnalysisDisplayStatus.keyframesSet.message == "已设置关键帧", "keyframes set message")
+        try require(AUAnalysisDisplayStatus.modelLoading.message == "Loading model", "model loading fallback message")
+        try require(AUAnalysisDisplayStatus.analyzingFrame.message == "Analyzing frame", "analyzing fallback message")
+        try require(AUAnalysisDisplayStatus.keyframesSet.message == "Keyframes set", "keyframes set fallback message")
         try require(AUAnalysisDisplayStatus.keyframesSet.preferredTransientDuration == 2.0, "keyframes set duration")
         try require(
-            AUAnalysisDisplayStatus.keyframesRemoved.message == "已删除关键帧\n如果片段上已经有关键帧，拖动本身就会在当前帧创建新的关键帧，不需要重复点击本按钮",
-            "keyframes removed message"
+            AUAnalysisDisplayStatus.keyframesRemoved.message == "Keyframes removed\nIf the clip already has keyframes, dragging creates a keyframe at the current frame. You do not need to click this button again.",
+            "keyframes removed fallback message"
         )
         try require(AUAnalysisDisplayStatus.keyframesRemoved.preferredTransientDuration == 6.0, "keyframes removed duration")
         try require(AUAnalysisDisplayStatus.allCases.count == 5, "status cases")

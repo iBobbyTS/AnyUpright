@@ -1,0 +1,150 @@
+/* 宿主资源库中显示的滤镜简介。 */
+"AnyUpright::Horizon Description" = "自动校正地平线，也可手动旋转并选择填满画面。";
+/* 宿主资源库中显示的滤镜简介。 */
+"AnyUpright::Inner Stretch Description" = "选择输入画面中的区域，并将其拉伸到完整画面。";
+/* 宿主资源库中显示的滤镜简介。 */
+"AnyUpright::Outer Stretch Description" = "拖动输出画面的四角以手动校正透视。";
+/* 宿主显示的屏幕控制简介。 */
+"AnyUpright::Inner Stretch OSC Description" = "AnyUpright Inner Stretch 的屏幕选区控制。";
+/* 宿主显示的屏幕控制简介。 */
+"AnyUpright::Outer Stretch OSC Description" = "AnyUpright Outer Stretch 的屏幕外角控制。";
+/* 宿主资源库中显示的滤镜简介。 */
+"AnyUpright::Upright Description" = "类似 Lightroom 的手动、引导、自动和半自动透视校正。";
+/* 宿主显示的屏幕控制简介。 */
+"AnyUpright::Upright OSC Description" = "AnyUpright Upright 的屏幕辅助线和候选线控制。";
+
+/* Horizon 检查器按钮。 */
+"AnyUpright::Parameter Analyze Horizon" = "分析地平线";
+/* Upright 检查器按钮。 */
+"AnyUpright::Parameter Analyze" = "分析";
+/* 检查器参数名。 */
+"AnyUpright::Parameter Rotation" = "旋转";
+/* 检查器参数名。 */
+"AnyUpright::Parameter Fill Frame" = "填满画面";
+/* 检查器参数名。 */
+"AnyUpright::Parameter Ratio" = "比例";
+/* 检查器参数名。 */
+"AnyUpright::Parameter Edit Mode" = "编辑模式";
+/* Stretch 关键帧操作按钮。 */
+"AnyUpright::Parameter Set Unset Key Frame" = "设置/删除关键帧";
+/* 打开默认设置的检查器按钮。 */
+"AnyUpright::Parameter Defaults" = "默认设置...";
+/* 检查器参数名。 */
+"AnyUpright::Parameter Direction" = "方向";
+/* 检查器参数名。 */
+"AnyUpright::Parameter Mode" = "模式";
+/* 检查器参数名。 */
+"AnyUpright::Parameter Auto Crop" = "自动裁切";
+/* 隐藏的内部参数名。 */
+"AnyUpright::Parameter Analysis Status" = "分析状态";
+/* 隐藏的 Upright 校正参数。 */
+"AnyUpright::Parameter Vertical Perspective" = "垂直透视";
+/* 隐藏的 Upright 校正参数。 */
+"AnyUpright::Parameter Horizontal Perspective" = "水平透视";
+
+/* 弹出菜单选项。 */
+"AnyUpright::Menu None" = "无";
+/* 比例弹出菜单选项。 */
+"AnyUpright::Menu Fit" = "适合";
+/* 比例弹出菜单选项。 */
+"AnyUpright::Menu Fill" = "填充";
+/* 方向或朝向弹出菜单选项。 */
+"AnyUpright::Menu Vertical" = "垂直";
+/* 方向或朝向弹出菜单选项。 */
+"AnyUpright::Menu Horizontal" = "水平";
+/* 方向弹出菜单选项。 */
+"AnyUpright::Menu Full" = "完整";
+/* Upright 模式弹出菜单选项。 */
+"AnyUpright::Menu Manual" = "手动";
+/* Upright 模式弹出菜单选项。 */
+"AnyUpright::Menu Semi Auto" = "半自动";
+/* Upright 模式弹出菜单选项。 */
+"AnyUpright::Menu Auto" = "自动";
+/* 隐藏的 Stretch 模式选项。 */
+"AnyUpright::Menu Outer Stretch" = "外部拉伸";
+/* 隐藏的 Stretch 模式选项。 */
+"AnyUpright::Menu Inner Stretch" = "内部拉伸";
+
+/* Stretch 角点分组名。 */
+"AnyUpright::Corner Top Left" = "左上";
+/* Stretch 角点分组名。 */
+"AnyUpright::Corner Top Right" = "右上";
+/* Stretch 角点分组名。 */
+"AnyUpright::Corner Bottom Right" = "右下";
+/* Stretch 角点分组名。 */
+"AnyUpright::Corner Bottom Left" = "左下";
+/* Stretch 角点 X 像素偏移。 */
+"AnyUpright::Corner Top Left X px" = "左上 X px";
+/* Stretch 角点 Y 像素偏移。 */
+"AnyUpright::Corner Top Left Y px" = "左上 Y px";
+/* Stretch 角点 X 像素偏移。 */
+"AnyUpright::Corner Top Right X px" = "右上 X px";
+/* Stretch 角点 Y 像素偏移。 */
+"AnyUpright::Corner Top Right Y px" = "右上 Y px";
+/* Stretch 角点 X 像素偏移。 */
+"AnyUpright::Corner Bottom Right X px" = "右下 X px";
+/* Stretch 角点 Y 像素偏移。 */
+"AnyUpright::Corner Bottom Right Y px" = "右下 Y px";
+/* Stretch 角点 X 像素偏移。 */
+"AnyUpright::Corner Bottom Left X px" = "左下 X px";
+/* Stretch 角点 Y 像素偏移。 */
+"AnyUpright::Corner Bottom Left Y px" = "左下 Y px";
+
+/* 隐藏的手动辅助线集合。 */
+"AnyUpright::Guides" = "辅助线";
+/* 隐藏的辅助线分组；%d 是从 1 开始的编号。 */
+"AnyUpright::Guide Number" = "辅助线 %d";
+/* 隐藏的辅助线开关；%d 是从 1 开始的编号。 */
+"AnyUpright::Guide Enabled" = "辅助线 %d 已启用";
+/* 隐藏的辅助线朝向；%d 是从 1 开始的编号。 */
+"AnyUpright::Guide Orientation" = "辅助线 %d 朝向";
+/* 隐藏的辅助线起点；%d 是从 1 开始的编号。 */
+"AnyUpright::Guide Start" = "辅助线 %d 起点";
+/* 隐藏的辅助线终点；%d 是从 1 开始的编号。 */
+"AnyUpright::Guide End" = "辅助线 %d 终点";
+/* 隐藏的识别候选集合。 */
+"AnyUpright::Detected Candidates" = "识别候选";
+/* 隐藏的候选分组；%d 是从 1 开始的编号。 */
+"AnyUpright::Candidate Number" = "候选 %d";
+/* 隐藏的候选可见开关；%d 是从 1 开始的编号。 */
+"AnyUpright::Candidate Visible" = "候选 %d 可见";
+/* 隐藏的候选选择开关；%d 是从 1 开始的编号。 */
+"AnyUpright::Candidate Selected" = "候选 %d 已选择";
+/* 隐藏的候选朝向；%d 是从 1 开始的编号。 */
+"AnyUpright::Candidate Orientation" = "候选 %d 朝向";
+/* 隐藏的候选起点；%d 是从 1 开始的编号。 */
+"AnyUpright::Candidate Start" = "候选 %d 起点";
+/* 隐藏的候选终点；%d 是从 1 开始的编号。 */
+"AnyUpright::Candidate End" = "候选 %d 终点";
+/* 隐藏的候选分数；%d 是从 1 开始的编号。 */
+"AnyUpright::Candidate Score" = "候选 %d 分数";
+
+/* 加载模型时的 OSC 状态。 */
+"AnyUpright::Analysis Model Loading" = "模型加载中";
+/* 分析画面时的 OSC 状态。 */
+"AnyUpright::Analysis Frame Analyzing" = "画面分析中";
+/* 设置 Stretch 关键帧后的 OSC 提示。 */
+"AnyUpright::Keyframes Set" = "已设置关键帧";
+/* 删除 Stretch 关键帧后的 OSC 提示。 */
+"AnyUpright::Keyframes Removed" = "已删除关键帧\n如果片段上已经有关键帧，拖动本身就会在当前帧创建新的关键帧，不需要重复点击本按钮。";
+/* 宿主可见的 Horizon 分析错误；%@ 是技术原因。 */
+"AnyUpright::Horizon Analysis Error" = "地平线分析：%@";
+/* 宿主可见的 Upright 分析错误；%@ 是技术原因。 */
+"AnyUpright::Upright Analysis Error" = "透视分析：%@";
+
+/* 默认设置窗口的适用范围说明。 */
+"AnyUpright::Defaults New Instances Only" = "默认参数值仅适用于新添加的滤镜实例。";
+/* 默认设置窗口的恢复按钮。 */
+"AnyUpright::Defaults Restore Factory" = "恢复出厂默认设置";
+/* 默认设置保存失败提示。 */
+"AnyUpright::Defaults Save Failed" = "无法保存默认设置。";
+/* 默认设置窗口标题。 */
+"AnyUpright::Horizon Defaults Title" = "Horizon 默认设置";
+/* 默认设置窗口标题。 */
+"AnyUpright::Inner Stretch Defaults Title" = "Inner Stretch 默认设置";
+/* 默认设置窗口标题。 */
+"AnyUpright::Outer Stretch Defaults Title" = "Outer Stretch 默认设置";
+/* 默认设置窗口标题。 */
+"AnyUpright::Upright Defaults Title" = "Upright 默认设置";
+/* Stretch 默认设置中的关键帧提示开关。 */
+"AnyUpright::Defaults Suppress Keyframe Notifications" = "不显示关键帧提示";

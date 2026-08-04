@@ -248,39 +248,47 @@ func addUprightWorkflowParameters(
     defaultFlags: FxParameterFlags
 ) {
     paramAPI.addPopupMenu(
-        withName: "Direction",
+        withName: AUL10n.plugin.text(.direction),
         parameterID: UprightParam.correctionMode.rawValue,
         defaultValue: UInt32(defaults.direction.rawValue),
-        menuEntries: ["Vertical", "Horizontal", "Full"],
+        menuEntries: [
+            AUL10n.plugin.text(.vertical),
+            AUL10n.plugin.text(.horizontal),
+            AUL10n.plugin.text(.full),
+        ],
         parameterFlags: defaultFlags
     )
     paramAPI.addPushButton(
-        withName: "Analyze",
+        withName: AUL10n.plugin.text(.analyze),
         parameterID: UprightParam.analyze.rawValue,
         selector: #selector(AnyUprightUprightPlugIn.analyze),
         parameterFlags: defaultFlags
     )
     paramAPI.addPopupMenu(
-        withName: "Mode",
+        withName: AUL10n.plugin.text(.mode),
         parameterID: UprightParam.controlMode.rawValue,
         defaultValue: UInt32(defaults.mode.rawValue),
-        menuEntries: ["Manual", "Semi Auto", "Auto"],
+        menuEntries: [
+            AUL10n.plugin.text(.manual),
+            AUL10n.plugin.text(.semiAuto),
+            AUL10n.plugin.text(.automatic),
+        ],
         parameterFlags: defaultFlags
     )
     paramAPI.addToggleButton(
-        withName: "Auto Crop",
+        withName: AUL10n.plugin.text(.autoCrop),
         parameterID: UprightParam.autoCrop.rawValue,
         defaultValue: defaults.autoCrop,
         parameterFlags: defaultFlags
     )
     paramAPI.addToggleButton(
-        withName: "Edit Mode",
+        withName: AUL10n.plugin.text(.editMode),
         parameterID: UprightParam.editMode.rawValue,
         defaultValue: true,
         parameterFlags: defaultFlags
     )
     paramAPI.addPushButton(
-        withName: "Defaults...",
+        withName: AUL10n.plugin.text(.defaults),
         parameterID: UprightParam.defaults.rawValue,
         selector: #selector(AnyUprightUprightPlugIn.showUprightDefaults),
         parameterFlags: defaultFlags
@@ -288,32 +296,33 @@ func addUprightWorkflowParameters(
 }
 
 func addUprightGuideParameters(_ paramAPI: FxParameterCreationAPI_v5, collapsedFlags: FxParameterFlags, defaultFlags: FxParameterFlags) {
-    paramAPI.startParameterSubGroup("Guides", parameterID: 390, parameterFlags: collapsedFlags)
+    paramAPI.startParameterSubGroup(AUL10n.plugin.text(.guides), parameterID: 390, parameterFlags: collapsedFlags)
     for (index, spec) in uprightGuideSpecs.enumerated() {
-        let title = "Guide \(index + 1)"
+        let number = index + 1
+        let title = AUL10n.plugin.format(.guideNumber, number)
         paramAPI.startParameterSubGroup(title, parameterID: UInt32(391 + index), parameterFlags: collapsedFlags)
         paramAPI.addToggleButton(
-            withName: "\(title) Enabled",
+            withName: AUL10n.plugin.format(.guideEnabled, number),
             parameterID: spec.enabled.rawValue,
             defaultValue: true,
             parameterFlags: defaultFlags
         )
         paramAPI.addPopupMenu(
-            withName: "\(title) Orientation",
+            withName: AUL10n.plugin.format(.guideOrientation, number),
             parameterID: spec.orientation.rawValue,
             defaultValue: UInt32(spec.defaultOrientation.rawValue),
-            menuEntries: ["Vertical", "Horizontal"],
+            menuEntries: [AUL10n.plugin.text(.vertical), AUL10n.plugin.text(.horizontal)],
             parameterFlags: defaultFlags
         )
         paramAPI.addPointParameter(
-            withName: "\(title) Start",
+            withName: AUL10n.plugin.format(.guideStart, number),
             parameterID: spec.start.rawValue,
             defaultX: spec.defaultStart.x,
             defaultY: spec.defaultStart.y,
             parameterFlags: defaultFlags
         )
         paramAPI.addPointParameter(
-            withName: "\(title) End",
+            withName: AUL10n.plugin.format(.guideEnd, number),
             parameterID: spec.end.rawValue,
             defaultX: spec.defaultEnd.x,
             defaultY: spec.defaultEnd.y,

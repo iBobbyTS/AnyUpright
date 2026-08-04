@@ -23,7 +23,7 @@ struct ExpectedPlugin {
     var uuid: String
     var protocols: Set<String>
     var localizedDisplayName: String
-    var localizedDescription: String
+    var localizedDescriptions: [String: String]
     var supportedPlugins: Set<String> = []
 }
 
@@ -31,12 +31,18 @@ struct ValidateFxPlugManifest {
     static func run() throws {
         let root = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? FileManager.default.currentDirectoryPath)
         let infoPlist = root.appendingPathComponent("AnyUpright/Plugin/Info.plist")
-        let infoStrings = root.appendingPathComponent("AnyUpright/Plugin/en.lproj/InfoPlist.strings")
-        let localizableStrings = root.appendingPathComponent("AnyUpright/Plugin/en.lproj/Localizable.strings")
-
         let plist = try dictionaryPlist(at: infoPlist)
-        let displayNames = try dictionaryPlist(at: infoStrings)
-        let descriptions = try dictionaryPlist(at: localizableStrings)
+        let locales = ["en", "zh-Hans"]
+        let localizedTables = try Dictionary(uniqueKeysWithValues: locales.map { locale in
+            let localeDirectory = root.appendingPathComponent("AnyUpright/Plugin/\(locale).lproj")
+            return (
+                locale,
+                (
+                    displayNames: try dictionaryPlist(at: localeDirectory.appendingPathComponent("InfoPlist.strings")),
+                    descriptions: try dictionaryPlist(at: localeDirectory.appendingPathComponent("Localizable.strings"))
+                )
+            )
+        })
 
         let expectedGroup = "DA62260F-B8B9-498A-A220-E33F20DE872C"
         let expected = [
@@ -47,7 +53,10 @@ struct ValidateFxPlugManifest {
                 uuid: "2E32E3C2-91C7-44D4-A0AC-0E87832A86A1",
                 protocols: ["FxFilter", "FxAnalyzer"],
                 localizedDisplayName: "AnyUpright Horizon",
-                localizedDescription: "Automatic horizon correction with manual rotation and optional fill."
+                localizedDescriptions: [
+                    "en": "Automatic horizon correction with manual rotation and optional fill.",
+                    "zh-Hans": "自动校正地平线，也可手动旋转并选择填满画面。"
+                ]
             ),
             ExpectedPlugin(
                 className: "AnyUprightInnerStretchPlugIn",
@@ -56,7 +65,10 @@ struct ValidateFxPlugManifest {
                 uuid: "9BB4C7D9-9384-4C8F-927D-4F716DA78B14",
                 protocols: ["FxFilter"],
                 localizedDisplayName: "AnyUpright Inner Stretch",
-                localizedDescription: "Select an input selection and stretch it to the full frame."
+                localizedDescriptions: [
+                    "en": "Select an input selection and stretch it to the full frame.",
+                    "zh-Hans": "选择输入画面中的区域，并将其拉伸到完整画面。"
+                ]
             ),
             ExpectedPlugin(
                 className: "AnyUprightOuterStretchPlugIn",
@@ -65,7 +77,10 @@ struct ValidateFxPlugManifest {
                 uuid: "81C621CF-4119-46E9-BC04-47A1539A8B54",
                 protocols: ["FxFilter"],
                 localizedDisplayName: "AnyUpright Outer Stretch",
-                localizedDescription: "Drag the outer output corners for manual perspective warping."
+                localizedDescriptions: [
+                    "en": "Drag the outer output corners for manual perspective warping.",
+                    "zh-Hans": "拖动输出画面的四角以手动校正透视。"
+                ]
             ),
             ExpectedPlugin(
                 className: "AnyUprightInnerStretchOSCPlugIn",
@@ -74,7 +89,10 @@ struct ValidateFxPlugManifest {
                 uuid: "1E97E435-F4A5-4252-8B14-86F44BAD0BF7",
                 protocols: ["FxOnScreenControl"],
                 localizedDisplayName: "AnyUpright Inner Stretch Controls",
-                localizedDescription: "Onscreen input selection controls for AnyUpright Inner Stretch.",
+                localizedDescriptions: [
+                    "en": "Onscreen input selection controls for AnyUpright Inner Stretch.",
+                    "zh-Hans": "AnyUpright Inner Stretch 的屏幕选区控制。"
+                ],
                 supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]
             ),
             ExpectedPlugin(
@@ -84,7 +102,10 @@ struct ValidateFxPlugManifest {
                 uuid: "4CA1AA25-31BD-4AB8-BF52-A379917B80E3",
                 protocols: ["FxOnScreenControl"],
                 localizedDisplayName: "AnyUpright Outer Stretch Controls",
-                localizedDescription: "Onscreen outer corner controls for AnyUpright Outer Stretch.",
+                localizedDescriptions: [
+                    "en": "Onscreen outer corner controls for AnyUpright Outer Stretch.",
+                    "zh-Hans": "AnyUpright Outer Stretch 的屏幕外角控制。"
+                ],
                 supportedPlugins: ["81C621CF-4119-46E9-BC04-47A1539A8B54"]
             ),
             ExpectedPlugin(
@@ -94,7 +115,10 @@ struct ValidateFxPlugManifest {
                 uuid: "A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB",
                 protocols: ["FxFilter", "FxAnalyzer"],
                 localizedDisplayName: "AnyUpright Upright",
-                localizedDescription: "Lightroom-style manual, guided, automatic, and semi-automatic upright correction."
+                localizedDescriptions: [
+                    "en": "Lightroom-style manual, guided, automatic, and semi-automatic upright correction.",
+                    "zh-Hans": "类似 Lightroom 的手动、引导、自动和半自动透视校正。"
+                ]
             ),
             ExpectedPlugin(
                 className: "AnyUprightUprightOSCPlugIn",
@@ -103,7 +127,10 @@ struct ValidateFxPlugManifest {
                 uuid: "FEF0BD6C-BB81-4E37-B5BD-8C163FBB7782",
                 protocols: ["FxOnScreenControl"],
                 localizedDisplayName: "AnyUpright Upright Controls",
-                localizedDescription: "Onscreen guide and candidate line controls for AnyUpright Upright.",
+                localizedDescriptions: [
+                    "en": "Onscreen guide and candidate line controls for AnyUpright Upright.",
+                    "zh-Hans": "AnyUpright Upright 的屏幕辅助线和候选线控制。"
+                ],
                 supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB", "2E32E3C2-91C7-44D4-A0AC-0E87832A86A1"]
             )
         ]
@@ -143,9 +170,27 @@ struct ValidateFxPlugManifest {
             try assertEqual(plugin["infoString"] as? String, item.descriptionKey, "\(item.className) description key")
             try assertEqual(Set(try requireStringArray(plugin["protocolNames"], "\(item.className) protocolNames")), item.protocols, "\(item.className) protocols")
             try assertEqual(Set(plugin["supportedPlugins"] as? [String] ?? []), item.supportedPlugins, "\(item.className) supported plugins")
-            try assertEqual(displayNames[item.displayNameKey] as? String, item.localizedDisplayName, "\(item.className) localized display name")
-            try assertEqual(descriptions[item.descriptionKey] as? String, item.localizedDescription, "\(item.className) localized description")
+            for locale in locales {
+                guard let tables = localizedTables[locale],
+                      let expectedDescription = item.localizedDescriptions[locale] else {
+                    throw ManifestValidationFailure.failed("Missing expected localization data for \(locale)")
+                }
+                try assertEqual(
+                    tables.displayNames[item.displayNameKey] as? String,
+                    item.localizedDisplayName,
+                    "\(item.className) \(locale) localized display name"
+                )
+                try assertEqual(
+                    tables.descriptions[item.descriptionKey] as? String,
+                    expectedDescription,
+                    "\(item.className) \(locale) localized description"
+                )
+            }
         }
+
+        let englishDisplayKeys = Set(localizedTables["en"]?.displayNames.keys.map { $0 } ?? [])
+        let chineseDisplayKeys = Set(localizedTables["zh-Hans"]?.displayNames.keys.map { $0 } ?? [])
+        try assertEqual(chineseDisplayKeys, englishDisplayKeys, "localized display-name key set")
 
         let serialized = String(data: try Data(contentsOf: infoPlist), encoding: .utf8) ?? ""
         try assertTrue(!serialized.localizedCaseInsensitiveContains("brightness"), "Info.plist should not contain template brightness entries")

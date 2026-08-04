@@ -1,0 +1,8 @@
+/* Filter and OSC names remain branded in every locale. */
+"AnyUpright::Horizon Name" = "AnyUpright Horizon";
+"AnyUpright::Inner Stretch Name" = "AnyUpright Inner Stretch";
+"AnyUpright::Outer Stretch Name" = "AnyUpright Outer Stretch";
+"AnyUpright::Inner Stretch OSC Name" = "AnyUpright Inner Stretch Controls";
+"AnyUpright::Outer Stretch OSC Name" = "AnyUpright Outer Stretch Controls";
+"AnyUpright::Upright Name" = "AnyUpright Upright";
+"AnyUpright::Upright OSC Name" = "AnyUpright Upright Controls";

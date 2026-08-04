@@ -6,8 +6,6 @@
 import Foundation
 import simd
 
-private final class AUAnalysisStatusLocalizationToken {}
-
 enum AUAnalysisDisplayStatusParameter {
     // FxPlug parameter IDs must be in the inclusive range 1...9998.
     static let id: UInt32 = 9997
@@ -36,34 +34,14 @@ enum AUAnalysisDisplayStatus: Int32, CaseIterable, Hashable {
         case .none:
             return nil
         case .modelLoading:
-            return localizedMessage(
-                key: "AnyUpright::Analysis Model Loading",
-                fallback: "模型加载中"
-            )
+            return AUL10n.plugin.text(.modelLoading)
         case .analyzingFrame:
-            return localizedMessage(
-                key: "AnyUpright::Analysis Frame Analyzing",
-                fallback: "画面分析中"
-            )
+            return AUL10n.plugin.text(.analyzingFrame)
         case .keyframesSet:
-            return localizedMessage(
-                key: "AnyUpright::Keyframes Set",
-                fallback: "已设置关键帧"
-            )
+            return AUL10n.plugin.text(.keyframesSet)
         case .keyframesRemoved:
-            return localizedMessage(
-                key: "AnyUpright::Keyframes Removed",
-                fallback: "已删除关键帧\n如果片段上已经有关键帧，拖动本身就会在当前帧创建新的关键帧，不需要重复点击本按钮"
-            )
+            return AUL10n.plugin.text(.keyframesRemoved)
         }
-    }
-
-    private func localizedMessage(key: String, fallback: String) -> String {
-        Bundle(for: AUAnalysisStatusLocalizationToken.self).localizedString(
-            forKey: key,
-            value: fallback,
-            table: nil
-        )
     }
 }
 

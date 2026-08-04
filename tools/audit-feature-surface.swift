@@ -59,6 +59,7 @@ struct AuditFeatureSurface {
         let analysisTransaction = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightFxAnalysisTransaction.swift"), encoding: .utf8)
         let pluginDefaults = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightPluginDefaults.swift"), encoding: .utf8)
         let pluginDefaultsUI = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightPluginDefaultsUI.swift"), encoding: .utf8)
+        let localization = try String(contentsOf: root.appendingPathComponent("AnyUpright/Plugin/AnyUprightLocalization.swift"), encoding: .utf8)
 
         try auditRegisteredPlugins(infoPlist)
         try reject(warp, "AUAnalysisStatusTextRenderer.shared.encode", "Analysis status remains outside the final Warp output")
@@ -66,11 +67,21 @@ struct AuditFeatureSurface {
         try reject(warp, "populateAnalysisDisplayStatus", "Warp render state does not read OSC-only analysis status")
         try require(overlay, "analysisStatus: AUAnalysisDisplayStatus", "OSC overlay owns analysis status composition")
         try auditPluginDefaults(pluginDefaults, ui: pluginDefaultsUI, warp: warp)
+        try auditLocalization(localization, pluginSources: [horizonEffect, stretchEffects, uprightEffects, pluginDefaultsUI].joined(separator: "\n"))
         try auditHorizon(horizonEffect, transaction: analysisTransaction)
         try auditStretch(stretchEffects, geometry: geometry, overlay: overlay, metal: metal)
         try auditUpright(uprightEffects, geometry: geometry, warp: warp, metal: metal, candidates: candidates, transaction: analysisTransaction)
 
         print("AnyUpright feature surface audit passed")
+    }
+
+    private static func auditLocalization(_ localization: String, pluginSources: String) throws {
+        try require(localization, "enum AUStringKey: String, CaseIterable", "User-visible plugin strings have one typed key namespace")
+        try require(localization, "struct AULocalizer", "Plugin localization supports injectable bundles")
+        try require(localization, "static let plugin = AULocalizer(bundle: Bundle(for:", "Plugin localization is anchored to the XPC bundle")
+        try require(localization, "value: key.englishFallback", "Missing translations fall back to English")
+        try reject(pluginSources, "defaultsLocalized(", "Defaults UI no longer has a parallel localization helper")
+        try reject(pluginSources, "localizedMessage(", "Analysis status no longer has a parallel localization helper")
     }
 
     private static func auditPluginDefaults(_ defaults: String, ui: String, warp: String) throws {
@@ -152,8 +163,8 @@ struct AuditFeatureSurface {
         try require(effects, "override var needsFullBuffer: Bool", "Horizon requests a full frame for its global rotation warp")
         try require(effects, "VNDetectHorizonRequest()", "Horizon uses Vision horizon detection")
         try require(effects, "dominantHorizonCorrectionRadians", "Horizon has a traditional line fallback")
-        try require(effects, "Analyze Horizon", "Horizon exposes explicit analysis button")
-        try require(effects, "Fill Frame", "Horizon exposes fill toggle")
+        try require(effects, "withName: AUL10n.plugin.text(.analyzeHorizon)", "Horizon localizes its explicit analysis button")
+        try require(effects, "withName: AUL10n.plugin.text(.fillFrame)", "Horizon localizes its fill toggle")
         try require(effects, "AUPluginDefaults.horizon.load()", "Horizon reads only its defaults store during parameter registration")
         try require(effects, "defaultValue: defaults.fillFrame", "Horizon Fill Frame uses the persisted default")
         try require(effects, "AUHorizonDefaultsEditor()", "Horizon opens its independent defaults editor")
@@ -171,8 +182,12 @@ struct AuditFeatureSurface {
         try reject(effects, "Detect Edge and Corner", "Inner Stretch does not expose analysis controls")
         try reject(effects, "Score Threshold", "Inner Stretch does not expose detection thresholds")
         try reject(effects, "Choose from detections", "Inner Stretch does not expose candidate-selection mode")
-        try require(effects, "withName: \"Ratio\"", "Inner Stretch exposes a manual ratio policy")
-        try require(effects, "menuEntries: [\"None\", \"Fit\", \"Fill\"]", "Inner Stretch ratio policy exposes None, Fit, and Fill")
+        try require(effects, "withName: AUL10n.plugin.text(.ratio)", "Inner Stretch localizes its manual ratio policy")
+        try requireInOrder(
+            effects,
+            ["AUL10n.plugin.text(.none)", "AUL10n.plugin.text(.fit)", "AUL10n.plugin.text(.fill)"],
+            "Inner Stretch preserves the None, Fit, Fill menu order through localized keys"
+        )
         try require(effects, "AUPluginDefaults.innerStretch.load().ratio", "Inner Stretch reads its Ratio default during parameter registration")
         try require(effects, "AUPluginDefaults.innerStretch.load().suppressKeyframeNotifications", "Inner Stretch reloads notification suppression for each keyframe action")
         try require(effects, "showKeyframeNotification", "Stretch keyframe notifications share one suppression boundary")
@@ -188,8 +203,8 @@ struct AuditFeatureSurface {
         try require(effects, "override var fixedStretchMode: AUStretchTransformMode", "Stretch filters choose fixed modes")
         try require(effects, "class AnyUprightOuterStretchOSCPlugIn: AnyUprightInnerStretchOSCPlugIn", "Outer Stretch exposes its own onscreen control")
         try require(effects, "parameterFlags: hiddenFlags()", "Stretch fixed mode parameter is hidden from the inspector")
-        try require(effects, "Edit Mode", "Stretch exposes edit mode for inner-stretch handles without applying the warp")
-        try require(effects, "Set Corner Keyframe", "Both Stretch filters expose one-click keyframing for all eight corner channels")
+        try require(effects, "withName: AUL10n.plugin.text(.editMode)", "Stretch localizes edit mode")
+        try require(effects, "withName: AUL10n.plugin.text(.setUnsetKeyFrame)", "Both Stretch filters localize one-click keyframing for all eight corner channels")
         try require(effects, "FxKeyframeAPI_v3", "Stretch uses the host keyframe API for its existing corner channels")
         try require(effects, "class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4", "Inner Stretch exposes onscreen controls as a separate FxPlug class")
         try require(effects, "renderOutputCornersOSC", "Outer Stretch draws host onscreen output-corner controls")
@@ -215,8 +230,9 @@ struct AuditFeatureSurface {
         )
         try require(effects, "let cornerGroupFlags = collapsedFlags()", "Both Stretch filters expose the four corner coordinate groups")
         try reject(effects, "hiddenCollapsedFlags", "Stretch corner coordinate groups are not hidden")
-        try require(effects, "addPixelSlider(paramAPI, name: \"\\(title) X px\"", "Stretch exposes horizontal pixel offsets")
-        try require(effects, "addPixelSlider(paramAPI, name: \"\\(title) Y px\"", "Stretch exposes vertical pixel offsets")
+        try require(effects, "addPixelSlider(paramAPI, name: AUL10n.plugin.text(xName)", "Stretch exposes localized horizontal pixel offsets")
+        try require(effects, "addPixelSlider(paramAPI, name: AUL10n.plugin.text(yName)", "Stretch exposes localized vertical pixel offsets")
+        try require(effects, "title: .topLeft, xName: .topLeftX, yName: .topLeftY", "Stretch maps corner labels to complete localization keys")
         try reject(effects, "addPercentSlider", "Stretch does not register percentage corner offsets")
         try require(effects, "overlayRenderer.clear", "Stretch OSC clears its host overlay surface while the effect render output owns the visible Inner Stretch adjuster")
         try require(geometry, "stretchOutputToSourceMatrix", "Stretch render matrix is centralized in geometry")
@@ -243,16 +259,24 @@ struct AuditFeatureSurface {
     }
 
     private static func auditUpright(_ effects: String, geometry: String, warp: String, metal: String, candidates: String, transaction: String) throws {
-        try require(effects, "withName: \"Direction\"", "Upright exposes direction-based correction selection")
-        try require(effects, "menuEntries: [\"Vertical\", \"Horizontal\", \"Full\"]", "Upright exposes vertical, horizontal, and full correction directions")
-        try require(effects, "withName: \"Mode\"", "Upright exposes workflow mode selection")
-        try require(effects, "menuEntries: [\"Manual\", \"Semi Auto\", \"Auto\"]", "Upright exposes manual, semi-auto, and auto modes")
+        try require(effects, "withName: AUL10n.plugin.text(.direction)", "Upright localizes direction-based correction selection")
+        try requireInOrder(
+            effects,
+            ["AUL10n.plugin.text(.vertical)", "AUL10n.plugin.text(.horizontal)", "AUL10n.plugin.text(.full)"],
+            "Upright preserves vertical, horizontal, and full menu order through localized keys"
+        )
+        try require(effects, "withName: AUL10n.plugin.text(.mode)", "Upright localizes workflow mode selection")
+        try requireInOrder(
+            effects,
+            ["AUL10n.plugin.text(.manual)", "AUL10n.plugin.text(.semiAuto)", "AUL10n.plugin.text(.automatic)"],
+            "Upright preserves manual, semi-auto, and auto menu order through localized keys"
+        )
         try require(effects, "defaults: AUPluginDefaults.upright.load()", "Upright reads only its defaults store during parameter registration")
         try require(effects, "defaultValue: UInt32(defaults.direction.rawValue)", "Upright Direction uses the persisted default")
         try require(effects, "defaultValue: UInt32(defaults.mode.rawValue)", "Upright Mode uses the persisted default")
         try require(effects, "defaultValue: defaults.autoCrop", "Upright Auto Crop uses the persisted default")
         try require(effects, "AUUprightDefaultsEditor()", "Upright opens its independent defaults editor")
-        try require(effects, "withName: \"Analyze\"", "Upright exposes one analysis/apply action for the selected mode")
+        try require(effects, "withName: AUL10n.plugin.text(.analyze)", "Upright localizes its analysis/apply action")
         try require(effects, "guard controlMode != .manual else", "Upright Analyze applies manual guides without running detection")
         try require(effects, "UprightAnalysisRequest(correctionMode: correctionMode, controlMode: controlMode)", "Upright Analyze starts semi-auto and full-auto candidate detection")
         try require(effects, "AUFxAnalysisTransaction<UprightAnalysisRequest, [UprightDetectedCandidate]>", "Upright owns a typed shared analysis transaction")
@@ -290,6 +314,16 @@ struct AuditFeatureSurface {
     private static func require(_ haystack: String, _ needle: String, _ label: String) throws {
         guard haystack.contains(needle) else {
             throw FeatureSurfaceAuditFailure.failed("\(label): missing \(needle)")
+        }
+    }
+
+    private static func requireInOrder(_ haystack: String, _ needles: [String], _ label: String) throws {
+        var searchStart = haystack.startIndex
+        for needle in needles {
+            guard let range = haystack.range(of: needle, range: searchStart..<haystack.endIndex) else {
+                throw FeatureSurfaceAuditFailure.failed("\(label): missing ordered entry \(needle)")
+            }
+            searchStart = range.upperBound
         }
     }
 

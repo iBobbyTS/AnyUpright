@@ -8,6 +8,7 @@ AnyUpright is a suite of FxPlug effects for single-frame-assisted perspective an
 - The template brightness filter has been replaced with four separate FxPlug filters under the `AnyUpright` group.
 - No Motion template files are tracked here yet; the current product is the registered FxPlug filters.
 - There is no package manager, Docker runtime, or CI workflow yet.
+- GitHub Release builds use the reproducible ad-hoc signing workflow in `scripts/build-release.sh`; Motion template creation, future PKG assembly, and Gatekeeper handling are documented in `docs/release-process.md` and `INSTALL.md`.
 - Geometry tests live in `AnyUprightTests/` and can be run as a lightweight Swift executable.
 - The shared geometry layer now includes line candidate filtering, horizon correction estimation, and centered perspective parameter estimation from reference lines.
 - Stretch and Upright expose FxPlug onscreen controls through separate `FxOnScreenControl` plug-in entries linked to their filter UUIDs with `supportedPlugins`.
@@ -325,9 +326,9 @@ Upright:
 ## Open Decisions
 
 - Whether Motion template files should be tracked in the repository or generated/copied from a documented local template location.
-- Minimum supported macOS, Final Cut Pro, Motion, Xcode, and FxPlug SDK versions.
-- Code signing, notarization, and distribution model.
-- Multi-locale policy beyond the current `en.lproj` template resources.
+- Minimum supported Final Cut Pro, Motion, Xcode, and FxPlug SDK versions beyond the current macOS 14.0 / Apple Silicon build boundary.
+- Whether a future commercial distribution should add Developer ID signing and notarization beyond the current ad-hoc GitHub release model.
+- Multi-locale policy beyond the current English and Simplified Chinese resources.
 - Xcode Test Navigator integration for the current lightweight geometry tests.
 - Automated Metal shader validation.
 

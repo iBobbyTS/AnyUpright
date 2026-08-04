@@ -54,8 +54,8 @@ struct ValidateFxPlugManifest {
                 protocols: ["FxFilter", "FxAnalyzer"],
                 localizedDisplayName: "AnyUpright Horizon",
                 localizedDescriptions: [
-                    "en": "Automatic horizon correction with manual rotation and optional fill.",
-                    "zh-Hans": "自动校正地平线，也可手动旋转并选择填满画面。"
+                    "en": "Automatic or manual leveling, with automatic canvas fill after rotation.",
+                    "zh-Hans": "自动或手动水平，旋转后自动填充画布。"
                 ]
             ),
             ExpectedPlugin(
@@ -66,8 +66,8 @@ struct ValidateFxPlugManifest {
                 protocols: ["FxFilter"],
                 localizedDisplayName: "AnyUpright Inner Stretch",
                 localizedDescriptions: [
-                    "en": "Select an input selection and stretch it to the full frame.",
-                    "zh-Hans": "选择输入画面中的区域，并将其拉伸到完整画面。"
+                    "en": "Select an area of the input image and stretch it to fill the frame, similar to a document scanning app.",
+                    "zh-Hans": "选择输入画面中的区域，并将其拉伸到完整画面。（类似文档扫描app）"
                 ]
             ),
             ExpectedPlugin(
@@ -78,8 +78,8 @@ struct ValidateFxPlugManifest {
                 protocols: ["FxFilter"],
                 localizedDisplayName: "AnyUpright Outer Stretch",
                 localizedDescriptions: [
-                    "en": "Drag the outer output corners for manual perspective warping.",
-                    "zh-Hans": "拖动输出画面的四角以手动校正透视。"
+                    "en": "Drag the four corners of the output image to stretch it, similar to Final Cut Pro's built-in Transform effect.",
+                    "zh-Hans": "拖动输出画面的四角以拉伸。（类似Final Cut Pro自带的“变换”）"
                 ]
             ),
             ExpectedPlugin(
@@ -116,8 +116,8 @@ struct ValidateFxPlugManifest {
                 protocols: ["FxFilter", "FxAnalyzer"],
                 localizedDisplayName: "AnyUpright Upright",
                 localizedDescriptions: [
-                    "en": "Lightroom-style manual, guided, automatic, and semi-automatic upright correction.",
-                    "zh-Hans": "类似 Lightroom 的手动、引导、自动和半自动透视校正。"
+                    "en": "Lightroom-style Upright perspective correction with vertical-only, horizontal-only, and full correction, plus manual, auto-detect with manual selection, and fully automatic modes.",
+                    "zh-Hans": "类似 Lightroom 的Upright透视校正。可选择仅纵向、仅横向和全向；手动、自动识别+手动选择、全自动模式。"
                 ]
             ),
             ExpectedPlugin(

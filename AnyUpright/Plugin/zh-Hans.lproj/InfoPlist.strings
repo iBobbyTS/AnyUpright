@@ -6,3 +6,12 @@
 "AnyUpright::Outer Stretch OSC Name" = "AnyUpright Outer Stretch Controls";
 "AnyUpright::Upright Name" = "AnyUpright Upright";
 "AnyUpright::Upright OSC Name" = "AnyUpright Upright Controls";
+
+/* Debug-only filter and OSC names remain branded in every locale. */
+"AnyUpright::Horizon Name.Debug" = "AnyUpright Horizon (Debug)";
+"AnyUpright::Inner Stretch Name.Debug" = "AnyUpright Inner Stretch (Debug)";
+"AnyUpright::Outer Stretch Name.Debug" = "AnyUpright Outer Stretch (Debug)";
+"AnyUpright::Inner Stretch OSC Name.Debug" = "AnyUpright Inner Stretch Controls (Debug)";
+"AnyUpright::Outer Stretch OSC Name.Debug" = "AnyUpright Outer Stretch Controls (Debug)";
+"AnyUpright::Upright Name.Debug" = "AnyUpright Upright (Debug)";
+"AnyUpright::Upright OSC Name.Debug" = "AnyUpright Upright Controls (Debug)";

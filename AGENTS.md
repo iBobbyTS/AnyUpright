@@ -42,6 +42,8 @@
 - Prefer validating the `Wrapper Application` scheme first because the wrapper registers the FxPlug plug-in with macOS.
 - For Motion/FxPlug debugging, build the registered development app at the canonical Derived Data path:
   `xcodebuild -project AnyUpright.xcodeproj -scheme 'Wrapper Application' -configuration Debug -derivedDataPath /private/tmp/AnyUprightDerivedData build`
+- Debug and Release use intentionally separate host identities. Debug uses wrapper ID `AnyUpright-Debug`, XPC ID `AnyUpright-XPC-Service-Debug`, a dedicated FxPlug group/UUID set, and filter names ending in `(Debug)`. Release keeps the production IDs and unsuffixed names. Do not replace these with one shared UUID set.
+- Motion templates bind to FxPlug UUIDs. Create distributable Final Cut Effect templates only from the unsuffixed Release filters; templates created from `(Debug)` filters will not resolve against a Release-only installation.
 - Before treating a Motion reproduction as evidence, verify all of the following:
   - The running XPC executable path points into `/private/tmp/AnyUprightDerivedData/Build/Products/Debug/AnyUpright.app`.
   - The embedded XPC binary modification time is from the latest build.
@@ -49,6 +51,7 @@
   - When a diagnostic log or build marker is available, the newly reproduced log contains the current marker; rotate or truncate old logs before reproducing so stale entries cannot be mistaken for current behavior.
 - `/tmp/AnyUprightDerivedData` and `/private/tmp/AnyUprightDerivedData` resolve to the same macOS path, but do not mix this canonical build with Xcode's default `~/Library/Developer/Xcode/DerivedData` output during host validation.
 - Do not conclude that a Motion fix passed or failed from screenshots alone until the loaded XPC build identity has been confirmed. Restarting Motion is insufficient if Launch Services or PlugInKit is registered to a different wrapper app path.
+- Query Debug and Release registrations separately with `pluginkit -m -ADv -i AnyUpright-XPC-Service-Debug` and `pluginkit -m -ADv -i AnyUpright-XPC-Service`. Multiple paths under one of those IDs are stale-registration conflicts; one Debug entry and one Release entry are expected and can coexist.
 - For rendering changes, verify behavior in Motion or Final Cut Pro when possible, especially proxy resolution, non-square pixels, trimming/retiming, and keyframed parameters.
 - For Metal transform changes, include targeted tests or deterministic sample calculations for geometry math when practical.
 - The user has explicitly authorized Computer Use to directly modify and save the development Motion templates for `Inner Stretch` and `Outer Stretch`, plus the development Final Cut Pro library named `Develop`, without asking for additional confirmation.

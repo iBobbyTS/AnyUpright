@@ -11,6 +11,7 @@ XPC_PATH="${APP_PATH}/Contents/PlugIns/AnyUpright XPC Service.pluginkit"
 XPC_EXECUTABLE="${XPC_PATH}/Contents/MacOS/AnyUpright XPC Service"
 APP_EXECUTABLE="${APP_PATH}/Contents/MacOS/AnyUpright"
 APP_ENTITLEMENTS="${ROOT_DIR}/AnyUpright/Wrapper Application/SandboxEntitlements.entitlements"
+MANIFEST_VALIDATOR="${DERIVED_DATA_PATH}/AnyUprightValidateManifest"
 
 require_path() {
     if [[ ! -e "$1" ]]; then
@@ -27,7 +28,10 @@ require_path "/Library/Developer/Frameworks/PluginManager.framework"
 require_path "$APP_ENTITLEMENTS"
 
 rm -rf "$DERIVED_DATA_PATH" "$OUTPUT_DIR"
-mkdir -p "$OUTPUT_DIR"
+mkdir -p "$DERIVED_DATA_PATH" "$OUTPUT_DIR"
+
+xcrun swiftc tools/validate-fxplug-manifest.swift -o "$MANIFEST_VALIDATOR"
+"$MANIFEST_VALIDATOR" "$ROOT_DIR"
 
 xcodebuild \
     -project AnyUpright.xcodeproj \
@@ -46,6 +50,12 @@ require_path "$DSYM_PATH"
 require_path "$XPC_PATH"
 require_path "$APP_EXECUTABLE"
 require_path "$XPC_EXECUTABLE"
+
+"$MANIFEST_VALIDATOR" \
+    "$ROOT_DIR" \
+    Release \
+    "$XPC_PATH/Contents/Info.plist" \
+    "$APP_PATH/Contents/Info.plist"
 
 # Xcode strips framework Modules while embedding the XPC service. Re-sign the
 # final nested layout so each resource seal describes the shipped files.

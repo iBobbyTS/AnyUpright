@@ -14,13 +14,14 @@ For coordinate bugs, pair this host-state checklist with `stretch-coordinate-lay
 - After changing static effect properties, render pipeline state, Metal shader semantics, or matrix conventions, restart the host or delete and re-add the effect before judging render math.
 - If PlugInKit identity looks stale, quit host apps, kill stale wrapper/XPC processes, rebuild/register the intended wrapper, and re-add the effect.
 - Rebuilding the same registered wrapper path and killing the plug-in XPC can be enough for Motion to launch a new binary without restarting the host. This proves new diagnostic code is loaded, but it does not prove an already-applied effect instance has re-read static properties.
-- Before judging a Motion/FCP rendering or OSC fix, verify there is exactly one PlugInKit entry for the plug-in bundle ID and that its path is the intended build:
+- Before judging a Motion/FCP rendering or OSC fix, verify there is exactly one PlugInKit entry for the configuration-specific plug-in bundle ID and that its path is the intended build:
 
 ```bash
+pluginkit -m -ADv -i AnyUpright-XPC-Service-Debug
 pluginkit -m -ADv -i AnyUpright-XPC-Service
 ```
 
-- If multiple entries with the same bundle ID exist, remove stale ones with `pluginkit -r /path/to/AnyUpright.app/Contents/PlugIns/AnyUpright\ XPC\ Service.pluginkit`, unregister stale wrappers with `lsregister -u /path/to/AnyUpright.app`, then register the intended wrapper.
+- Current Debug and Release builds intentionally have separate bundle IDs and FxPlug UUID sets, so one entry for each is valid. If multiple entries with the same configuration-specific bundle ID exist, remove stale ones with `pluginkit -r /path/to/AnyUpright.app/Contents/PlugIns/AnyUpright\ XPC\ Service.pluginkit`, unregister stale wrappers with `lsregister -u /path/to/AnyUpright.app`, then register the intended wrapper.
 - Avoid testing an old already-open effect instance after changing template state.
 - Avoid stacking another effect instance over the old one as a shortcut. It can create misleading black or duplicated viewer states.
 - For Final Cut OSC dragging, confirm Motion template publication includes the built-in `Publish OSC` setting enabled.

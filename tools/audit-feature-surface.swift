@@ -142,10 +142,10 @@ struct AuditFeatureSurface {
             FeaturePluginExpectation(className: "AnyUprightHorizonPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
             FeaturePluginExpectation(className: "AnyUprightInnerStretchPlugIn", protocols: ["FxFilter"]),
             FeaturePluginExpectation(className: "AnyUprightOuterStretchPlugIn", protocols: ["FxFilter"]),
-            FeaturePluginExpectation(className: "AnyUprightInnerStretchOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["9BB4C7D9-9384-4C8F-927D-4F716DA78B14"]),
-            FeaturePluginExpectation(className: "AnyUprightOuterStretchOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["81C621CF-4119-46E9-BC04-47A1539A8B54"]),
+            FeaturePluginExpectation(className: "AnyUprightInnerStretchOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["$(AU_INNER_STRETCH_PLUGIN_UUID)"]),
+            FeaturePluginExpectation(className: "AnyUprightOuterStretchOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["$(AU_OUTER_STRETCH_PLUGIN_UUID)"]),
             FeaturePluginExpectation(className: "AnyUprightUprightPlugIn", protocols: ["FxFilter", "FxAnalyzer"]),
-            FeaturePluginExpectation(className: "AnyUprightUprightOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB", "2E32E3C2-91C7-44D4-A0AC-0E87832A86A1"])
+            FeaturePluginExpectation(className: "AnyUprightUprightOSCPlugIn", protocols: ["FxOnScreenControl"], supportedPlugins: ["$(AU_UPRIGHT_PLUGIN_UUID)", "$(AU_HORIZON_PLUGIN_UUID)"])
         ]
 
         for item in expected {

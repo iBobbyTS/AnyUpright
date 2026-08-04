@@ -37,10 +37,11 @@ SHA256SUMS
 脚本固定执行以下门槛：
 
 1. Release + `arm64` 构建。
-2. 对最终嵌套布局中的 `PluginManager.framework`、`FxPlug.framework`、XPC 和 App 依次 ad-hoc 重签。
-3. `codesign --verify --deep --strict` 严格验签。
-4. 验证 App/XPC 架构、最低系统、两种语言资源和至少九个 Core ML model bundle。
-5. 生成 App ZIP、dSYM ZIP、构建环境记录和 SHA-256。
+2. 验证 manifest 模板的 Debug/Release 身份均完整，并确认实际 Release App/XPC 使用生产 bundle ID、生产 FxPlug 组和原始七个 UUID；检测到 Debug 身份会直接失败。
+3. 对最终嵌套布局中的 `PluginManager.framework`、`FxPlug.framework`、XPC 和 App 依次 ad-hoc 重签。
+4. `codesign --verify --deep --strict` 严格验签。
+5. 验证 App/XPC 架构、最低系统、两种语言资源和至少九个 Core ML model bundle。
+6. 生成 App ZIP、dSYM ZIP、构建环境记录和 SHA-256。
 
 Xcode 在把 XPC 嵌入 App 时会移除 framework 的 `Modules`。如果只看 `BUILD SUCCEEDED`，`PluginManager.framework` 的旧资源封印可能仍引用已移除的 `module.modulemap`。发行脚本在最终 App 布局上重新签名并严格验签，不能省略这一段。
 
@@ -64,6 +65,8 @@ Apple 的标准流程是从 Motion Project Browser 创建 `Final Cut Effect`，�
 2. 打开一次 `/Applications/AnyUpright.app`，让 Launch Services 和 PlugInKit 注册嵌入的 FxPlug XPC。
 3. 完全退出并重新打开 Motion。
 4. 在 Motion 的 Filters Library 中确认 `AnyUpright` 分类下四个滤镜都存在。
+
+Release 滤镜名称不带后缀。若看到 `(Debug)`，说明当前选择的是独立的开发身份；不要用它创建发行模板。`.moef` 会绑定滤镜 UUID，因此 Debug 模板不会在只安装 Release 的用户机器上自动改绑。
 
 四个模板分别执行一次：
 

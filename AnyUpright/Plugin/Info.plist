@@ -48,9 +48,9 @@
 	<array>
 		<dict>
 			<key>groupName</key>
-			<string>AnyUpright</string>
+			<string>$(AU_PLUGIN_GROUP_NAME)</string>
 			<key>uuid</key>
-			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<string>$(AU_PLUGIN_GROUP_UUID)</string>
 		</dict>
 	</array>
 	<key>ProPlugPlugInList</key>
@@ -59,9 +59,9 @@
 			<key>className</key>
 			<string>AnyUprightHorizonPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Horizon Name</string>
+			<string>AnyUpright::Horizon Name$(AU_PLUGIN_NAME_KEY_SUFFIX)</string>
 			<key>group</key>
-			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<string>$(AU_PLUGIN_GROUP_UUID)</string>
 				<key>infoString</key>
 				<string>AnyUpright::Horizon Description</string>
 			<key>protocolNames</key>
@@ -70,7 +70,7 @@
 				<string>FxAnalyzer</string>
 			</array>
 			<key>uuid</key>
-			<string>2E32E3C2-91C7-44D4-A0AC-0E87832A86A1</string>
+			<string>$(AU_HORIZON_PLUGIN_UUID)</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>
@@ -78,9 +78,9 @@
 			<key>className</key>
 			<string>AnyUprightInnerStretchPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Inner Stretch Name</string>
+			<string>AnyUpright::Inner Stretch Name$(AU_PLUGIN_NAME_KEY_SUFFIX)</string>
 			<key>group</key>
-			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<string>$(AU_PLUGIN_GROUP_UUID)</string>
 				<key>infoString</key>
 				<string>AnyUpright::Inner Stretch Description</string>
 			<key>protocolNames</key>
@@ -88,7 +88,7 @@
 				<string>FxFilter</string>
 			</array>
 			<key>uuid</key>
-			<string>9BB4C7D9-9384-4C8F-927D-4F716DA78B14</string>
+			<string>$(AU_INNER_STRETCH_PLUGIN_UUID)</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>
@@ -96,9 +96,9 @@
 			<key>className</key>
 			<string>AnyUprightOuterStretchPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Outer Stretch Name</string>
+			<string>AnyUpright::Outer Stretch Name$(AU_PLUGIN_NAME_KEY_SUFFIX)</string>
 			<key>group</key>
-			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<string>$(AU_PLUGIN_GROUP_UUID)</string>
 			<key>infoString</key>
 			<string>AnyUpright::Outer Stretch Description</string>
 			<key>protocolNames</key>
@@ -106,7 +106,7 @@
 				<string>FxFilter</string>
 			</array>
 			<key>uuid</key>
-			<string>81C621CF-4119-46E9-BC04-47A1539A8B54</string>
+			<string>$(AU_OUTER_STRETCH_PLUGIN_UUID)</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>
@@ -114,9 +114,9 @@
 			<key>className</key>
 			<string>AnyUprightInnerStretchOSCPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Inner Stretch OSC Name</string>
+			<string>AnyUpright::Inner Stretch OSC Name$(AU_PLUGIN_NAME_KEY_SUFFIX)</string>
 			<key>group</key>
-			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<string>$(AU_PLUGIN_GROUP_UUID)</string>
 			<key>infoString</key>
 			<string>AnyUpright::Inner Stretch OSC Description</string>
 			<key>protocolNames</key>
@@ -125,10 +125,10 @@
 			</array>
 			<key>supportedPlugins</key>
 			<array>
-				<string>9BB4C7D9-9384-4C8F-927D-4F716DA78B14</string>
+				<string>$(AU_INNER_STRETCH_PLUGIN_UUID)</string>
 			</array>
 			<key>uuid</key>
-			<string>1E97E435-F4A5-4252-8B14-86F44BAD0BF7</string>
+			<string>$(AU_INNER_STRETCH_OSC_UUID)</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>
@@ -136,9 +136,9 @@
 			<key>className</key>
 			<string>AnyUprightOuterStretchOSCPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Outer Stretch OSC Name</string>
+			<string>AnyUpright::Outer Stretch OSC Name$(AU_PLUGIN_NAME_KEY_SUFFIX)</string>
 			<key>group</key>
-			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<string>$(AU_PLUGIN_GROUP_UUID)</string>
 			<key>infoString</key>
 			<string>AnyUpright::Outer Stretch OSC Description</string>
 			<key>protocolNames</key>
@@ -147,10 +147,10 @@
 			</array>
 			<key>supportedPlugins</key>
 			<array>
-				<string>81C621CF-4119-46E9-BC04-47A1539A8B54</string>
+				<string>$(AU_OUTER_STRETCH_PLUGIN_UUID)</string>
 			</array>
 			<key>uuid</key>
-			<string>4CA1AA25-31BD-4AB8-BF52-A379917B80E3</string>
+			<string>$(AU_OUTER_STRETCH_OSC_UUID)</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>
@@ -158,9 +158,9 @@
 			<key>className</key>
 			<string>AnyUprightUprightPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Upright Name</string>
+			<string>AnyUpright::Upright Name$(AU_PLUGIN_NAME_KEY_SUFFIX)</string>
 			<key>group</key>
-			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<string>$(AU_PLUGIN_GROUP_UUID)</string>
 			<key>infoString</key>
 			<string>AnyUpright::Upright Description</string>
 			<key>protocolNames</key>
@@ -169,7 +169,7 @@
 				<string>FxAnalyzer</string>
 			</array>
 			<key>uuid</key>
-			<string>A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB</string>
+			<string>$(AU_UPRIGHT_PLUGIN_UUID)</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>
@@ -177,9 +177,9 @@
 			<key>className</key>
 			<string>AnyUprightUprightOSCPlugIn</string>
 			<key>displayName</key>
-			<string>AnyUpright::Upright OSC Name</string>
+			<string>AnyUpright::Upright OSC Name$(AU_PLUGIN_NAME_KEY_SUFFIX)</string>
 			<key>group</key>
-			<string>DA62260F-B8B9-498A-A220-E33F20DE872C</string>
+			<string>$(AU_PLUGIN_GROUP_UUID)</string>
 			<key>infoString</key>
 			<string>AnyUpright::Upright OSC Description</string>
 			<key>protocolNames</key>
@@ -188,11 +188,11 @@
 			</array>
 			<key>supportedPlugins</key>
 			<array>
-				<string>A8F7169F-B5C7-44EB-B0AD-5F9178DCE9AB</string>
-				<string>2E32E3C2-91C7-44D4-A0AC-0E87832A86A1</string>
+				<string>$(AU_UPRIGHT_PLUGIN_UUID)</string>
+				<string>$(AU_HORIZON_PLUGIN_UUID)</string>
 			</array>
 			<key>uuid</key>
-			<string>FEF0BD6C-BB81-4E37-B5BD-8C163FBB7782</string>
+			<string>$(AU_UPRIGHT_OSC_UUID)</string>
 			<key>version</key>
 			<string>1.0</string>
 		</dict>

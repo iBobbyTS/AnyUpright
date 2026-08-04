@@ -249,7 +249,16 @@ Full 2,000-image GeoCalib validation uses `tools/run-swift-geocalib-full-validat
 
 If Xcode reports a missing Metal Toolchain during build, install it with Xcode's suggested `xcodebuild -downloadComponent MetalToolchain` before repeating the full build.
 
-When debugging Motion integration, avoid registering multiple builds with the same wrapper bundle ID at the same time. In particular, mixing a `/tmp/AnyUprightDerivedData` build with Xcode's default `~/Library/Developer/Xcode/DerivedData/.../AnyUpright.app` can leave Motion using a stale path-based PlugInKit object; OSC entries may then fail to attach even when the plist is correct. If this happens, quit or kill the stale wrapper/XPC process, unregister the stale wrapper with `lsregister -u /path/to/AnyUpright.app`, rebuild/register the intended wrapper, and then restart Motion or re-add the effect instance.
+Debug and Release builds have separate host identities. The canonical Debug build uses wrapper ID `AnyUpright-Debug`, XPC ID `AnyUpright-XPC-Service-Debug`, its own FxPlug group and seven plugin UUIDs, and filter names ending in `(Debug)`. Release retains the original production IDs and unsuffixed names. This lets one canonical Debug build coexist with one installed Release build without Motion resolving both to the same plug-in identity.
+
+Multiple paths registered under the same configuration-specific bundle ID are still ambiguous. In particular, mixing the canonical `/private/tmp/AnyUprightDerivedData` Debug build with Xcode's default `~/Library/Developer/Xcode/DerivedData/.../AnyUpright.app` can leave Motion using a stale Debug PlugInKit object. If this happens, quit or kill the stale wrapper/XPC process, unregister the stale wrapper with `lsregister -u /path/to/AnyUpright.app`, rebuild/register the intended wrapper, and then restart Motion or re-add the effect instance. Query the two identities independently:
+
+```sh
+pluginkit -m -ADv -i AnyUpright-XPC-Service-Debug
+pluginkit -m -ADv -i AnyUpright-XPC-Service
+```
+
+Motion templates bind to the selected FxPlug UUID. Use only the unsuffixed Release filters when creating distributable Final Cut Effect templates. A template created from a `(Debug)` filter intentionally depends on the Debug UUID and is not compatible with a Release-only installation.
 
 ### Local Test Assets
 

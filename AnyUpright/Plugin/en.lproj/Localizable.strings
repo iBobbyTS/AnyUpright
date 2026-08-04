@@ -13,7 +13,6 @@
 "AnyUpright::Keyframes Removed" = "已删除关键帧\n如果片段上已经有关键帧，拖动本身就会在当前帧创建新的关键帧，不需要重复点击本按钮";
 "AnyUpright::Defaults New Instances Only" = "Default parameter values apply only to new filter instances.";
 "AnyUpright::Defaults Restore Factory" = "Restore Factory Defaults";
-"AnyUpright::Defaults Save" = "Save";
 "AnyUpright::Defaults Save Failed" = "Unable to save defaults.";
 "AnyUpright::Horizon Defaults Title" = "Horizon Defaults";
 "AnyUpright::Inner Stretch Defaults Title" = "Inner Stretch Defaults";

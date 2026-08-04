@@ -49,11 +49,9 @@ protocol AUPluginDefaultsEditor: AnyObject {
     var title: String { get }
     var contentView: NSView { get }
     var canRestoreFactoryDefaults: Bool { get }
-    var canSave: Bool { get }
-    var onChange: (() -> Void)? { get set }
+    var onChange: ((Error?) -> Void)? { get set }
 
     func beginEditingSession()
-    func save() throws
     func restoreFactoryDefaults()
 }
 
@@ -61,9 +59,8 @@ private final class AUPluginDefaultsEditorSession<Settings: AUPluginDefaultSetti
     private let store: AUPluginDefaultsStore<Settings>
     private var state: AUPluginDefaultsEditingState<Settings>
 
-    var onChange: (() -> Void)?
+    var onChange: ((Error?) -> Void)?
     var canRestoreFactoryDefaults: Bool { state.canRestoreFactoryDefaults }
-    var canSave: Bool { state.canSave }
 
     init(store: AUPluginDefaultsStore<Settings>) {
         self.store = store
@@ -82,22 +79,25 @@ private final class AUPluginDefaultsEditorSession<Settings: AUPluginDefaultSetti
         return state.current
     }
 
-    func updateCurrent(_ settings: Settings) {
+    func updateAndSave(_ settings: Settings) {
         state.updateCurrent(settings)
-        onChange?()
-    }
-
-    func save(_ settings: Settings) throws {
-        state.updateCurrent(settings)
-        try store.save(state.current)
-        state.markCurrentAsSaved()
-        onChange?()
+        persistCurrent()
     }
 
     func restoreFactoryDefaults() -> Settings {
         state.restoreFactoryDefaults()
-        onChange?()
+        persistCurrent()
         return state.current
+    }
+
+    private func persistCurrent() {
+        do {
+            try store.save(state.current)
+            state.markCurrentAsSaved()
+            onChange?(nil)
+        } catch {
+            onChange?(error)
+        }
     }
 }
 
@@ -265,12 +265,6 @@ private final class AUPluginDefaultsViewController: NSViewController {
         target: self,
         action: #selector(restoreFactoryDefaults)
     )
-    private lazy var saveButton = NSButton(
-        title: defaultsLocalized("AnyUpright::Defaults Save", fallback: "Save"),
-        target: self,
-        action: #selector(save)
-    )
-
     init(editor: AUPluginDefaultsEditor) {
         self.editor = editor
         super.init(nibName: nil, bundle: nil)
@@ -308,13 +302,10 @@ private final class AUPluginDefaultsViewController: NSViewController {
         statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        saveButton.keyEquivalent = "\r"
         resetButton.setContentHuggingPriority(.required, for: .horizontal)
         resetButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-        saveButton.setContentHuggingPriority(.required, for: .horizontal)
-        saveButton.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        let footerStack = NSStackView(views: [statusLabel, resetButton, saveButton])
+        let footerStack = NSStackView(views: [statusLabel, resetButton])
         footerStack.orientation = .horizontal
         footerStack.alignment = .centerY
         footerStack.spacing = Self.actionSpacing
@@ -348,40 +339,31 @@ private final class AUPluginDefaultsViewController: NSViewController {
             editor.contentView.widthAnchor.constraint(equalTo: contentStack.widthAnchor),
         ])
 
-        editor.onChange = { [weak self] in
-            self?.editorDidChange()
+        editor.onChange = { [weak self] error in
+            self?.editorDidChange(error: error)
         }
         updateActionState()
     }
 
-    private func editorDidChange() {
-        statusLabel.stringValue = ""
-        updateActionState()
-    }
-
-    private func updateActionState() {
-        resetButton.isEnabled = editor.canRestoreFactoryDefaults
-        saveButton.isEnabled = editor.canSave
-    }
-
-    @objc private func save() {
-        do {
-            try editor.save()
-            statusLabel.stringValue = ""
-            updateActionState()
-        } catch {
+    private func editorDidChange(error: Error?) {
+        if let error {
             statusLabel.stringValue = defaultsLocalized(
                 "AnyUpright::Defaults Save Failed",
                 fallback: "Unable to save defaults."
             )
             NSLog("AnyUpright defaults save error: %@", String(describing: error))
+        } else {
+            statusLabel.stringValue = ""
         }
+        updateActionState()
+    }
+
+    private func updateActionState() {
+        resetButton.isEnabled = editor.canRestoreFactoryDefaults
     }
 
     @objc private func restoreFactoryDefaults() {
         editor.restoreFactoryDefaults()
-        statusLabel.stringValue = ""
-        updateActionState()
     }
 }
 
@@ -394,14 +376,12 @@ final class AUHorizonDefaultsEditor: NSObject, AUPluginDefaultsEditor {
         target: nil,
         action: nil
     )
-    var onChange: (() -> Void)? {
+    var onChange: ((Error?) -> Void)? {
         get { session.onChange }
         set { session.onChange = newValue }
     }
 
     var canRestoreFactoryDefaults: Bool { session.canRestoreFactoryDefaults }
-    var canSave: Bool { session.canSave }
-
     lazy var contentView: NSView = {
         let stack = NSStackView(views: [fillFrameButton])
         stack.orientation = .vertical
@@ -420,16 +400,12 @@ final class AUHorizonDefaultsEditor: NSObject, AUPluginDefaultsEditor {
         apply(session.beginEditingSession())
     }
 
-    func save() throws {
-        try session.save(settingsFromControls())
-    }
-
     func restoreFactoryDefaults() {
         apply(session.restoreFactoryDefaults())
     }
 
     @objc private func controlDidChange() {
-        session.updateCurrent(settingsFromControls())
+        session.updateAndSave(settingsFromControls())
     }
 
     private func settingsFromControls() -> AUHorizonDefaultSettings {
@@ -458,14 +434,12 @@ final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
         target: nil,
         action: nil
     )
-    var onChange: (() -> Void)? {
+    var onChange: ((Error?) -> Void)? {
         get { session.onChange }
         set { session.onChange = newValue }
     }
 
     var canRestoreFactoryDefaults: Bool { session.canRestoreFactoryDefaults }
-    var canSave: Bool { session.canSave }
-
     lazy var contentView: NSView = {
         let stack = NSStackView(views: [
             AUPluginDefaultsForm.labeledRow(
@@ -493,16 +467,12 @@ final class AUInnerStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
         apply(session.beginEditingSession())
     }
 
-    func save() throws {
-        try session.save(settingsFromControls())
-    }
-
     func restoreFactoryDefaults() {
         apply(session.restoreFactoryDefaults())
     }
 
     @objc private func controlDidChange() {
-        session.updateCurrent(settingsFromControls())
+        session.updateAndSave(settingsFromControls())
     }
 
     private func settingsFromControls() -> AUInnerStretchDefaultSettings {
@@ -531,14 +501,12 @@ final class AUOuterStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
         target: nil,
         action: nil
     )
-    var onChange: (() -> Void)? {
+    var onChange: ((Error?) -> Void)? {
         get { session.onChange }
         set { session.onChange = newValue }
     }
 
     var canRestoreFactoryDefaults: Bool { session.canRestoreFactoryDefaults }
-    var canSave: Bool { session.canSave }
-
     lazy var contentView: NSView = {
         let stack = NSStackView(views: [suppressKeyframeNotificationsButton])
         stack.orientation = .vertical
@@ -557,16 +525,12 @@ final class AUOuterStretchDefaultsEditor: NSObject, AUPluginDefaultsEditor {
         apply(session.beginEditingSession())
     }
 
-    func save() throws {
-        try session.save(settingsFromControls())
-    }
-
     func restoreFactoryDefaults() {
         apply(session.restoreFactoryDefaults())
     }
 
     @objc private func controlDidChange() {
-        session.updateCurrent(settingsFromControls())
+        session.updateAndSave(settingsFromControls())
     }
 
     private func settingsFromControls() -> AUOuterStretchDefaultSettings {
@@ -599,14 +563,12 @@ final class AUUprightDefaultsEditor: NSObject, AUPluginDefaultsEditor {
         target: nil,
         action: nil
     )
-    var onChange: (() -> Void)? {
+    var onChange: ((Error?) -> Void)? {
         get { session.onChange }
         set { session.onChange = newValue }
     }
 
     var canRestoreFactoryDefaults: Bool { session.canRestoreFactoryDefaults }
-    var canSave: Bool { session.canSave }
-
     lazy var contentView: NSView = {
         let stack = NSStackView(views: [
             AUPluginDefaultsForm.labeledRow(
@@ -640,16 +602,12 @@ final class AUUprightDefaultsEditor: NSObject, AUPluginDefaultsEditor {
         apply(session.beginEditingSession())
     }
 
-    func save() throws {
-        try session.save(settingsFromControls())
-    }
-
     func restoreFactoryDefaults() {
         apply(session.restoreFactoryDefaults())
     }
 
     @objc private func controlDidChange() {
-        session.updateCurrent(settingsFromControls())
+        session.updateAndSave(settingsFromControls())
     }
 
     private func settingsFromControls() -> AUUprightDefaultSettings {

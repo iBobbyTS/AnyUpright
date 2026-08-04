@@ -107,7 +107,7 @@ final class AUAnalysisStatusTextRenderer {
         imageHeight: Double,
         device: MTLDevice
     ) -> TextTexture? {
-        let fontPixelSize = Int(round(min(72.0, max(24.0, imageHeight * 0.032))))
+        let fontPixelSize = Int(round(min(144.0, max(48.0, imageHeight * 0.064))))
         let maximumTextWidth = Int(round(min(1200.0, max(240.0, imageWidth * 0.8))))
         let key = TextureKey(
             registryID: device.registryID,

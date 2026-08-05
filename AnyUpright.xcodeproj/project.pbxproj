@@ -144,6 +144,7 @@
 			membershipExceptions = (
 				"/Localized: Wrapper Application/Credits.rtf",
 				"/Localized: Wrapper Application/InfoPlist.strings",
+				"/Localized: Wrapper Application/Localizable.strings",
 				"/Localized: Wrapper Application/MainMenu.xib",
 				Plugin/AnyUprightGeoCalib.metal,
 				Plugin/AnyUprightGeoCalibNeuralPrototype.swift,
@@ -151,6 +152,9 @@
 				Plugin/Info.plist,
 				"Wrapper Application/AppDelegate.swift",
 				"Wrapper Application/Info.plist",
+				"Wrapper Application/InstallerViewController.swift",
+				"Wrapper Application/PluginRegistrationService.swift",
+				"Wrapper Application/WrapperLocalization.swift",
 			);
 			target = B0B4FAA82FD2A99500794BBA /* XPC Service */;
 		};
@@ -444,7 +448,6 @@
 		B0B4FAE12FD2A99500794BBA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "AnyUpright/Wrapper Application/SandboxEntitlements.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
@@ -461,7 +464,6 @@
 		B0B4FAE22FD2A99500794BBA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "AnyUpright/Wrapper Application/SandboxEntitlements.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;

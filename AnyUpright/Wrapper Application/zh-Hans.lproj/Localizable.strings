@@ -1,0 +1,21 @@
+/* AnyUpright 安装窗口主标题。 */
+"installer.title" = "AnyUpright 安装";
+/* 内嵌 FxPlug 注册区域标题。 */
+"installer.pluginRegistration" = "插件注册";
+/* Motion 效果模板区域标题。 */
+"installer.motionEffects" = "Motion Effects 文件";
+/* 注册或模板安装状态。 */
+"status.installed" = "已安装";
+"status.notInstalled" = "未安装";
+"status.unavailable" = "不可用：%@";
+/* 安装操作。 */
+"action.install" = "安装";
+"action.uninstall" = "卸载";
+"action.ok" = "好";
+/* Motion Effects 管理占位弹窗。 */
+"notImplemented.title" = "尚未实现";
+"notImplemented.message" = "Motion Effects 文件的安装和卸载功能尚未实现。";
+/* 内嵌插件注册错误。 */
+"registration.error.missingDirectory" = "应用中没有 PlugIns 目录。";
+"registration.error.missingPlugin" = "找不到内嵌的 AnyUpright 插件。";
+"registration.error.commandFailed" = "插件注册失败：%@";

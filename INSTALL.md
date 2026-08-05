@@ -10,20 +10,22 @@ AnyUpright GitHub builds are ad-hoc signed and are not notarized by Apple. Insta
 
 ## Install
 
-When the GitHub Release provides the installer package:
+When the GitHub Release provides the disk image:
 
-1. Download the `.pkg` and `SHA256SUMS` from the same release.
-2. Verify the package checksum:
+1. Download the `.dmg` and `SHA256SUMS` from the same release.
+2. Verify the disk image checksum:
 
    ```sh
    shasum -a 256 -c SHA256SUMS
    ```
 
 3. Quit Motion and Final Cut Pro.
-4. Open the package and finish installation.
-5. Open `/Applications/AnyUpright.app` once, then reopen Motion or Final Cut Pro.
+4. Open the DMG and drag `AnyUpright.app` onto its `Applications` shortcut.
+5. Open `/Applications/AnyUpright.app`.
+6. In Plug-in Registration, click Install if the status is Not Installed.
+7. Quit and reopen Motion or Final Cut Pro.
 
-The installer places the application in `/Applications` and the four Final Cut Effect templates in:
+Motion Effects installation is not implemented in the current build. Its Install and Uninstall buttons display a placeholder alert. When implemented, the four Final Cut Effect templates will be installed in:
 
 ```text
 ~/Movies/Motion Templates.localized/Effects.localized/AnyUpright/
@@ -33,7 +35,7 @@ The installer places the application in `/Applications` and the four Final Cut E
 
 First try Apple's supported UI override:
 
-1. Try to open the blocked package or `/Applications/AnyUpright.app` once.
+1. Try to open `/Applications/AnyUpright.app` once.
 2. Open `System Settings > Privacy & Security`.
 3. Scroll to Security and click `Open Anyway` for AnyUpright.
 4. Confirm `Open`, then open `/Applications/AnyUpright.app` once.
@@ -60,14 +62,9 @@ open "$APP"
 
 Then fully restart Motion or Final Cut Pro. The `xattr` command removes the quarantine marker recursively; the `codesign` commands rebuild a local ad-hoc signature from the innermost frameworks outward. Neither action notarizes the software or proves its origin. Creating a private self-signed certificate does not make the software trusted by Gatekeeper on other Macs, so it is not a substitute for an Apple Developer ID.
 
-## Manual ZIP installation
+## Uninstall
 
-If a release contains only `AnyUpright-<version>-macos-arm64.zip`:
-
-1. Verify its SHA-256.
-2. Extract `AnyUpright.app` and move it to `/Applications`.
-3. Follow the Gatekeeper steps above.
-4. Install the four template directories under `~/Movies/Motion Templates.localized/Effects.localized/AnyUpright/` while preserving their directory structure. Finder and Apple documentation normally display these localized folders without the `.localized` suffix.
+The Plug-in Registration Uninstall button unregisters the embedded FxPlug but does not delete the application. Quit Motion, Final Cut Pro, and AnyUpright before deleting `/Applications/AnyUpright.app`. Motion Effects removal is not implemented yet.
 
 Apple references:
 

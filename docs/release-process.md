@@ -10,6 +10,49 @@
 - 最低系统：macOS 14.0。实际宿主要求仍以所使用的 Motion、Final Cut Pro 和 FxPlug SDK 版本为准。
 - 签名：ad-hoc，不需要 Apple 开发者账号，不等同于 Developer ID 签名，也不能提交 Apple 公证。
 
+### Release App 与 Debug 构建的管理边界
+
+`/Applications/AnyUpright.app` 及其安装窗口只管理 Release。发行 App 的 bundle ID 为 `AnyUpright`，内嵌 XPC 的 bundle ID 为 `AnyUpright-XPC-Service`；安装、卸载和状态检查均只针对这套生产身份。安装窗口不负责发现、注册、取消注册或清理 Debug 构建。
+
+Debug 产物的文件名同样是 `AnyUpright.app`，但其 wrapper ID 为 `AnyUpright-Debug`，XPC ID 为 `AnyUpright-XPC-Service-Debug`，滤镜名称带 `(Debug)`。不要把 Debug App 复制到 `/Applications/AnyUpright.app`，不要把它放入发行 DMG，也不要使用 Release App 的安装窗口管理 Debug。Debug 的构建、注册、路径冲突和清理由开发者或 Agent 直接使用 Xcode、Launch Services 和 PlugInKit 工具处理。
+
+Debug App 可能出现在以下位置：
+
+```text
+# 项目规定的 canonical 路径
+/private/tmp/AnyUprightDerivedData/Build/Products/Debug/AnyUpright.app
+
+# 与 canonical 路径指向同一位置的 macOS 路径写法
+/tmp/AnyUprightDerivedData/Build/Products/Debug/AnyUpright.app
+
+# Xcode 默认 Derived Data
+~/Library/Developer/Xcode/DerivedData/AnyUpright-*/Build/Products/Debug/AnyUpright.app
+
+# 调用 xcodebuild 时指定的自定义 Derived Data
+<derived-data-path>/Build/Products/Debug/AnyUpright.app
+
+# 人工复制产生的遗留副本，例如桌面、下载目录或 ~/Applications
+<copied-location>/AnyUpright.app
+```
+
+日常 Motion 调试只使用第一项 canonical 路径。`/tmp` 与 `/private/tmp` 是同一位置，不属于两个副本。其他 Debug 路径一旦被 Launch Services 或 PlugInKit 发现，就可能与 canonical Debug 注册竞争；它们应视为开发环境冲突，而不是由发行 App 代为处理。
+
+构建和定位 Debug 注册：
+
+```sh
+xcodebuild \
+  -project AnyUpright.xcodeproj \
+  -scheme 'Wrapper Application' \
+  -configuration Debug \
+  -derivedDataPath /private/tmp/AnyUprightDerivedData \
+  build
+
+pluginkit -m -ADv -i AnyUpright-XPC-Service-Debug
+pluginkit -m -ADv -i AnyUpright-XPC-Service
+```
+
+第一条 `pluginkit` 命令只检查 Debug，第二条只检查 Release。正常开发机可以同时存在一个 canonical Debug 注册和一个 `/Applications/AnyUpright.app` Release 注册；同一 bundle ID 返回多个不同 App 路径才是冲突。清理冲突前应完全退出 Motion 和 Final Cut Pro，再由开发者或 Agent 对查到的具体遗留路径执行 `lsregister -u /path/to/AnyUpright.app`，并删除不再需要的副本。不得把 `/Applications/AnyUpright.app` 当作 Debug 清理目标。
+
 ## 1. 构建 Release 二进制
 
 前置条件：
@@ -28,7 +71,7 @@
 默认使用 `/private/tmp/AnyUprightDerivedDataRelease`，输出到 `build/release/`：
 
 ```text
-AnyUpright-<version>-macos-arm64.zip
+AnyUpright-<version>-macos-arm64.dmg
 AnyUpright-<version>-macos-arm64.dSYM.zip
 AnyUpright-<version>-macos-arm64.build-info.txt
 SHA256SUMS
@@ -41,7 +84,7 @@ SHA256SUMS
 3. 对最终嵌套布局中的 `PluginManager.framework`、`FxPlug.framework`、XPC 和 App 依次 ad-hoc 重签。
 4. `codesign --verify --deep --strict` 严格验签。
 5. 验证 App/XPC 架构、最低系统、两种语言资源和至少九个 Core ML model bundle。
-6. 生成 App ZIP、dSYM ZIP、构建环境记录和 SHA-256。
+6. 生成带 `/Applications` 快捷方式的 App DMG、dSYM ZIP、构建环境记录和 SHA-256。
 
 Xcode 在把 XPC 嵌入 App 时会移除 framework 的 `Modules`。如果只看 `BUILD SUCCEEDED`，`PluginManager.framework` 的旧资源封印可能仍引用已移除的 `module.modulemap`。发行脚本在最终 App 布局上重新签名并严格验签，不能省略这一段。
 
@@ -53,7 +96,7 @@ OUTPUT_DIR="$PWD/build/release" \
 ./scripts/build-release.sh
 ```
 
-GitHub Release 上传 App ZIP、`SHA256SUMS` 和 `build-info.txt`。dSYM 建议同时保留，用于定位用户崩溃；它不是安装内容。
+GitHub Release 上传 App DMG、`SHA256SUMS` 和 `build-info.txt`。dSYM 建议同时保留，用于定位用户崩溃；它不是安装内容。
 
 ## 2. 在 Motion 创建四个 Final Cut Effect
 
@@ -61,8 +104,8 @@ Apple 的标准流程是从 Motion Project Browser 创建 `Final Cut Effect`，�
 
 先准备二进制：
 
-1. 解压 Release ZIP，把 `AnyUpright.app` 放入 `/Applications`。
-2. 打开一次 `/Applications/AnyUpright.app`，让 Launch Services 和 PlugInKit 注册嵌入的 FxPlug XPC。
+1. 打开 Release DMG，把 `AnyUpright.app` 拖到 DMG 中的 `Applications` 快捷方式。
+2. 打开 `/Applications/AnyUpright.app`，在左侧“插件注册”中确认状态；若显示未安装，点击“安装”。
 3. 完全退出并重新打开 Motion。
 4. 在 Motion 的 Filters Library 中确认 `AnyUpright` 分类下四个滤镜都存在。
 
@@ -94,7 +137,7 @@ Release 滤镜名称不带后缀。若看到 `(Debug)`，说明当前选择的�
 └── AnyUpright Upright/
 ```
 
-每个目录应包含一个 `.moef` 以及 Motion 生成的 `large.png`、`small.png` 等资源。不要手工改 `.moef` 内部引用。先在 Final Cut Pro 中逐个验证，再进入 PKG 阶段。
+每个目录应包含一个 `.moef` 以及 Motion 生成的 `large.png`、`small.png` 等资源。不要手工改 `.moef` 内部引用。先在 Final Cut Pro 中逐个验证，再把模板接入 Wrapper 的 Motion Effects 安装功能。
 
 建议 Final Cut Pro 验收矩阵：
 
@@ -110,28 +153,28 @@ Apple 文档：
 - [Create an effect template in Motion](https://support.apple.com/guide/motion/create-an-effect-template-motn141bbb1f/mac)
 - [Where are Final Cut Pro templates saved in Motion?](https://support.apple.com/guide/motion/where-are-final-cut-pro-templates-saved-motn141bd88c/mac)
 
-## 3. PKG 设计（模板完成后执行）
+## 3. DMG 与安装应用
 
-最终 PKG 将包含两个 payload：
+本项目不提供 PKG。DMG 只包含：
 
-1. `/Applications/AnyUpright.app`
-2. 四个 Motion Effect 模板
+1. `AnyUpright.app`
+2. 指向 `/Applications` 的快捷方式
 
-Apple 将共享模板的规范位置显示为用户目录下的 `~/Movies/Motion Templates/Effects/`；实际磁盘目录通常带 `.localized` 后缀。Installer 脚本以 root 身份执行，不能直接依赖 `$HOME`；因此后续打包脚本会：
+用户把 App 拖入 `/Applications` 后打开它。安装窗口分为两列：
 
-1. 把 App 安装到 `/Applications`。
-2. 把模板暂存到 `/Library/Application Support/AnyUpright/Motion Templates/Effects/AnyUpright/`。
-3. `postinstall` 解析当前 console user 的真实 home，优先使用已有的 `Motion Templates.localized/Effects.localized` 目录；目录不存在时按该磁盘名称创建，再复制 `AnyUpright` 模板并修正 owner/group。
-4. 强制注册 `/Applications/AnyUpright.app`，但不在安装时启动 Motion 或 Final Cut Pro。
+- “插件注册”显示当前内嵌 FxPlug 的注册状态，并提供安装和卸载注册按钮。
+- “Motion Effects 文件”显示模板安装状态，并提供安装和卸载按钮；在四个正式 `.moef` 模板加入发行资源前，这两个按钮只显示“尚未实现”提示。
 
-不在四个模板完成前生成 PKG，避免把不完整或手工猜测的模板目录固化到发行流程。PKG 本身将保持未签名；Installer package 不能用普通 `codesign` 做 ad-hoc 签名。未来如有 Apple Developer ID，应使用 `Developer ID Application` 签 App、`Developer ID Installer` 签 PKG，再使用 `notarytool` 公证。
+左侧“卸载”只取消当前 App 内嵌 FxPlug 的 PlugInKit 注册，不删除 `/Applications/AnyUpright.app`。需要彻底移除时，先退出 Motion/Final Cut Pro 和 AnyUpright，再从 `/Applications` 删除 App。系统自动发现机制可能再次发现仍留在磁盘上的 App，因此发行说明不得把“取消注册”描述为删除二进制。
+
+Motion Effects 安装完成后的目标目录仍为 `~/Movies/Motion Templates.localized/Effects.localized/AnyUpright/`。该功能后续由 Wrapper 在当前登录用户上下文中管理，不需要 root installer 脚本。
 
 ## 4. 用户安装与 Gatekeeper
 
 面向最终用户的简版说明维护在仓库根目录 [INSTALL.md](../INSTALL.md)。结论如下：
 
 - 正常情况下不必须执行 `xattr`。
-- 未公证 PKG/App 被拦截时，先尝试打开一次，再进入 `System Settings > Privacy & Security` 点击 `Open Anyway`。Apple 将该软件保存为安全例外，之后可正常打开。
+- 未公证 App 被拦截时，先尝试打开一次，再进入 `System Settings > Privacy & Security` 点击 `Open Anyway`。Apple 将该软件保存为安全例外，之后可正常打开。
 - 对嵌套 FxPlug 没有出现图形界面放行入口、或宿主仍拒绝加载时，才使用文档中的 `xattr` + 按嵌套顺序 ad-hoc 重签兜底命令。私人自签证书不会让其他 Mac 的 Gatekeeper 自动信任该软件。
 - `Open Anyway` 与删除 quarantine 都会绕过一部分 Gatekeeper 保护，只应对已核对 GitHub Release SHA-256 的文件执行。
 

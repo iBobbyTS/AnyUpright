@@ -8,7 +8,8 @@ AnyUpright is a suite of FxPlug effects for single-frame-assisted perspective an
 - The template brightness filter has been replaced with four separate FxPlug filters under the `AnyUpright` group.
 - No Motion template files are tracked here yet; the current product is the registered FxPlug filters.
 - There is no package manager, Docker runtime, or CI workflow yet.
-- GitHub Release builds use the reproducible ad-hoc signing workflow in `scripts/build-release.sh`; Motion template creation, future PKG assembly, and Gatekeeper handling are documented in `docs/release-process.md` and `INSTALL.md`.
+- GitHub Release builds use the reproducible ad-hoc signing and DMG workflow in `scripts/build-release.sh`; Motion template creation, Wrapper-based installation, and Gatekeeper handling are documented in `docs/release-process.md` and `INSTALL.md`.
+- The installed `/Applications/AnyUpright.app` and its installer UI manage Release only. Debug products remain developer/Agent-managed artifacts under Derived Data and must never replace the installed Release App; canonical and possible stale Debug paths are documented in `docs/release-process.md`.
 - Geometry tests live in `AnyUprightTests/` and can be run as a lightweight Swift executable.
 - The shared geometry layer now includes line candidate filtering, horizon correction estimation, and centered perspective parameter estimation from reference lines.
 - Stretch and Upright expose FxPlug onscreen controls through separate `FxOnScreenControl` plug-in entries linked to their filter UUIDs with `supportedPlugins`.

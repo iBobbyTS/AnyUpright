@@ -1,0 +1,21 @@
+/* Main heading in the AnyUpright installer window. */
+"installer.title" = "AnyUpright Installation";
+/* Left column heading for the embedded FxPlug registration. */
+"installer.pluginRegistration" = "Plug-in Registration";
+/* Right column heading for Motion effect templates. */
+"installer.motionEffects" = "Motion Effects";
+/* Registration or template status. */
+"status.installed" = "Installed";
+"status.notInstalled" = "Not Installed";
+"status.unavailable" = "Unavailable: %@";
+/* Installation actions. */
+"action.install" = "Install";
+"action.uninstall" = "Uninstall";
+"action.ok" = "OK";
+/* Placeholder alert for Motion Effects management. */
+"notImplemented.title" = "Not Implemented";
+"notImplemented.message" = "Motion Effects installation and removal are not implemented yet.";
+/* Embedded plug-in registration errors. */
+"registration.error.missingDirectory" = "The application does not contain a PlugIns directory.";
+"registration.error.missingPlugin" = "The embedded AnyUpright plug-in could not be found.";
+"registration.error.commandFailed" = "Plug-in registration failed: %@";

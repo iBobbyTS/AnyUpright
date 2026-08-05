@@ -10,7 +10,6 @@ DSYM_PATH="${DERIVED_DATA_PATH}/Build/Products/Release/AnyUpright.app.dSYM"
 XPC_PATH="${APP_PATH}/Contents/PlugIns/AnyUpright XPC Service.pluginkit"
 XPC_EXECUTABLE="${XPC_PATH}/Contents/MacOS/AnyUpright XPC Service"
 APP_EXECUTABLE="${APP_PATH}/Contents/MacOS/AnyUpright"
-APP_ENTITLEMENTS="${ROOT_DIR}/AnyUpright/Wrapper Application/SandboxEntitlements.entitlements"
 MANIFEST_VALIDATOR="${DERIVED_DATA_PATH}/AnyUprightValidateManifest"
 
 require_path() {
@@ -25,8 +24,6 @@ cd "$ROOT_DIR"
 require_path "/Library/Developer/SDKs/FxPlug.sdk"
 require_path "/Library/Developer/Frameworks/FxPlug.framework"
 require_path "/Library/Developer/Frameworks/PluginManager.framework"
-require_path "$APP_ENTITLEMENTS"
-
 rm -rf "$DERIVED_DATA_PATH" "$OUTPUT_DIR"
 mkdir -p "$DERIVED_DATA_PATH" "$OUTPUT_DIR"
 
@@ -62,7 +59,7 @@ require_path "$XPC_EXECUTABLE"
 codesign --force --sign - "${XPC_PATH}/Contents/Frameworks/PluginManager.framework"
 codesign --force --sign - "${XPC_PATH}/Contents/Frameworks/FxPlug.framework"
 codesign --force --sign - "$XPC_PATH"
-codesign --force --sign - --entitlements "$APP_ENTITLEMENTS" "$APP_PATH"
+codesign --force --sign - "$APP_PATH"
 
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
@@ -87,6 +84,7 @@ fi
 for LOCALE in en zh-Hans; do
     require_path "${XPC_PATH}/Contents/Resources/${LOCALE}.lproj/Localizable.strings"
     require_path "${XPC_PATH}/Contents/Resources/${LOCALE}.lproj/InfoPlist.strings"
+    require_path "${APP_PATH}/Contents/Resources/${LOCALE}.lproj/Localizable.strings"
 done
 
 MODEL_COUNT="$(find "${XPC_PATH}/Contents/Resources" -maxdepth 1 -type d -name '*.mlmodelc' | wc -l | tr -d ' ')"
@@ -96,12 +94,22 @@ if [[ "$MODEL_COUNT" -lt 9 ]]; then
 fi
 
 ARCHIVE_BASENAME="AnyUpright-${VERSION}-macos-arm64"
-APP_ARCHIVE="${OUTPUT_DIR}/${ARCHIVE_BASENAME}.zip"
+APP_DMG="${OUTPUT_DIR}/${ARCHIVE_BASENAME}.dmg"
 DSYM_ARCHIVE="${OUTPUT_DIR}/${ARCHIVE_BASENAME}.dSYM.zip"
 BUILD_INFO="${OUTPUT_DIR}/${ARCHIVE_BASENAME}.build-info.txt"
 CHECKSUMS="${OUTPUT_DIR}/SHA256SUMS"
+DMG_STAGING="${DERIVED_DATA_PATH}/DMG"
 
-ditto -c -k --keepParent --sequesterRsrc "$APP_PATH" "$APP_ARCHIVE"
+rm -rf "$DMG_STAGING"
+mkdir -p "$DMG_STAGING"
+ditto "$APP_PATH" "$DMG_STAGING/AnyUpright.app"
+ln -s /Applications "$DMG_STAGING/Applications"
+hdiutil create \
+    -volname "AnyUpright ${VERSION}" \
+    -srcfolder "$DMG_STAGING" \
+    -ov \
+    -format UDZO \
+    "$APP_DMG"
 ditto -c -k --keepParent "$DSYM_PATH" "$DSYM_ARCHIVE"
 
 GIT_COMMIT="$(git rev-parse HEAD)"
@@ -126,12 +134,12 @@ fi
 
 (
     cd "$OUTPUT_DIR"
-    shasum -a 256 "$(basename "$APP_ARCHIVE")" "$(basename "$DSYM_ARCHIVE")" "$(basename "$BUILD_INFO")" > "$(basename "$CHECKSUMS")"
+    shasum -a 256 "$(basename "$APP_DMG")" "$(basename "$DSYM_ARCHIVE")" "$(basename "$BUILD_INFO")" > "$(basename "$CHECKSUMS")"
 )
 
 echo
 echo "Release artifacts:"
-echo "  $APP_ARCHIVE"
+echo "  $APP_DMG"
 echo "  $DSYM_ARCHIVE"
 echo "  $BUILD_INFO"
 echo "  $CHECKSUMS"

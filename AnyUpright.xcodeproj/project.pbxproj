@@ -453,7 +453,7 @@
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				INFOPLIST_FILE = "AnyUpright/Wrapper Application/Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = "AnyUpright-Debug";
-				PRODUCT_NAME = AnyUpright;
+				PRODUCT_NAME = "AnyUpright (Debug)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "AnyUpright/Wrapper Application/Wrapper Application-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;

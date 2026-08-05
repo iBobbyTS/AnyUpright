@@ -14,25 +14,25 @@
 
 `/Applications/AnyUpright.app` 及其安装窗口只管理 Release。发行 App 的 bundle ID 为 `AnyUpright`，内嵌 XPC 的 bundle ID 为 `AnyUpright-XPC-Service`；安装、卸载和状态检查均只针对这套生产身份。安装窗口不负责发现、注册、取消注册或清理 Debug 构建。
 
-Debug 产物的文件名同样是 `AnyUpright.app`，但其 wrapper ID 为 `AnyUpright-Debug`，XPC ID 为 `AnyUpright-XPC-Service-Debug`，滤镜名称带 `(Debug)`。不要把 Debug App 复制到 `/Applications/AnyUpright.app`，不要把它放入发行 DMG，也不要使用 Release App 的安装窗口管理 Debug。Debug 的构建、注册、路径冲突和清理由开发者或 Agent 直接使用 Xcode、Launch Services 和 PlugInKit 工具处理。
+Debug 产物名为 `AnyUpright (Debug).app`，其 wrapper ID 为 `AnyUpright-Debug`，XPC ID 为 `AnyUpright-XPC-Service-Debug`，滤镜名称也带 `(Debug)`。不要重命名后复制到 `/Applications/AnyUpright.app`，不要把它放入发行 DMG，也不要使用 Release App 的安装窗口管理 Debug。Debug 的构建、注册、路径冲突和清理由开发者或 Agent 直接使用 Xcode、Launch Services 和 PlugInKit 工具处理。
 
 Debug App 可能出现在以下位置：
 
 ```text
 # 项目规定的 canonical 路径
-/private/tmp/AnyUprightDerivedData/Build/Products/Debug/AnyUpright.app
+/private/tmp/AnyUprightDerivedData/Build/Products/Debug/AnyUpright (Debug).app
 
 # 与 canonical 路径指向同一位置的 macOS 路径写法
-/tmp/AnyUprightDerivedData/Build/Products/Debug/AnyUpright.app
+/tmp/AnyUprightDerivedData/Build/Products/Debug/AnyUpright (Debug).app
 
 # Xcode 默认 Derived Data
-~/Library/Developer/Xcode/DerivedData/AnyUpright-*/Build/Products/Debug/AnyUpright.app
+~/Library/Developer/Xcode/DerivedData/AnyUpright-*/Build/Products/Debug/AnyUpright (Debug).app
 
 # 调用 xcodebuild 时指定的自定义 Derived Data
-<derived-data-path>/Build/Products/Debug/AnyUpright.app
+<derived-data-path>/Build/Products/Debug/AnyUpright (Debug).app
 
 # 人工复制产生的遗留副本，例如桌面、下载目录或 ~/Applications
-<copied-location>/AnyUpright.app
+<copied-location>/AnyUpright (Debug).app
 ```
 
 日常 Motion 调试只使用第一项 canonical 路径。`/tmp` 与 `/private/tmp` 是同一位置，不属于两个副本。其他 Debug 路径一旦被 Launch Services 或 PlugInKit 发现，就可能与 canonical Debug 注册竞争；它们应视为开发环境冲突，而不是由发行 App 代为处理。
@@ -51,7 +51,7 @@ pluginkit -m -ADv -i AnyUpright-XPC-Service-Debug
 pluginkit -m -ADv -i AnyUpright-XPC-Service
 ```
 
-第一条 `pluginkit` 命令只检查 Debug，第二条只检查 Release。正常开发机可以同时存在一个 canonical Debug 注册和一个 `/Applications/AnyUpright.app` Release 注册；同一 bundle ID 返回多个不同 App 路径才是冲突。清理冲突前应完全退出 Motion 和 Final Cut Pro，再由开发者或 Agent 对查到的具体遗留路径执行 `lsregister -u /path/to/AnyUpright.app`，并删除不再需要的副本。不得把 `/Applications/AnyUpright.app` 当作 Debug 清理目标。
+第一条 `pluginkit` 命令只检查 Debug，第二条只检查 Release。正常开发机可以同时存在一个 canonical Debug 注册和一个 `/Applications/AnyUpright.app` Release 注册；同一 bundle ID 返回多个不同 App 路径才是冲突。清理冲突前应完全退出 Motion 和 Final Cut Pro，再由开发者或 Agent 对查到的具体 Debug 遗留路径执行 `lsregister -u '/path/to/AnyUpright (Debug).app'`，并删除不再需要的副本。不得把 `/Applications/AnyUpright.app` 当作 Debug 清理目标。
 
 ## 1. 构建 Release 二进制
 

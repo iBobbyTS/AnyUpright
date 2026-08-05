@@ -21,7 +21,7 @@ pluginkit -m -ADv -i AnyUpright-XPC-Service-Debug
 pluginkit -m -ADv -i AnyUpright-XPC-Service
 ```
 
-- Current Debug and Release builds intentionally have separate bundle IDs and FxPlug UUID sets, so one entry for each is valid. If multiple entries with the same configuration-specific bundle ID exist, remove stale ones with `pluginkit -r /path/to/AnyUpright.app/Contents/PlugIns/AnyUpright\ XPC\ Service.pluginkit`, unregister stale wrappers with `lsregister -u /path/to/AnyUpright.app`, then register the intended wrapper.
+- Current Debug and Release builds intentionally have separate bundle IDs and FxPlug UUID sets, so one entry for each is valid. If multiple entries with the same configuration-specific bundle ID exist, remove stale plug-ins with `pluginkit -r '/path/to/wrapper.app/Contents/PlugIns/AnyUpright XPC Service.pluginkit'`, unregister the matching wrapper with `lsregister -u '/path/to/wrapper.app'`, then register the intended wrapper. Debug wrappers are named `AnyUpright (Debug).app`; Release wrappers are named `AnyUpright.app`.
 - Avoid testing an old already-open effect instance after changing template state.
 - Avoid stacking another effect instance over the old one as a shortcut. It can create misleading black or duplicated viewer states.
 - For Final Cut OSC dragging, confirm Motion template publication includes the built-in `Publish OSC` setting enabled.

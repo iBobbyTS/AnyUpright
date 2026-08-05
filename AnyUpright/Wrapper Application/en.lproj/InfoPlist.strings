@@ -1,3 +1,1 @@
-/* Wrapper application display name remains branded. */
-"CFBundleDisplayName" = "AnyUpright";
-"CFBundleName" = "AnyUpright";
+/* The localized app name comes from the configuration-specific PRODUCT_NAME. */

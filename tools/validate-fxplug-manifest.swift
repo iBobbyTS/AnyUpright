@@ -23,6 +23,7 @@ enum BuildFlavor: String, CaseIterable {
 
 struct BuildIdentity {
     let flavor: BuildFlavor
+    let wrapperProductName: String
     let wrapperBundleIdentifier: String
     let xpcBundleIdentifier: String
     let groupName: String
@@ -35,6 +36,7 @@ struct BuildIdentity {
         case .debug:
             return BuildIdentity(
                 flavor: flavor,
+                wrapperProductName: "AnyUpright (Debug)",
                 wrapperBundleIdentifier: "AnyUpright-Debug",
                 xpcBundleIdentifier: "AnyUpright-XPC-Service-Debug",
                 groupName: "AnyUpright Debug",
@@ -53,6 +55,7 @@ struct BuildIdentity {
         case .release:
             return BuildIdentity(
                 flavor: flavor,
+                wrapperProductName: "AnyUpright",
                 wrapperBundleIdentifier: "AnyUpright",
                 xpcBundleIdentifier: "AnyUpright-XPC-Service",
                 groupName: "AnyUpright",
@@ -139,6 +142,7 @@ struct ValidateFxPlugManifest {
         try validate(plist: xpcPlist, identity: identity, localizedTables: localizedTables)
         try assertEqual(xpcPlist["CFBundleIdentifier"] as? String, identity.xpcBundleIdentifier, "\(flavor.rawValue) XPC bundle identifier")
         try assertEqual(wrapperPlist["CFBundleIdentifier"] as? String, identity.wrapperBundleIdentifier, "\(flavor.rawValue) wrapper bundle identifier")
+        try assertEqual(wrapperPlist["CFBundleName"] as? String, identity.wrapperProductName, "\(flavor.rawValue) wrapper product name")
         print("AnyUpright FxPlug \(flavor.rawValue) build identity validation passed")
     }
 

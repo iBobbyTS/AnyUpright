@@ -122,10 +122,49 @@ Release 滤镜名称不带后缀。若看到 `(Debug)`，说明当前选择的�
    - `AnyUpright Inner Stretch`
    - `AnyUpright Outer Stretch`
    - `AnyUpright Upright`
-6. 在 Inspector 中逐项发布希望出现在 Final Cut Pro 的参数。至少保留对应滤镜当前的用户可见控制；不要发布内部隐藏参数。特别确认 Analyze、Defaults、Edit Mode、四角坐标和 Set/Unset Key Frame 在模板发布后是否仍可见、可点击。
+6. 在 Inspector 中逐项发布希望出现在 Final Cut Pro 的参数。至少保留对应滤镜当前的用户可见控制；不要发布内部隐藏参数。普通数值参数使用 Motion 的发布菜单；FxPlug push button 在当前 Motion 界面中没有同等发布入口，必须在保存后的 `.moef` XML 中补充 `<publishSettings>` target，方法见下文。特别确认 Analyze、Defaults、Edit Mode、四角坐标和 Set/Unset Key Frame 在模板发布后是否仍可见、可点击。
 7. 如使用参考图片检查预览，发布前从 `Effect Source` 清除，避免把测试素材打进模板。
 8. `File > Save`，名称与滤镜商品名完全一致，Category 统一新建为 `AnyUpright`，Theme 留空，关闭 `Include unused media`；Preview Movie 可选。
 9. 点击 `Publish`。
+
+### 发布 FxPlug 按钮参数
+
+FxPlug 通过 `addPushButton` 注册的按钮可以正常出现在 Motion Inspector 中，但当前 Motion 界面不会像普通数值参数那样提供直接发布入口。按钮在 Motion 中可见，不代表它已经进入 `.moef` 的 `<publishSettings>`；未列入该节点的按钮不会出现在 Final Cut Pro Inspector 中。
+
+保存模板后，编辑当前 `.moef` 的 `<publishSettings>`，为按钮补充 target。`object` 必须取自同一文件中当前 Release 滤镜的 `<filter ... id="...">`，不能从旧 `.motn`、自动保存文件或其他模板复制。`channel` 是 `./` 加 FxPlug 参数 ID。例如 Horizon 当前参数 ID 为：
+
+```text
+Analyze Horizon = 102
+Rotation        = 100
+Fill Frame      = 101
+Defaults        = 103
+Publish OSC     = 10005
+```
+
+若当前 `.moef` 中 Release Horizon 的滤镜对象 ID 为 `10015`，发布 Analyze、Rotation、Fill Frame 和 Defaults 的写法是：
+
+```xml
+<publishSettings>
+    <version>2</version>
+    <target object="10015" channel="./102" name="分析水平线"/>
+    <target object="10015" channel="./100" name="旋转"/>
+    <target object="10015" channel="./101" name="填满画面"/>
+    <target object="10015" channel="./103" name="默认设置..."/>
+</publishSettings>
+```
+
+`10015` 只是该次模板保存产生的对象 ID；Motion 重新创建或保存模板后可能变化，必须重新读取当前文件。`Publish OSC` 是独立的宿主设置，只在需要 Final Cut 画布 OSC 或 Horizon 分析状态叠层时另行发布 `./10005`，不要把它与按钮发布混为一谈。
+
+不要用旧 `.motn` 整体覆盖当前 `.moef`。旧文件可能绑定旧的 Debug/Release 插件 UUID、旧对象 ID或旧参数状态；只把所需 target 加入当前 Release `.moef`。直接编辑磁盘文件时，应先关闭 Motion 中已打开的同一文档，或确保关闭时不保存旧的内存版本，否则 Motion 可能覆盖 XML 修改。
+
+修改后至少执行：
+
+```sh
+xmllint --noout '/path/to/Horizon.moef'
+xmllint --xpath '//publishSettings' '/path/to/Horizon.moef'
+```
+
+然后完全退出并重新打开 Final Cut Pro，删除旧效果实例，再从 Effects Browser 重新拖入模板。Final Cut Pro 可能缓存旧模板和旧实例，仅重开 Inspector 不足以验证发布结果。可迁移的宿主边界和排错清单见 [`engineering-notes/motion-fxplug-button-publishing.md`](engineering-notes/motion-fxplug-button-publishing.md)。
 
 完成后应得到：
 
@@ -137,7 +176,7 @@ Release 滤镜名称不带后缀。若看到 `(Debug)`，说明当前选择的�
 └── AnyUpright Upright/
 ```
 
-每个目录应包含一个 `.moef` 以及 Motion 生成的 `large.png`、`small.png` 等资源。不要手工改 `.moef` 内部引用。先在 Final Cut Pro 中逐个验证，再把模板接入 Wrapper 的 Motion Effects 安装功能。
+每个目录应包含一个 `.moef` 以及 Motion 生成的 `large.png`、`small.png` 等资源。除上述 `<publishSettings>` 按钮 target 外，不要手工改 `.moef` 内部引用。先在 Final Cut Pro 中逐个验证，再把模板接入 Wrapper 的 Motion Effects 安装功能。
 
 建议 Final Cut Pro 验收矩阵：
 

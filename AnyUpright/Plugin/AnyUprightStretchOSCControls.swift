@@ -12,7 +12,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
     private struct SharedSurfaceState {
         static let lock = NSLock()
         static var surfaceSize = AUSize(width: 1.0, height: 1.0)
-        static var outputSize = AUSize(width: 1920.0, height: 1080.0)
+        static var outputSize: AUSize?
     }
 
     private let overlayRenderer = AnyUprightOSCOverlayRenderer()
@@ -73,8 +73,8 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             return
         }
 
-        let objectSize = objectPixelSizeForOSC(defaultSize: outputSize)
-        let geometry = hitGeometry(from: state, size: objectSize, mode: mode)
+        let interactionSize = interactionPixelSizeForOSC(callbackOutputSize: outputSize)
+        let geometry = hitGeometry(from: state, size: interactionSize, mode: mode)
         let stretch = geometry.stretch
         let canvasFrame = objectCanvasFrame()
         let displayPart = currentDisplayPart(hostActivePart: activePart)
@@ -86,7 +86,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             height: height,
             destinationImage: destinationImage,
             outputSize: outputSize,
-            objectSize: objectSize,
+            objectSize: interactionSize,
             stretch: stretch,
             objectCanvasStretch: geometry.stretch,
             canvasFrame: canvasFrame
@@ -115,7 +115,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             return
         }
 
-        let size = objectPixelSizeForOSC()
+        let size = interactionPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let canvasFrame = objectCanvasFrame()
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
@@ -138,7 +138,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         let paramAPI = parameterRetrievalAPI()
         let state = stretchParameterState(at: time, paramAPI: paramAPI, fixedMode: fixedStretchMode)
         let mode = stretchMode(from: state)
-        let size = objectPixelSizeForOSC()
+        let size = interactionPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let canvasFrame = objectCanvasFrame()
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
@@ -206,7 +206,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             return
         }
 
-        let size = objectPixelSizeForOSC()
+        let size = interactionPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let eventPoint = AUPoint(x: mousePositionX, y: mousePositionY)
         let resolved = resolvedCanvasPoint(
@@ -456,6 +456,24 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
         return size
     }
 
+    private func currentOutputSize() -> AUSize? {
+        SharedSurfaceState.lock.lock()
+        let size = SharedSurfaceState.outputSize
+        SharedSurfaceState.lock.unlock()
+        return size
+    }
+
+    private func interactionPixelSizeForOSC(callbackOutputSize: AUSize? = nil) -> AUSize {
+        let objectSize = objectPixelSizeForOSC()
+        guard fixedStretchMode == .innerStretch else {
+            return objectSize
+        }
+        return AnyUprightGeometry.innerStretchOSCInteractionSize(
+            callbackOutputSize: callbackOutputSize ?? currentOutputSize(),
+            fallbackObjectSize: objectSize
+        )
+    }
+
     @discardableResult
     private func updateHoverPart(forEventPoint eventPoint: AUPoint, at time: CMTime, forceUpdate: UnsafeMutablePointer<ObjCBool>?) -> StretchOSCPart {
         let state = stretchParameterState(at: time, paramAPI: parameterRetrievalAPI(), fixedMode: fixedStretchMode)
@@ -465,7 +483,7 @@ class AnyUprightInnerStretchOSCPlugIn: AnyUprightOSCPlugIn, FxOnScreenControl_v4
             return .none
         }
 
-        let size = objectPixelSizeForOSC()
+        let size = interactionPixelSizeForOSC()
         let geometry = hitGeometry(from: state, size: size, mode: mode)
         let canvasFrame = objectCanvasFrame()
         debugCanvasMetrics(label: "hover", eventPoint: eventPoint, stretch: geometry.stretch, canvasFrame: canvasFrame)

@@ -32,6 +32,7 @@ struct AnyUprightGeometryTests {
         try testLineIntersectionFindsCrossingPoint()
         try testInnerStretchDefaultSelectionHasNoDYDrift()
         try testInnerStretchObjectSpacePixelsMatchFxPlugOSCEvents()
+        try testInnerStretchOSCPixelsUseProjectOutputSizeAcrossSourceResolutions()
         try testInnerStretchMappedSurfaceDragWritesObjectYDirectly()
         try testInnerStretchRawCanvasDragWritesObjectYDirectly()
         try testInnerStretchHostCanvasLayerPreservesNamedCorners()
@@ -385,6 +386,41 @@ struct AnyUprightGeometryTests {
         try assertEqual(pixels, AUPoint(x: 45.0, y: -25.0), "source object-space drag pixel offset")
         try assertEqual(updatedObjectPixels.topLeft, draggedPixel, "source object-space drag target")
         try assertEqual(updatedInnerStretch.topLeft, AUPoint(x: 45.0, y: 25.0), "inner stretch should sample the Y-flipped image point matching the visible handle")
+    }
+
+    static func testInnerStretchOSCPixelsUseProjectOutputSizeAcrossSourceResolutions() throws {
+        let projectOutputSize = AUSize(width: 2880.0, height: 2160.0)
+        let objectPoint = AUPoint(x: 0.25, y: 0.75)
+        let sourceSizes = [
+            AUSize(width: 1280.0, height: 960.0),
+            projectOutputSize,
+            AUSize(width: 8064.0, height: 6048.0),
+        ]
+
+        for sourceSize in sourceSizes {
+            let interactionSize = AnyUprightGeometry.innerStretchOSCInteractionSize(
+                callbackOutputSize: projectOutputSize,
+                fallbackObjectSize: sourceSize
+            )
+            let pixels = AnyUprightGeometry.sourceCornerPixelOffset(
+                forObjectPoint: objectPoint,
+                corner: .topLeft,
+                size: interactionSize
+            )
+
+            try assertEqual(interactionSize, projectOutputSize, "OSC interaction size must stay in the project output basis")
+            try assertEqual(pixels, AUPoint(x: 720.0, y: -540.0), "OSC pixel writeback must not scale with source resolution")
+        }
+
+        let fallbackSize = AUSize(width: 1280.0, height: 960.0)
+        try assertEqual(
+            AnyUprightGeometry.innerStretchOSCInteractionSize(
+                callbackOutputSize: nil,
+                fallbackObjectSize: fallbackSize
+            ),
+            fallbackSize,
+            "OSC interaction must retain a safe object-size fallback before the first draw callback"
+        )
     }
 
     static func testInnerStretchMappedSurfaceDragWritesObjectYDirectly() throws {
@@ -3388,6 +3424,11 @@ struct AnyUprightGeometryTests {
     static func assertEqual(_ actual: AUPoint, _ expected: AUPoint, _ label: String) throws {
         try assertApprox(actual.x, expected.x, "\(label) x")
         try assertApprox(actual.y, expected.y, "\(label) y")
+    }
+
+    static func assertEqual(_ actual: AUSize, _ expected: AUSize, _ label: String) throws {
+        try assertApprox(actual.width, expected.width, "\(label) width")
+        try assertApprox(actual.height, expected.height, "\(label) height")
     }
 
     static func assertEqual(_ actual: AUPixelBounds, _ expected: AUPixelBounds, _ label: String) throws {

@@ -412,6 +412,18 @@ func resolveOSCDisplayPart(hostActivePart: Int = 0, hoverPart: Int, dragPart: In
 }
 
 enum AnyUprightGeometry {
+    static func innerStretchOSCInteractionSize(
+        callbackOutputSize: AUSize?,
+        fallbackObjectSize: AUSize
+    ) -> AUSize {
+        guard let callbackOutputSize,
+              callbackOutputSize.width > 0.0,
+              callbackOutputSize.height > 0.0 else {
+            return fallbackObjectSize
+        }
+        return callbackOutputSize
+    }
+
     static func outputCoordinateBounds(for tileBounds: AUPixelBounds, imageBounds: AUPixelBounds) -> AUOutputCoordinateBounds {
         AUOutputCoordinateBounds(
             left: Double(tileBounds.left - imageBounds.left),

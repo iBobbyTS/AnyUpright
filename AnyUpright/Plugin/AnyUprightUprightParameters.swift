@@ -258,12 +258,6 @@ func addUprightWorkflowParameters(
         ],
         parameterFlags: defaultFlags
     )
-    paramAPI.addPushButton(
-        withName: AUL10n.plugin.text(.analyze),
-        parameterID: UprightParam.analyze.rawValue,
-        selector: #selector(AnyUprightUprightPlugIn.analyze),
-        parameterFlags: defaultFlags
-    )
     paramAPI.addPopupMenu(
         withName: AUL10n.plugin.text(.mode),
         parameterID: UprightParam.controlMode.rawValue,
@@ -273,6 +267,12 @@ func addUprightWorkflowParameters(
             AUL10n.plugin.text(.semiAuto),
             AUL10n.plugin.text(.automatic),
         ],
+        parameterFlags: defaultFlags
+    )
+    paramAPI.addPushButton(
+        withName: AUL10n.plugin.text(.analyze),
+        parameterID: UprightParam.analyze.rawValue,
+        selector: #selector(AnyUprightUprightPlugIn.analyze),
         parameterFlags: defaultFlags
     )
     paramAPI.addToggleButton(

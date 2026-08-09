@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ozxmlscene>
+<ozml version="5.15">
+
+<displayversion>6.3</displayversion>
+
+<factory id="1" uuid="46c844a813d311d8a438000a95af9f7e">
+	<description>Channel</description>
+	<manufacturer>Apple</manufacturer>
+	<version>1</version>
+</factory>
+
+<factory id="2" uuid="65cb4dc9d4504fa281921f5f751fba06">
+	<description>小组件</description>
+	<manufacturer>Apple</manufacturer>
+	<version>1</version>
+</factory>
+
+<factory id="3" uuid="66fc0d6af6a911d6a7a7000393670732">
+	<description>图像</description>
+	<manufacturer>Apple</manufacturer>
+	<version>1</version>
+</factory>
+
+<factory id="4" uuid="7d468273c013498e9806a0d7bc32fddf">
+	<description>项目</description>
+	<manufacturer>Apple</manufacturer>
+	<version>1</version>
+</factory>
+
+<factory id="5" uuid="dbca752470fd11d7980100039389b702">
+	<description>Channel</description>
+	<manufacturer>Apple</manufacturer>
+	<version>1</version>
+</factory>
+
+<factory id="6" uuid="deca4859b16011d7a12d0003936f6f92">
+	<description>ProPlugin 滤镜</description>
+	<manufacturer>Apple</manufacturer>
+	<version>1</version>
+</factory>
+
+
+<build></build>
+
+<description></description>
+
+<canvas>
+	<layout>1</layout>
+	<activeView>0</activeView>
+</canvas>
+
+<viewer subview="0">
+	<resolutionMode>0</resolutionMode>
+	<dynamicResolution>1</dynamicResolution>
+	<viewmode>0</viewmode>
+	<overlayOptions>60172</overlayOptions>
+	<oscOptions>30</oscOptions>
+	<compensateAspectRatio>1</compensateAspectRatio>
+	<renderFields>0</renderFields>
+	<showMotionBlur>0</showMotionBlur>
+	<showFrameBlending>1</showFrameBlending>
+	<showLighting>1</showLighting>
+	<showShadows>1</showShadows>
+	<showReflection>1</showReflection>
+	<showDepthOfField>0</showDepthOfField>
+	<renderFullView>0</renderFullView>
+	<renderQuality>2</renderQuality>
+	<textRenderQuality>2</textRenderQuality>
+	<showHighQualityResampling>0</showHighQualityResampling>
+	<showShapeAntialiasing>1</showShapeAntialiasing>
+	<show3DIntersectionAntialiasing>0</show3DIntersectionAntialiasing>
+	<cameraType>0</cameraType>
+	<cameraName>活跃的摄像机</cameraName>
+	<mirrorHMD>0</mirrorHMD>
+	<panZoom camera="0" zoom="0.3194444477558136" panX="58" panY="5" mode="2" centered="1"/>
+</viewer>
+
+<projectPanel>
+	<layersPreviewColumn>1</layersPreviewColumn>
+	<layersOpacityColumn>0</layersOpacityColumn>
+	<layersBlendColumn>0</layersBlendColumn>
+	<displayMasks>1</displayMasks>
+	<displayBehaviors>1</displayBehaviors>
+	<displayEffects>1</displayEffects>
+	<layersVerticalZoom>1.7999999523162842</layersVerticalZoom>
+	<mediaPreviewColumn>1</mediaPreviewColumn>
+	<mediaTypeColumn>1</mediaTypeColumn>
+	<mediaDurationColumn>1</mediaDurationColumn>
+	<mediaInUseColumn>1</mediaInUseColumn>
+	<mediaFrameSizeColumn>1</mediaFrameSizeColumn>
+	<mediaCompressorColumn>1</mediaCompressorColumn>
+	<mediaDepthColumn>1</mediaDepthColumn>
+	<mediaFrameRateColumn>1</mediaFrameRateColumn>
+	<mediaDataRateColumn>1</mediaDataRateColumn>
+	<mediaAudioRateColumn>1</mediaAudioRateColumn>
+	<mediaAudioFormatColumn>1</mediaAudioFormatColumn>
+	<mediaFileSizeColumn>1</mediaFileSizeColumn>
+	<mediaFileCreatedColumn>1</mediaFileCreatedColumn>
+	<mediaDileModifiedColumn>1</mediaDileModifiedColumn>
+	<mediaVerticalZoom>1.7999999523162842</mediaVerticalZoom>
+</projectPanel>
+
+<timeline>
+	<displayVideo>1</displayVideo>
+	<displayAudio>1</displayAudio>
+	<displayKeyframes>0</displayKeyframes>
+	<displayMasks>1</displayMasks>
+	<displayBehaviors>1</displayBehaviors>
+	<displayEffects>1</displayEffects>
+	<videoVerticalZoom>1.5</videoVerticalZoom>
+	<audioVerticalZoom>1.5</audioVerticalZoom>
+	<displayRange in="-967523564 1281250000 3 0" out="10765140343 1000000000 3 0"/>
+</timeline>
+
+<curveeditor>
+	<autozoom>0</autozoom>
+	<snapping>0</snapping>
+	<displayAudioWaveform>0</displayAudioWaveform>
+	<lockKeyframesInTime>0</lockKeyframesInTime>
+	<displayRange in="-967523564 1281250000 3 0" out="10765140343 1000000000 3 0"/>
+	<currentviewvolume originx="-0.75514034263414631" originy="-62.5" width="11.520280686" height="125"/>
+	<snapshotChannels>0</snapshotChannels>
+</curveeditor>
+
+<inspector>
+	<collapseState id="./1/100" state="1"/>
+	<collapseState id="./1/200" state="1"/>
+	<collapseState id="./1/324" state="0"/>
+	<collapseState id="./1/344" state="1"/>
+</inspector>
+
+<scene>
+	<sceneSettings>
+		<width>3840</width>
+		<height>2160</height>
+		<duration>600</duration>
+		<shouldOverrideFCDuration>0</shouldOverrideFCDuration>
+		<frameRate>60</frameRate>
+		<NTSC>1</NTSC>
+		<pixelAspectRatio>1</pixelAspectRatio>
+		<workingGamut>0</workingGamut>
+		<viewGamut>-1</viewGamut>
+		<optimizeForDisplay>0</optimizeForDisplay>
+		<backgroundColor red="0" green="0" blue="0" alpha="1"/>
+		<audioChannels>2</audioChannels>
+		<audioBitsPerSample>32</audioBitsPerSample>
+		<fieldRenderingMode>0</fieldRenderingMode>
+		<motionBlurSamples>8</motionBlurSamples>
+		<motionBlurDuration>1</motionBlurDuration>
+		<sharpScaling>0</sharpScaling>
+		<startTimecode>0</startTimecode>
+		<presetPath>/Applications/Motion Creator Studio.app/Contents/Resources/Presets/Project/zh_CN.lproj/4K - Ultra HD.preset</presetPath>
+		<backgroundMode>0</backgroundMode>
+		<reflectionRecursionLimit>2</reflectionRecursionLimit>
+		<glyphOSCMode>0</glyphOSCMode>
+		<animateFlag>0</animateFlag>
+		<parameterColorSpaceID>3</parameterColorSpaceID>
+		<savePreviewMovie>0</savePreviewMovie>
+		<Object3DEnvironments>100</Object3DEnvironments>
+		<DRTSupport>0</DRTSupport>
+		<onHDRDisplay>1</onHDRDisplay>
+	</sceneSettings>
+	<publishSettings>
+		<version>2</version>
+		<target object="10015" channel="./102" name="分析水平线"/>
+		<target object="10015" channel="./100" name="旋转"/>
+		<target object="10015" channel="./101" name="填满画面"/>
+		<target object="10015" channel="./103" name="默认设置..."/>
+	</publishSettings>
+	<currentFrame>0 1 1 0</currentFrame>
+	<currentObject>10007</currentObject>
+	<activeLayer>10003</activeLayer>
+	<timeRange offset="0 1 1 0" duration="1201200 120000 1 0"/>
+	<playRange offset="0 1 1 0" duration="1201200 120000 1 0"/>
+	<flags>1</flags>
+	<audioTracks>0</audioTracks>
+	<timemarkerset/>
+	<guideset/>
+	<curvesets selected="1"/>
+	<scenenode name="项目" id="10000" factoryID="4" version="5">
+		<scenenode name="小组件" id="10002" factoryID="2" version="5">
+			<flags>0</flags>
+			<timing in="0 1 1 0" out="-2002 120000 1 0" offset="0 1 1 0"/>
+			<foldFlags>0</foldFlags>
+			<baseFlags>16</baseFlags>
+			<parameter name="属性" id="1" flags="8589938704"/>
+			<parameter name="对象" id="2" flags="8589938704">
+				<parameter name="选项" id="103" flags="8589938688"/>
+				<parameter name="Hidden" id="102" flags="8589934608" default="0" value="1"/>
+				<parameter name="快照" id="101" flags="8589938706"/>
+				<parameter name="小组件" id="100" flags="8589934608" default="1.7777777777777777" value="1.7777777777777777"/>
+			</parameter>
+		</scenenode>
+		<flags>0</flags>
+		<timing in="0 1 1 0" out="-2002 120000 1 0" offset="0 1 1 0"/>
+		<foldFlags>0</foldFlags>
+		<baseFlags>16</baseFlags>
+		<parameter name="属性" id="1" flags="8589938704"/>
+		<parameter name="对象" id="2" flags="8589938704"/>
+	</scenenode>
+	<layer name="群组" id="10003">
+		<scenenode name="效果源" id="10007" factoryID="3" version="5">
+			<validTracks>1</validTracks>
+			<aspectRatio>1</aspectRatio>
+			<flags>0</flags>
+			<timing in="0 1 1 0" out="1199198 120000 1 0" offset="0 1 1 0"/>
+			<foldFlags>24576</foldFlags>
+			<baseFlags>524304</baseFlags>
+			<parameter name="属性" id="1" flags="8589938704">
+				<parameter name="电影效果" id="344" flags="8589938706">
+					<foldFlags>131076</foldFlags>
+					<parameter name="景深" id="346" flags="8589934608" default="1.3999999999999999" value="2"/>
+					<parameter name="焦点" id="348" flags="8589938706">
+						<foldFlags>15</foldFlags>
+					</parameter>
+				</parameter>
+				<parameter name="灯光" id="230" flags="8589938706">
+					<foldFlags>15</foldFlags>
+				</parameter>
+				<parameter name="阴影" id="234" flags="8589938706">
+					<foldFlags>15</foldFlags>
+				</parameter>
+				<parameter name="倒影" id="223" flags="8589971474">
+					<foldFlags>131087</foldFlags>
+				</parameter>
+				<parameter name="颜色" id="243" flags="8589938690">
+					<parameter name="Hidden Channel" id="245" flags="8589934610" default="1" value="3"/>
+					<parameter name="转换类型" id="247" flags="8606810128" default="3" value="3"/>
+					<parameter name="PQ 峰值（尼特）" id="248" flags="8606744592" default="1000" value="1000"/>
+				</parameter>
+				<parameter name="媒体" id="324" flags="8589938704">
+					<foldFlags>4</foldFlags>
+					<parameter name="源媒体" id="300" flags="81621221392" default="10005" value="10005"/>
+					<parameter name="源媒体" id="325" flags="8590000146"/>
+				</parameter>
+				<parameter name="页码" id="301" flags="8589934610" default="1" value="1"/>
+				<parameter name="重新定时值" id="304" flags="8590066066" default="1" value="1"/>
+				<parameter name="重新定时值缓存" id="319" flags="8590065810" default="1" value="1"/>
+			</parameter>
+			<parameter name="对象" id="2" flags="8589938704">
+				<parameter name="拖放区" id="311" flags="8589934738" default="0" value="1"/>
+				<parameter name="类型" id="321" flags="8590000146" default="0" value="3"/>
+				<parameter name="移动" id="326" flags="77309415442">
+					<foldFlags>15</foldFlags>
+				</parameter>
+				<parameter name="缩放" id="327" flags="77309415442">
+					<foldFlags>15</foldFlags>
+				</parameter>
+				<parameter name="填充不透明" id="328" flags="8606711824" default="0" value="0"/>
+				<parameter name="填充颜色" id="329" flags="8589938704">
+					<foldFlags>15</foldFlags>
+				</parameter>
+				<parameter name="清除" id="315" flags="8606777360" default="0" value="0"/>
+				<parameter name="宽度" id="313" flags="8589934610" default="1" value="3840"/>
+				<parameter name="高度" id="314" flags="8589934610" default="1" value="2160"/>
+			</parameter>
+			<filter name="AnyUpright Horizon" id="10015" factoryID="6" pluginUUID="2E32E3C2-91C7-44D4-A0AC-0E87832A86A1" pluginVersion="1" pluginName="AnyUpright Horizon" pluginDynamicParams="0">
+				<timing in="0 1 1 0" out="1199198 120000 1 0" offset="0 1 1 0"/>
+				<baseFlags>8858370065</baseFlags>
+				<parameter name="旋转" id="100" flags="12901679120" default="0" value="0"/>
+				<parameter name="填满画面" id="101" flags="12901679120" default="1" value="1"/>
+				<parameter name="混合" id="10001" flags="12901679104" default="1" value="1"/>
+				<parameter name="翻转" id="10002" flags="12905938976" default="0" value="0"/>
+				<parameter name="输入点" id="10003" flags="12905938976" default="1" value="1"/>
+				<parameter name="发布 OSC" id="10005" flags="12901679104" default="0" value="1"/>
+			</filter>
+		</scenenode>
+		<aspectRatio>1</aspectRatio>
+		<flags>0</flags>
+		<timing in="0 1 1 0" out="1199198 120000 1 0" offset="0 1 1 0"/>
+		<foldFlags>0</foldFlags>
+		<baseFlags>524304</baseFlags>
+		<parameter name="属性" id="1" flags="8589938704">
+			<parameter name="灯光" id="230" flags="8589938706">
+				<foldFlags>15</foldFlags>
+			</parameter>
+			<parameter name="阴影" id="234" flags="8589938706">
+				<foldFlags>15</foldFlags>
+			</parameter>
+			<parameter name="倒影" id="223" flags="8589971474">
+				<foldFlags>131087</foldFlags>
+			</parameter>
+			<parameter name="颜色" id="243" flags="8589938688">
+				<parameter name="Hidden Channel" id="245" flags="8589934610" default="1" value="3"/>
+				<parameter name="转换类型" id="247" flags="8590032912" default="3" value="3"/>
+				<parameter name="PQ 峰值（尼特）" id="248" flags="8589967376" default="1000" value="1000"/>
+			</parameter>
+		</parameter>
+		<parameter name="对象" id="2" flags="8589938704">
+			<parameter name="固定宽度" id="302" flags="12884901908" default="3840" value="3840"/>
+			<parameter name="固定高度" id="303" flags="12884901908" default="2160" value="2160"/>
+			<parameter name="展平" id="311" flags="8589934610" default="0" value="0"/>
+			<parameter name="层顺序" id="305" flags="8589934610" default="0" value="0"/>
+			<parameter name="光圈宽度" id="312" flags="12884901906" default="3840" value="3840"/>
+			<parameter name="光圈高度" id="313" flags="12884901906" default="2160" value="2160"/>
+		</parameter>
+	</layer>
+
+	<footage name="媒体层" id="10006">
+		<clip name="效果源" id="10005">
+			<pathURL>Drop Zone.tiff</pathURL>
+			<missingWidth>1200</missingWidth>
+			<missingHeight>1200</missingHeight>
+			<missingDuration>0.033333333333333333</missingDuration>
+			<missingDynamicRangeType>0</missingDynamicRangeType>
+			<creationDuration>1</creationDuration>
+			<mediaID></mediaID>
+			<flags>0</flags>
+			<timing in="0 1 1 0" out="0 120000 1 0" offset="0 1 1 0"/>
+			<foldFlags>0</foldFlags>
+			<baseFlags>524304</baseFlags>
+			<parameter name="属性" id="1" flags="8589938704"/>
+			<parameter name="对象" id="2" flags="8589938704">
+				<parameter name="像素宽高比" id="104" flags="12884901888" default="1" value="1"/>
+				<parameter name="帧速率" id="107" flags="8589934592" default="0" value="30"/>
+				<parameter name="固定宽度" id="114" flags="12884901888" default="1200" value="1200"/>
+				<parameter name="固定高度" id="115" flags="12884901888" default="1200" value="1200"/>
+				<parameter name="使用背景颜色" id="116" flags="8589934594" default="0" value="0"/>
+				<parameter name="背景颜色" id="117" flags="8589971458">
+					<foldFlags>15</foldFlags>
+					<parameter name="红色" id="1" flags="8589967376" default="1" value="1"/>
+					<parameter name="绿色" id="2" flags="8589967376" default="1" value="1"/>
+					<parameter name="蓝色" id="3" flags="8589967376" default="1" value="1"/>
+				</parameter>
+				<parameter name="Missing Is Still" id="128" flags="8589934610" default="0" value="1"/>
+				<parameter name="素材版本" id="131" flags="8589934610" default="1" value="2"/>
+			</parameter>
+		</clip>
+		<flags>0</flags>
+		<timing in="0 1 1 0" out="0 120000 1 0" offset="0 1 1 0"/>
+		<foldFlags>0</foldFlags>
+		<baseFlags>524304</baseFlags>
+		<parameter name="属性" id="1" flags="8589938704"/>
+		<parameter name="对象" id="2" flags="8589938704"/>
+	</footage>
+</scene>
+
+</ozml>

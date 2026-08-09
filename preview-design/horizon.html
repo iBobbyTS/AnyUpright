@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=640, initial-scale=1">
+  <title>AnyUpright Horizon Preview</title>
+  <style>
+    html,
+    body {
+      width: 640px;
+      height: 360px;
+      margin: 0;
+      overflow: hidden;
+      background: #101418;
+    }
+
+    .preview {
+      position: relative;
+      width: 640px;
+      height: 360px;
+    }
+
+    .preview > img,
+    .preview > svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .preview > img {
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body>
+  <main class="preview" aria-label="山湖照片上的水平仪预览">
+    <img src="large.png" alt="山湖风景">
+
+    <svg viewBox="0 0 640 360" role="img" aria-label="水平仪">
+      <!-- Five-degree measured line, centered on the horizon reference. -->
+      <path d="M72 201.7 L568 158.3" stroke="#ffb454" stroke-opacity="0.98" stroke-width="3" stroke-linecap="round"/>
+
+      <!-- Flat electronic horizon reference line. -->
+      <path d="M72 180 H568" stroke="#53e5ff" stroke-opacity="0.96" stroke-width="3" stroke-linecap="round"/>
+
+      <!-- Horizon endpoints. -->
+      <g stroke="#eaffff" stroke-linecap="round">
+        <path d="M72 168 V192 M568 168 V192" stroke-width="3"/>
+      </g>
+
+      <!-- Flat electronic level display. -->
+      <g>
+        <rect x="237" y="148" width="166" height="64" rx="14" fill="#111820" fill-opacity="0.94" stroke="#eaffff" stroke-width="2"/>
+        <rect x="249" y="159" width="142" height="42" rx="8" fill="#092d36" stroke="#53e5ff" stroke-width="2"/>
+
+        <!-- Electronic center alignment marks. -->
+        <path d="M261 180 H278 M362 180 H379" stroke="#53e5ff" stroke-width="3" stroke-linecap="round"/>
+        <path d="M284 174 L290 180 L284 186 M356 174 L350 180 L356 186" fill="none" stroke="#53e5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+        <!-- Digital angle readout. -->
+        <text x="320" y="188" fill="#f4ffff" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="24" font-weight="700" text-anchor="middle" letter-spacing="0.5">5.0°</text>
+      </g>
+
+      <!-- Exact center indicator. -->
+      <path d="M320 136 V148 M320 212 V224" stroke="#53e5ff" stroke-width="3" stroke-linecap="round"/>
+
+    </svg>
+  </main>
+</body>
+</html>

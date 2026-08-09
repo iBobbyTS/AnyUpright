@@ -20,3 +20,7 @@ build/
 AnyUpright/Plugin/GeoCalibRuntime/
 AnyUpright/Plugin/GeoCalibCoreML/
 AnyUpright/Plugin/ScaleLSDCoreML/
+
+# Preview Design
+.playwright-cli/
+preview-design/png/
